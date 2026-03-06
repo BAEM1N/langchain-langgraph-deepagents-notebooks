@@ -1,0 +1,29 @@
+graph TB
+    subgraph Agent["Deep Agent"]
+        Planning["Planning<br/><i>write_todos</i>"]
+        Tools["Tools<br/><i>ls, read, write, edit ...</i>"]
+        Middleware["Middleware<br/><i>Todo, FS, SubAgent, Summary ...</i>"]
+        Backend["Backend<br/><i>State / FS / Store / Composite</i>"]
+        SubA["SubAgent A"]
+        SubB["SubAgent B"]
+        SubC["SubAgent C"]
+
+        Planning ~~~ Tools ~~~ Middleware
+        Tools --> Backend
+        Backend --> SubA
+        Backend --> SubB
+        Backend --> SubC
+    end
+
+    LangGraph["LangGraph<br/><i>실행 엔진</i>"]
+    Agent --> LangGraph
+
+    style Agent fill:#f0f0f0,stroke:#ccc,color:#333
+    style Planning fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style Tools fill:#ed7969,stroke:#c45a4d,color:#fff
+    style Middleware fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style Backend fill:#ed7969,stroke:#c45a4d,color:#fff
+    style SubA fill:#d4eff1,stroke:#83ced2,color:#333
+    style SubB fill:#d4eff1,stroke:#83ced2,color:#333
+    style SubC fill:#d4eff1,stroke:#83ced2,color:#333
+    style LangGraph fill:#333,stroke:#000,color:#fff,font-weight:bold

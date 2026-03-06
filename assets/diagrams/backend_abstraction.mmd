@@ -1,0 +1,13 @@
+graph LR
+    A["에이전트"] --> B["파일 도구<br/>ls, read, write,<br/>edit, glob, grep"]
+    B --> C["Backend"]
+    C --> D["StateBackend<br/>(메모리)"]
+    C --> E["FilesystemBackend<br/>(디스크)"]
+    C --> F["StoreBackend<br/>(영속)"]
+
+    style A fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style B fill:#ed7969,stroke:#c45a4d,color:#fff
+    style C fill:#ffd166,stroke:#d4a843,color:#333
+    style D fill:#d4eff1,stroke:#83ced2,color:#333
+    style E fill:#fde0dc,stroke:#ed7969,color:#333
+    style F fill:#d4eff1,stroke:#83ced2,color:#333

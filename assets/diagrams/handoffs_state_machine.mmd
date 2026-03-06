@@ -1,0 +1,14 @@
+graph LR
+    ID["Identify<br/>Customer"]
+    DI["Diagnose<br/>Issue"]
+    RI["Resolve<br/>Issue"]
+    CT["Close<br/>Ticket"]
+
+    ID -- "lookup_customer()" --> DI
+    DI -- "escalate_to_resolve()" --> RI
+    RI -- "mark_resolved()" --> CT
+
+    style ID fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style DI fill:#ed7969,stroke:#c45a4d,color:#fff
+    style RI fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style CT fill:#ed7969,stroke:#c45a4d,color:#fff

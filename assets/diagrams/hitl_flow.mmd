@@ -1,0 +1,13 @@
+graph TD
+    A["에이전트 → write_file 호출 시도"] --> B["실행 중단<br/>(interrupt_on 설정됨)"]
+    B --> C["사용자에게 승인 요청"]
+    C --> D["Approve<br/>원래 인자로 실행"]
+    C --> E["Edit<br/>수정된 인자로 실행"]
+    C --> F["Reject<br/>도구 호출 건너뜀"]
+
+    style A fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style B fill:#ffd166,stroke:#d4a843,color:#333
+    style C fill:#ed7969,stroke:#c45a4d,color:#fff
+    style D fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style E fill:#ffd166,stroke:#d4a843,color:#333
+    style F fill:#ed7969,stroke:#c45a4d,color:#fff

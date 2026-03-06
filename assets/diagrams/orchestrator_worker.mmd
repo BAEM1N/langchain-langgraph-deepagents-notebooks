@@ -1,0 +1,22 @@
+graph TD
+    START(["START"])
+    plan["plan<br/><i>섹션 계획</i>"]
+    W1["worker<br/><i>섹션 1</i>"]
+    W2["worker<br/><i>섹션 2</i>"]
+    W3["worker<br/><i>섹션 3</i>"]
+    END_(["END"])
+
+    START --> plan
+    plan -- "Send()" --> W1
+    plan -- "Send()" --> W2
+    plan -- "Send()" --> W3
+    W1 --> END_
+    W2 --> END_
+    W3 --> END_
+
+    style START fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c,font-weight:bold
+    style plan fill:#ed7969,stroke:#c45a4d,color:#fff,font-weight:bold
+    style W1 fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style W2 fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style W3 fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style END_ fill:#ed7969,stroke:#c45a4d,color:#fff,font-weight:bold

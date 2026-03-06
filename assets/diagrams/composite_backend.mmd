@@ -1,0 +1,9 @@
+graph TD
+    A["CompositeBackend"] --> B{"/memories/* ?"}
+    B -->|Yes| C["StoreBackend<br/>(영속: 대화 간 유지)"]
+    B -->|No| D["StateBackend<br/>(에페메럴: 대화 내 임시)"]
+
+    style A fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style B fill:#ffd166,stroke:#d4a843,color:#333
+    style C fill:#ed7969,stroke:#c45a4d,color:#fff
+    style D fill:#d4eff1,stroke:#83ced2,color:#333

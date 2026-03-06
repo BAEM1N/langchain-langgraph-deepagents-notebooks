@@ -1,0 +1,18 @@
+graph LR
+    subgraph Main["메인 에이전트"]
+        A["사용자 질문"]
+        B["최종 응답"]
+    end
+    subgraph Sub["서브에이전트 (격리된 컨텍스트)"]
+        C["검색 1 → 결과 (3K)"]
+        D["검색 2 → 결과 (5K)"]
+        E["파일 읽기 → 내용 (2K)"]
+        F["분석..."]
+        G["→ 최종 요약 (500 토큰)"]
+    end
+
+    A -->|"task 호출"| C
+    G -->|"요약 반환"| B
+
+    style Main fill:#d4eff1,stroke:#83ced2,color:#333
+    style Sub fill:#fde0dc,stroke:#ed7969,color:#333

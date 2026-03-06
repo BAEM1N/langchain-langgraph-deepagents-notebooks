@@ -1,0 +1,14 @@
+graph LR
+    subgraph External["에이전트 (외부)"]
+        A["시크릿 보관"]
+        B["도구 호출 관리"]
+    end
+    subgraph Sandbox["샌드박스 (격리)"]
+        C["코드 실행만"]
+        D["네트워크 제한"]
+    end
+
+    External -->|"API"| Sandbox
+
+    style External fill:#d4eff1,stroke:#83ced2,color:#333
+    style Sandbox fill:#fde0dc,stroke:#ed7969,color:#333

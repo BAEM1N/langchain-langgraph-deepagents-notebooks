@@ -1,0 +1,30 @@
+[project]
+name = "langchain-langgraph-deepagents-notebooks"
+version = "0.0.1"
+description = "LangChain & LangGraph & DeepAgents 자료"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "deepagents>=0.4.4",
+    "ipykernel>=7.2.0",
+    "jupyter>=1.1.1",
+    "langchain>=1.2",
+    "langchain-openai>=1.1.10",
+    "langchain-community>=0.4",
+    "langchain-text-splitters>=1.1",
+    "langgraph>=1.0",
+    "faiss-cpu>=1.13",
+    "python-dotenv>=1.2.2",
+    "tavily-python>=0.7.22",
+    "slack-sdk>=3.40.1",
+    "assemblyai>=0.54.1",
+    "cartesia>=3.0.2",
+    "websockets>=16.0",
+    "agentevals>=0.0.9",
+]
+
+[project.optional-dependencies]
+observability = [
+    "langfuse>=2.0",
+    "langsmith>=0.3",
+]

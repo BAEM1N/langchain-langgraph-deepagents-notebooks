@@ -1,0 +1,31 @@
+graph LR
+    subgraph before["before_model (순방향)"]
+        bA["A"] --> bB["B"] --> bC["C"]
+    end
+
+    subgraph after["after_model (역방향)"]
+        aC["C"] --> aB["B"] --> aA["A"]
+    end
+
+    subgraph wrap["wrap_model (중첩)"]
+        wA["A"]
+        wB["B"]
+        wC["C"]
+        mc(("model"))
+        wA --> wB --> wC --> mc
+        mc --> wC2["C"] --> wB2["B"] --> wA2["A"]
+    end
+
+    style bA fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style bB fill:#ed7969,stroke:#c45a4d,color:#fff
+    style bC fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style aC fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style aB fill:#ed7969,stroke:#c45a4d,color:#fff
+    style aA fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style wA fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style wB fill:#ed7969,stroke:#c45a4d,color:#fff
+    style wC fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style mc fill:#ffd166,stroke:#d4a843,color:#333
+    style wC2 fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style wB2 fill:#ed7969,stroke:#c45a4d,color:#fff
+    style wA2 fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c

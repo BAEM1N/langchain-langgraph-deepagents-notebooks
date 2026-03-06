@@ -1,0 +1,21 @@
+graph TD
+    Input["사용자 입력"]
+    Reasoning["모델 추론<br/><i>Reasoning</i>"]
+    Acting["도구 호출<br/><i>Acting</i>"]
+    Observation["결과 관찰<br/><i>Observation</i>"]
+    Decision{"도구 호출이<br/>더 필요한가?"}
+    Response["최종 응답"]
+
+    Input --> Reasoning
+    Reasoning --> Acting
+    Acting --> Observation
+    Observation --> Decision
+    Decision -- "예" --> Reasoning
+    Decision -- "아니오" --> Response
+
+    style Input fill:#f0f0f0,stroke:#ccc,color:#333
+    style Reasoning fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style Acting fill:#ed7969,stroke:#c45a4d,color:#fff
+    style Observation fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style Decision fill:#ffd166,stroke:#d4a843,color:#333
+    style Response fill:#f0f0f0,stroke:#ccc,color:#333

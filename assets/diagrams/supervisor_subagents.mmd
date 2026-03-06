@@ -1,0 +1,29 @@
+graph TD
+    Supervisor["Supervisor Agent"]
+    CalAgent["Calendar Agent"]
+    EmailAgent["Email Agent"]
+    create["create"]
+    read_cal["read"]
+    update["update"]
+    send["send"]
+    read_email["read"]
+    search["search"]
+
+    Supervisor --> CalAgent
+    Supervisor --> EmailAgent
+    CalAgent --> create
+    CalAgent --> read_cal
+    CalAgent --> update
+    EmailAgent --> send
+    EmailAgent --> read_email
+    EmailAgent --> search
+
+    style Supervisor fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c,font-weight:bold
+    style CalAgent fill:#ed7969,stroke:#c45a4d,color:#fff
+    style EmailAgent fill:#ed7969,stroke:#c45a4d,color:#fff
+    style create fill:#d4eff1,stroke:#83ced2,color:#333
+    style read_cal fill:#d4eff1,stroke:#83ced2,color:#333
+    style update fill:#d4eff1,stroke:#83ced2,color:#333
+    style send fill:#fde0dc,stroke:#ed7969,color:#333
+    style read_email fill:#fde0dc,stroke:#ed7969,color:#333
+    style search fill:#fde0dc,stroke:#ed7969,color:#333

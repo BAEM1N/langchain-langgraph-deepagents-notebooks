@@ -1,0 +1,16 @@
+graph TD
+    A["User Request"]
+    B["before_model<br/>모델 호출 전 처리<br/>(입력 검증, 로깅, 트리밍)"]
+    C["Model<br/>wrap_model_call로<br/>감싸기 가능 (재시도, 폴백)"]
+    D["after_model<br/>모델 응답 후 처리<br/>(로깅, 필터링)"]
+    E["Tools<br/>wrap_tool_call로<br/>감싸기 가능"]
+    F["Response"]
+
+    A --> B --> C --> D --> E --> F
+
+    style A fill:#f0f0f0,stroke:#ccc,color:#333
+    style B fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style C fill:#ed7969,stroke:#c45a4d,color:#fff
+    style D fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style E fill:#ed7969,stroke:#c45a4d,color:#fff
+    style F fill:#f0f0f0,stroke:#ccc,color:#333

@@ -1,0 +1,32 @@
+graph TD
+    Q["에이전트 파일이<br/>필요한가?"] --> A["임시 작업만 필요"]
+    Q --> B["로컬 파일 접근 필요"]
+    Q --> C["대화 간 데이터<br/>유지 필요"]
+    Q --> D["임시 + 영속 혼합"]
+    Q --> E["셸 명령도 필요"]
+
+    A --> A1["StateBackend<br/>(기본값)"]
+    B --> B1["읽기만"]
+    B --> B2["쓰기도"]
+    B1 --> B1R["FilesystemBackend<br/>(virtual_mode=True)"]
+    B2 --> B2R["FilesystemBackend<br/>+ Human-in-the-Loop"]
+    C --> C1["StoreBackend"]
+    D --> D1["CompositeBackend"]
+    E --> E1["개발 환경"]
+    E --> E2["프로덕션"]
+    E1 --> E1R["LocalShellBackend"]
+    E2 --> E2R["샌드박스<br/>(Modal, Daytona 등)"]
+
+    style Q fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c,font-weight:bold
+    style A fill:#d4eff1,stroke:#83ced2,color:#333
+    style B fill:#d4eff1,stroke:#83ced2,color:#333
+    style C fill:#d4eff1,stroke:#83ced2,color:#333
+    style D fill:#d4eff1,stroke:#83ced2,color:#333
+    style E fill:#d4eff1,stroke:#83ced2,color:#333
+    style A1 fill:#ed7969,stroke:#c45a4d,color:#fff
+    style B1R fill:#ed7969,stroke:#c45a4d,color:#fff
+    style B2R fill:#ed7969,stroke:#c45a4d,color:#fff
+    style C1 fill:#ed7969,stroke:#c45a4d,color:#fff
+    style D1 fill:#ed7969,stroke:#c45a4d,color:#fff
+    style E1R fill:#ed7969,stroke:#c45a4d,color:#fff
+    style E2R fill:#ed7969,stroke:#c45a4d,color:#fff

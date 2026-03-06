@@ -1,0 +1,19 @@
+graph TD
+    Router["Router<br/><i>분류</i>"]
+    GitHub["GitHub<br/>Agent"]
+    Notion["Notion<br/>Agent"]
+    Slack["Slack<br/>Agent"]
+    Reducer["Result Reducer<br/><i>합성</i>"]
+
+    Router -- "Send()" --> GitHub
+    Router -- "Send()" --> Notion
+    Router -- "Send()" --> Slack
+    GitHub --> Reducer
+    Notion --> Reducer
+    Slack --> Reducer
+
+    style Router fill:#ffd166,stroke:#d4a843,color:#333,font-weight:bold
+    style GitHub fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style Notion fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style Slack fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
+    style Reducer fill:#ed7969,stroke:#c45a4d,color:#fff,font-weight:bold
