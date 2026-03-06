@@ -7,18 +7,14 @@ LLM 기반 AI 에이전트 개발을 **초급부터 프로덕션 배포까지** 
 ## 프로젝트 구조
 
 ```
-agent-engineering-notebooks/
+langchain-langgraph-deepagents-notebooks/
 ├── .env.example                 # API 키 템플릿
 ├── pyproject.toml               # 의존성 관리 (uv)
 ├── 01_beginner/                 # 초급 과정 (8개)
-├── 02_langchain/                # 중급 — LangChain v1 (10개)
-├── 03_langgraph/                # 중급 — LangGraph v1 (10개)
-├── 04_deepagents/               # 중급 — Deep Agents SDK (7개)
+├── 02_langchain/                # 중급 — LangChain v1 (13개)
+├── 03_langgraph/                # 중급 — LangGraph v1 (13개)
+├── 04_deepagents/               # 중급 — Deep Agents SDK (10개)
 ├── 05_advanced/                 # 고급 과정 (10개)
-├── docs/                        # 참고 문서
-│   ├── langchain/
-│   ├── langgraph/
-│   └── deepagents/
 └── assets/                      # 이미지 등 정적 자산
 ```
 
@@ -41,7 +37,7 @@ agent-engineering-notebooks/
 | 06 | `06_comparison.ipynb` | 프레임워크 비교 | LangChain vs LangGraph vs Deep Agents |
 | 07 | `07_mini_project.ipynb` | 미니 프로젝트 | Tavily 검색 + 요약 리서치 에이전트 |
 
-### 2. 중급 — LangChain v1 (`02_langchain/`, 10개)
+### 2. 중급 — LangChain v1 (`02_langchain/`, 13개)
 
 > 대상: LangChain으로 프로덕션 에이전트를 만들고 싶은 분들께 추천드립니다.
 
@@ -57,8 +53,11 @@ agent-engineering-notebooks/
 | 08 | `08_multi_agent.ipynb` | 멀티 에이전트 패턴 | Subagents, Handoffs, Skills, Router |
 | 09 | `09_custom_workflow_and_rag.ipynb` | 커스텀 워크플로와 RAG | StateGraph, 조건부 엣지, 벡터 검색 |
 | 10 | `10_production.ipynb` | 프로덕션 | Studio, 테스트, UI, 배포, 관측성 |
+| 11 | `11_mcp.ipynb` | MCP | Model Context Protocol, langchain-mcp-adapters, Stdio/SSE |
+| 12 | `12_frontend_streaming.ipynb` | 프론트엔드 스트리밍 | useStream React 훅, StreamEvent, 커스텀 이벤트 |
+| 13 | `13_guardrails.ipynb` | 가드레일 | PII 감지, HITL, 커스텀 미들웨어, 다중 가드레일 |
 
-### 3. 중급 — LangGraph v1 (`03_langgraph/`, 10개)
+### 3. 중급 — LangGraph v1 (`03_langgraph/`, 13개)
 
 > 대상: 복잡한 워크플로와 상태 관리가 필요한 분들께 추천드립니다.
 
@@ -74,8 +73,11 @@ agent-engineering-notebooks/
 | 08 | `08_interrupts_and_time_travel.ipynb` | 인터럽트와 타임 트래블 | `interrupt()`, `Command(resume=)`, 체크포인트 리플레이 |
 | 09 | `09_subgraphs.ipynb` | 서브그래프 | 그래프 모듈화, 상태 매핑, 서브그래프 스트리밍 |
 | 10 | `10_production.ipynb` | 프로덕션 | Studio, 테스트, 배포, 관측성, Pregel |
+| 11 | `11_local_server.ipynb` | 로컬 서버 | langgraph dev, Studio, Python SDK, REST API |
+| 12 | `12_durable_execution.ipynb` | 내구성 실행 | 체크포인터, @task, 장애 복구, 내구성 모드 |
+| 13 | `13_api_guide_and_pregel.ipynb` | API 가이드와 Pregel | Graph vs Functional, Pregel 런타임, 슈퍼스텝 |
 
-### 4. 중급 — Deep Agents SDK (`04_deepagents/`, 7개)
+### 4. 중급 — Deep Agents SDK (`04_deepagents/`, 10개)
 
 > 대상: 올인원 에이전트 시스템을 빠르게 구축하고 싶은 분들께 추천드립니다.
 
@@ -88,6 +90,9 @@ agent-engineering-notebooks/
 | 05 | `05_subagents.ipynb` | 서브에이전트 | `SubAgent`, `CompiledSubAgent`, 파이프라인 |
 | 06 | `06_memory_and_skills.ipynb` | 메모리 & 스킬 | `memory`, `skills`, AGENTS.md, SKILL.md |
 | 07 | `07_advanced.ipynb` | 고급 기능 | Human-in-the-Loop, 스트리밍, 샌드박스, ACP, CLI |
+| 08 | `08_harness.ipynb` | 에이전트 하네스 | AgentHarness, 파일시스템, 컨텍스트 관리, 서브에이전트 |
+| 09 | `09_comparison.ipynb` | 외부 프레임워크 비교 | Deep Agents vs OpenCode vs Claude Agent SDK |
+| 10 | `10_sandboxes_and_acp.ipynb` | 샌드박스와 ACP | Modal/Daytona/Runloop, Agent Client Protocol |
 
 ### 5. 고급 — 프로덕션 & 멀티에이전트 (`05_advanced/`, 10개)
 
@@ -112,8 +117,8 @@ agent-engineering-notebooks/
 
 ```bash
 # 1. 저장소 클론
-git clone https://github.com/BAEM1N/agent-engineering-notebooks.git
-cd agent-engineering-notebooks
+git clone https://github.com/BAEM1N/langchain-langgraph-deepagents-notebooks.git
+cd langchain-langgraph-deepagents-notebooks
 
 # 2. 의존 패키지 설치 (uv 기반)
 uv sync
@@ -125,6 +130,8 @@ cp .env.example .env
 # 4. Jupyter 실행
 uv run jupyter lab
 ```
+
+> **설치 원칙**: 공식 설치 경로는 `uv sync`입니다. 일부 고급 노트북에 `%pip install` 셀이 있지만, 이는 Colab 등 일회성 환경용입니다. 로컬 환경에서는 `uv sync`로 모든 의존성을 한 번에 설치하세요.
 
 ---
 
