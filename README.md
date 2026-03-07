@@ -152,7 +152,7 @@ uv run jupyter lab
 | 01 | `01_rag_agent.ipynb` | RAG 에이전트 | InMemoryVectorStore, `content_and_artifact`, create_deep_agent |
 | 02 | `02_sql_agent.ipynb` | SQL 에이전트 | SQLDatabaseToolkit, AGENTS.md 안전규칙, HITL interrupt |
 | 03 | `03_data_analysis_agent.ipynb` | 데이터 분석 에이전트 | LocalShellBackend, run_pandas, 스트리밍, 멀티턴 |
-| 04 | `04_ml_agent.ipynb` | 머신러닝 에이전트 | sklearn 도구 3개, data-preprocessor 서브에이전트 |
+| 04 | `04_ml_agent.ipynb` | 머신러닝 에이전트 | run_ml_code, 자유 EDA→전처리→모델비교, 멀티턴 |
 | 05 | `05_deep_research_agent.ipynb` | 딥 리서치 에이전트 | 병렬 서브에이전트 3개, think_tool, 5단계 워크플로 |
 
 ---
