@@ -22,6 +22,8 @@ dependencies = [
     "websockets>=16.0",
     "agentevals>=0.0.9",
     "scikit-learn>=1.8.0",
+    "pandas>=3.0.1",
+    "langchain-tavily>=0.2.17",
 ]
 
 [project.optional-dependencies]
