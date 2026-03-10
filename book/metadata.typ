@@ -42,6 +42,6 @@
 #let color-part-bg = rgb("#F8FAFA")
 
 // Fonts
-#let font-body = ("goorm Sans", "Pretendard", "Noto Sans KR")
+#let font-body = ("goorm Sans")
 #let font-code = ("goorm Sans Code", "JetBrainsMono NF", "D2Coding")
 #let font-serif = ("Noto Serif KR", "Batang")

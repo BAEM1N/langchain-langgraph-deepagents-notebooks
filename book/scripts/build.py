@@ -19,8 +19,8 @@ BOOK_DIR = Path(__file__).parent.parent
 SCRIPTS_DIR = Path(__file__).parent
 CONFIG_PATH = SCRIPTS_DIR / "config.yaml"
 MAIN_TYP = BOOK_DIR / "main.typ"
-OUTPUT_DIR = BOOK_DIR / "output"
-OUTPUT_PDF = OUTPUT_DIR / "agent-handbook.pdf"
+OUTPUT_DIR = BOOK_DIR
+OUTPUT_PDF = BOOK_DIR / "agent-handbook.pdf"
 
 
 def step(name: str):
