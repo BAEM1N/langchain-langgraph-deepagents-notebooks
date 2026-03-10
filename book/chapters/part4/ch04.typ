@@ -37,7 +37,7 @@ Deep Agents의 빌트인 파일 도구(`ls`, `read_file`, `write_file`, `edit_fi
 
 백엔드는 에이전트가 파일을 읽고 쓰는 _스토리지 계층_을 추상화합니다. 에이전트 입장에서는 "파일을 쓴다"는 동일한 명령을 내리지만, 그 뒤에서 실제로 메모리에 저장하는지, 디스크에 저장하는지, 원격 데이터베이스에 저장하는지는 백엔드 구현에 따라 달라집니다. 이 추상화 덕분에 에이전트의 시스템 프롬프트나 도구 호출 로직을 전혀 변경하지 않고도, `create_deep_agent()`의 `backend` 파라미터 한 줄만 바꿔서 저장소 전략을 완전히 전환할 수 있습니다.
 
-#align(center)[#image("../../assets/diagrams/png/backend_abstraction.png", width: 70%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/backend_abstraction.png", width: 78%, height: 112mm, fit: "contain")]
 
 위 다이어그램에서 에이전트의 파일 도구와 백엔드 사이에 위치한 추상화 계층에 주목하세요. 에이전트는 항상 동일한 인터페이스(`read`, `write`, `ls` 등)를 호출하며, 실제 저장 방식은 백엔드가 결정합니다.
 
@@ -173,7 +173,7 @@ StoreBackend 에이전트가 생성되었습니다!
 
 `CompositeBackend`는 경로 프리픽스에 따라 서로 다른 백엔드로 요청을 라우팅합니다. 가장 일반적인 패턴은 *`/memories/`는 영속 저장, 나머지는 에페메럴*입니다. 이 패턴은 에이전트가 작업 중 생성하는 임시 파일(초안, 중간 결과 등)은 세션이 끝나면 자동 정리되고, 중요한 학습 결과나 사용자 선호도는 영구 보존되도록 합니다.
 
-#align(center)[#image("../../assets/diagrams/png/composite_backend.png", width: 70%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/composite_backend.png", width: 68%, height: 122mm, fit: "contain")]
 
 #code-block(`````python
 # CompositeBackend 팩토리 함수
@@ -347,7 +347,7 @@ print("검색 결과:", custom_backend.grep_raw("설치"))
 
 어떤 백엔드를 선택해야 할지 결정할 때 아래 의사결정 트리를 참고하세요. 핵심 질문은 "데이터가 대화 세션을 넘어 유지되어야 하는가?"와 "에이전트가 로컬 파일 시스템에 접근해야 하는가?"입니다.
 
-#align(center)[#image("../../assets/diagrams/png/backend_decision_tree.png", width: 70%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/backend_decision_tree.png", width: 86%, height: 96mm, fit: "contain")]
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 핵심 정리

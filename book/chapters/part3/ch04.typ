@@ -93,7 +93,7 @@ else:
     result = handle_general(query).result()
 `````)
 
-#align(center)[#image("../../assets/diagrams/png/conditional_routing.png", width: 70%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/conditional_routing.png", width: 78%, height: 112mm, fit: "contain")]
 
 #warning-box[라우팅 함수에서 `Literal` 타입 힌트를 사용하면 그래프 시각화에 가능한 경로가 모두 표시됩니다. 타입 힌트가 없으면 시각화 도구가 분기 경로를 추론할 수 없어, 디버깅 시 불편할 수 있습니다.]
 
@@ -117,7 +117,7 @@ builder.add_node("worker", worker_fn)
 builder.add_edge("worker", "aggregator")
 `````)
 
-#align(center)[#image("../../assets/diagrams/png/orchestrator_worker.png", width: 70%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/orchestrator_worker.png", width: 68%, height: 122mm, fit: "contain")]
 
 #tip-box[`Send()` API에서 각 워커는 _독립적인 상태_를 받습니다. 워커 노드의 결과를 하나로 합치려면 팬인(fan-in) 노드에서 리듀서를 활용해야 합니다. 예를 들어 `results: Annotated[list, operator.add]` 필드를 정의하면, 각 워커가 반환한 결과가 자동으로 리스트에 누적됩니다.]
 

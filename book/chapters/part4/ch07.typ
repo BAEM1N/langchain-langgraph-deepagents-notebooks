@@ -47,7 +47,7 @@ print(f"모델 설정 완료: {model.model_name}")
 
 === 작동 방식
 
-#align(center)[#image("../../assets/diagrams/png/hitl_flow.png", width: 70%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/hitl_flow.png", width: 78%, height: 112mm, fit: "contain")]
 
 === 필수 요구사항
 #warning-box[Human-in-the-Loop을 사용하려면 반드시 `checkpointer`를 설정해야 합니다. 에이전트가 중단된 시점의 상태를 보존하고, 승인 후 정확히 그 지점에서 재개하기 위해 체크포인터가 필수입니다.]
@@ -191,7 +191,7 @@ print("스트리밍 데모 에이전트 생성 완료")
 
 _샌드박스를 도구로 사용_ (권장)
 
-#align(center)[#image("../../assets/diagrams/png/sandbox_architecture.png", width: 70%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/sandbox_architecture.png", width: 92%, height: 82mm, fit: "contain")]
 
 #warning-box[_절대 샌드박스 안에 시크릿을 넣지 마세요._ 에이전트는 환경 변수를 읽거나 파일을 탐색하여 자격 증명을 외부로 유출할 수 있습니다. 자격 증명은 반드시 호스트(에이전트 측)의 전용 도구에서만 관리하세요.]
 

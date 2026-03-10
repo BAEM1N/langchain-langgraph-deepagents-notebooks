@@ -36,7 +36,7 @@ LangChain의 기본 에이전트 컴포넌트 위에 구축되었으며, _LangGr
 
 Deep Agents의 아키텍처는 세 계층으로 구성됩니다. 최하단에는 LangChain의 모델/도구 인터페이스가 위치하고, 중간 계층의 LangGraph가 상태 기반 그래프 실행을 담당하며, 최상위에 Deep Agents 하네스가 계획, 파일시스템, 서브에이전트, 메모리 등 고수준 기능을 통합합니다. 이 계층 구조 덕분에 각 계층의 기능을 독립적으로 교체하거나 확장할 수 있습니다. 예를 들어, LangChain 계층에서 모델만 교체하면 나머지 인프라는 그대로 유지되고, LangGraph 계층에서 체크포인터를 바꾸면 영속성 전략만 변경됩니다.
 
-#align(center)[#image("../../assets/diagrams/png/deepagents_architecture.png", width: 70%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/deepagents_architecture.png", width: 78%, height: 112mm, fit: "contain")]
 
 아래 다이어그램에서 주목할 점은 _화살표의 방향_입니다. Deep Agents 하네스는 LangGraph와 LangChain을 _의존_하지만, 반대 방향은 성립하지 않습니다. 즉, LangGraph로 직접 그래프를 구축하던 기존 코드도 Deep Agents 없이 독립적으로 동작할 수 있습니다.
 

@@ -42,7 +42,7 @@ print("환경 준비 완료.")
 
 `.stream()` 메서드는 모델 응답을 토큰 단위로 실시간 전달합니다. 사용자는 전체 응답이 완성되기 전에 부분 결과를 볼 수 있습니다. 내부적으로 `.stream()`은 LLM API의 스트리밍 응답을 파이썬 제너레이터로 감싸서, `for chunk in model.stream(...)` 형태로 각 토큰 청크를 순회할 수 있게 합니다.
 
-#align(center)[#image("../../assets/diagrams/png/frontend_streaming_flow.png", width: 86%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/frontend_streaming_flow.png", width: 86%, height: 96mm, fit: "contain")]
 
 이 그림처럼 프론트엔드 스트리밍은 단순히 _토큰을 받는 기능_ 이 아니라, 스레드 재개, 상태 동기화, 커스텀 이벤트 수신까지 포함하는 _세션 프로토콜_ 에 가깝습니다.
 
@@ -54,7 +54,7 @@ print("환경 준비 완료.")
 
 === 주요 이벤트 타입
 
-#align(center)[#image("../../assets/diagrams/png/frontend_streaming_events.png", width: 82%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/frontend_streaming_events.png", width: 68%, height: 122mm, fit: "contain")]
 
 이 다이어그램은 _사용자 입력 → `useStream` → LangGraph 서버 → 에이전트 런타임 → 이벤트 반환_ 의 왕복 흐름을 보여줍니다. 실무에서는 토큰 자체보다도 `on_tool_start`, `on_tool_end` 같은 _상태 이벤트_ 가 중요합니다. 사용자는 "지금 답을 쓰는 중인지", "검색 도구를 실행 중인지"를 구분해 볼 수 있어야 체감 대기 시간이 크게 줄어듭니다.
 

@@ -53,7 +53,7 @@ LangGraph는 에이전트 워크플로를 구축하기 위한 두 가지 API를 
 
 == 13.3 빠른 선택 가이드
 
-#align(center)[#image("../../assets/diagrams/png/api_selection_map.png", width: 84%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/api_selection_map.png", width: 78%, height: 112mm, fit: "contain")]
 
 선택의 핵심은 _실행 흐름을 눈에 보이는 그래프로 관리할지_, 아니면 _Python 함수 흐름으로 간결하게 표현할지_ 입니다. 두 API 모두 Pregel 런타임 위에서 실행되므로 성능보다도 _표현 방식과 유지보수성_ 이 더 중요한 결정 기준입니다.
 

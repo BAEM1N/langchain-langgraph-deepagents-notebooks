@@ -37,7 +37,7 @@ print("모델 준비 완료:", model.model_name)
 
 미들웨어는 에이전트 실행 파이프라인의 _각 단계에 훅(hook)을 추가_하여 동작을 제어하는 메커니즘입니다. `create_agent()`의 `middleware` 매개변수에 미들웨어 리스트를 전달하면, 에이전트의 매 실행 주기마다 해당 훅이 자동으로 호출됩니다. 미들웨어의 훅 종류는 `prompt`, `before_model`, `after_model`, `before_tool`, `after_tool`, `wrap_model_call` 등이 있으며, 아래 다이어그램에서 각 훅이 파이프라인의 어느 시점에 실행되는지 확인할 수 있습니다.
 
-#align(center)[#image("../../assets/diagrams/png/middleware_pipeline.png", width: 70%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/middleware_pipeline.png", width: 54%, height: 128mm, fit: "contain")]
 
 _5가지 미들웨어 훅:_
 

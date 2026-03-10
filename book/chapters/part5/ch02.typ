@@ -29,7 +29,7 @@ model = ChatOpenAI(model="gpt-4.1")
 
 Subagents 패턴은 _3계층 아키텍처_로 구성됩니다. 감독자가 모든 라우팅을 담당하고, 서브에이전트는 사용자와 직접 상호작용하지 않으며, 결과를 감독자에게 반환합니다.
 
-#align(center)[#image("../../assets/diagrams/png/supervisor_subagents.png", width: 70%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/supervisor_subagents.png", width: 86%, height: 96mm, fit: "contain")]
 
 #table(
   columns: 3,

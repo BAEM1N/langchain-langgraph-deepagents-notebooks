@@ -50,7 +50,7 @@ model = ChatOpenAI(model="gpt-4.1")
 
 === 해결 방식: CompositeBackend
 
-#align(center)[#image("../../assets/diagrams/png/composite_backend.png", width: 70%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/composite_backend.png", width: 68%, height: 122mm, fit: "contain")]
 
 `/memories/` 경로에 저장된 파일은 _어떤 대화 스레드에서든_ 접근할 수 있습니다. 이 구조에서 `StateBackend`는 현재 대화의 임시 파일을 관리하고, `StoreBackend`는 `/memories/` 하위 경로의 파일을 `InMemoryStore`(또는 데이터베이스)에 영속적으로 저장한다. `CompositeBackend`가 경로별로 어떤 백엔드를 사용할지 라우팅하는 역할을 한다.
 

@@ -35,7 +35,7 @@ Dialect: sqlite
 
 SQL 에이전트는 자연어 질문을 SQL 쿼리로 변환하는 _8단계_ 프로세스를 따릅니다:
 
-#align(center)[#image("../../assets/diagrams/png/sql_query_review_flow.png", width: 88%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/sql_query_review_flow.png", width: 92%, height: 82mm, fit: "contain")]
 
 실무에서는 이 흐름을 두 갈래로 기억하면 됩니다. _정상 경로_ 는 생성 → 검증 → 승인 → 실행으로 이어지고, _보호 경로_ 는 검증 실패나 사람 거절 시 즉시 다시 작성하거나 사용자에게 추가 정보를 요구합니다.
 

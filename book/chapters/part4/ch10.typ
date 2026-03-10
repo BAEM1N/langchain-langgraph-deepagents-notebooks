@@ -79,7 +79,7 @@ Deep Agents에서 샌드박스는 _백엔드_로 기능합니다. 4장에서 학
 
 샌드박스를 에이전트와 통합하는 방식에는 두 가지 근본적으로 다른 접근법이 있습니다. 이 선택은 단순한 구현 방식의 차이가 아니라, _보안 경계(security boundary)_를 어디에 설정하느냐의 문제입니다. 각 패턴의 보안 모델과 운영 특성을 이해하면 프로젝트에 맞는 올바른 선택을 할 수 있습니다.
 
-#align(center)[#image("../../assets/diagrams/png/sandbox_acp_sequence.png", width: 86%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/sandbox_acp_sequence.png", width: 78%, height: 112mm, fit: "contain")]
 
 위 시퀀스 다이어그램에서 핵심은 _에이전트의 지능_ 과 _실행 권한_ 이 분리된다는 점입니다. ACP는 개발자 경험을 담당하고, 샌드박스는 실제 실행을 격리합니다. 따라서 실무에서는 “어디서 추론하고, 어디서 실행하는가?”를 먼저 결정하면 패턴 선택이 훨씬 쉬워집니다.
 

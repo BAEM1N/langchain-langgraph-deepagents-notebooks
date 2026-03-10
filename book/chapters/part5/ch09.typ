@@ -41,7 +41,7 @@ Part 5의 마지막 장입니다. 앞선 장들에서 미들웨어, 멀티에이
 
 에이전트의 비결정적 특성 때문에 전통적인 소프트웨어 테스트만으로는 품질을 보장할 수 없습니다.
 
-#align(center)[#image("../../assets/diagrams/png/production_lifecycle_flow.png", width: 86%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/production_lifecycle_flow.png", width: 92%, height: 82mm, fit: "contain")]
 
 이 흐름도는 프로덕션 운영을 _개발 → 검증 → 관측 → 배포 → 운영_ 의 닫힌 루프로 보여줍니다. 에이전트는 배포 후에도 계속 프롬프트, 도구, 평가셋이 수정되므로, 마지막 운영 단계가 다시 테스트와 개발로 되돌아가는 구조를 의도적으로 가져가야 합니다.
 

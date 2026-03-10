@@ -71,7 +71,7 @@ model = ChatOpenAI(model="gpt-4.1")
 
 보이스 에이전트는 3-레이어 파이프라인으로 구성됩니다:
 
-#align(center)[#image("../../assets/diagrams/png/voice_streaming_pipeline.png", width: 88%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/voice_streaming_pipeline.png", width: 92%, height: 82mm, fit: "contain")]
 
 이 파이프라인은 세 단계가 _겹쳐서_ 실행될 때 비로소 자연스럽게 동작합니다. STT가 문장을 완전히 마치기 전에도 부분 전사를 넘기고, Agent는 첫 토큰이 나오자마자 TTS로 전달하여 전체 체감 지연을 줄입니다.
 
@@ -442,7 +442,7 @@ async def main():
 
 === 레이턴시 분석
 
-#align(center)[#image("../../assets/diagrams/png/voice_latency_pipeline.png", width: 82%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/voice_latency_pipeline.png", width: 86%, height: 96mm, fit: "contain")]
 
 _레이턴시 버짓 예시_: STT 180ms + Agent TTFT 320ms + TTS 첫 오디오 140ms = _약 640ms_ 입니다. 이때 핵심은 각 단계를 개별 최적화하는 것보다, 다음 단계가 이전 단계의 _완료_ 가 아니라 _첫 결과_ 를 받아 시작하도록 만드는 것입니다.
 

@@ -493,7 +493,7 @@ class AuditMiddleware(AgentMiddleware):
 
 `middleware=[A, B, C]` 등록 시:
 
-#align(center)[#image("../../assets/diagrams/png/middleware_execution_order.png", width: 70%, height: 150mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/middleware_execution_order.png", width: 54%, height: 128mm, fit: "contain")]
 
 === 실전 팁
 - _PII 검출은 로깅보다 먼저_ 등록해야 로그에 PII가 포함되지 않습니다.
