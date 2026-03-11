@@ -1,15 +1,18 @@
-graph TD
-    T1["before_model (순방향)"]
-    T1 --> bA["A"] --> bB["B"] --> bC["C"]
+graph LR
+    subgraph before["before_model"]
+        direction LR
+        T1["순방향"] --> bA["A"] --> bB["B"] --> bC["C"]
+    end
 
-    T2["after_model (역방향)"]
-    bC --> T2
-    T2 --> aC["C"] --> aB["B"] --> aA["A"]
+    subgraph after["after_model"]
+        direction LR
+        T2["역방향"] --> aC["C"] --> aB["B"] --> aA["A"]
+    end
 
-    T3["wrap_model (중첩)"]
-    aA --> T3
-    T3 --> wA["A"] --> wB["B"] --> wC["C"] --> mc(("model"))
-    mc --> wC2["C"] --> wB2["B"] --> wA2["A"]
+    subgraph wrap["wrap_model"]
+        direction LR
+        T3["중첩"] --> wA["A"] --> wB["B"] --> wC["C"] --> mc(("model")) --> wC2["C"] --> wB2["B"] --> wA2["A"]
+    end
 
     style bA fill:#83ced2,stroke:#5ba8ad,color:#1a3a3c
     style bB fill:#ed7969,stroke:#c45a4d,color:#fff

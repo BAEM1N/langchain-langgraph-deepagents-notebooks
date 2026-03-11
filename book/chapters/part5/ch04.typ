@@ -40,7 +40,7 @@ print("환경 준비 완료.")
 
 === 2차원 매트릭스: Mutability x Lifetime
 
-#align(center)[#image("../../assets/diagrams/png/context_matrix_guide.png", width: 88%, height: 106mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/context_matrix_guide.png", width: 94%, height: 128mm, fit: "contain")]
 
 이 다이어그램은 표의 행과 열을 _"언제 바뀌는가"_ 와 _"얼마나 오래 유지되는가"_ 라는 두 질문으로 다시 읽게 해 줍니다. 정리하면 다음 3줄 규칙으로 기억하면 됩니다:
 
@@ -720,5 +720,4 @@ Background: 최종 일관성, 지연 없음.
 )
 
 컨텍스트 엔지니어링은 에이전트의 _지능의 기반_입니다. 올바른 정보를 적시에 제공하는 것이 모델 선택보다 더 큰 영향을 미칩니다. 다음 장에서는 이 컨텍스트 엔지니어링을 실전에 적용하는 첫 번째 사례로, RAG 파이프라인을 심층적으로 다룹니다.
-
 

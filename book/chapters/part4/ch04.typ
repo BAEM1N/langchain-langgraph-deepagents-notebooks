@@ -347,7 +347,7 @@ print("검색 결과:", custom_backend.grep_raw("설치"))
 
 어떤 백엔드를 선택해야 할지 결정할 때 아래 의사결정 트리를 참고하세요. 핵심 질문은 "데이터가 대화 세션을 넘어 유지되어야 하는가?"와 "에이전트가 로컬 파일 시스템에 접근해야 하는가?"입니다.
 
-#align(center)[#image("../../assets/diagrams/png/backend_decision_tree.png", width: 92%, height: 122mm, fit: "contain")]
+#align(center)[#image("../../assets/diagrams/png/backend_decision_tree.png", width: 96%, height: 140mm, fit: "contain")]
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 핵심 정리
