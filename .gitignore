@@ -14,6 +14,7 @@ wheels/
 advanced/Chinook.db
 en/05_advanced/Chinook.db
 .omx/
+.codex/
 
 # Local lecture planning workspace
 lecture/
