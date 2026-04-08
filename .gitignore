@@ -12,3 +12,4 @@ wheels/
 # Environment variables
 .env
 advanced/Chinook.db
+.omx/
