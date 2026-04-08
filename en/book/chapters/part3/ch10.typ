@@ -38,7 +38,7 @@ print(json.dumps(config, indent=2))
 print()
 print("Command:")
 print("  $ pip install 'langgraph-cli[inmem]'")
-print("$ langgraph dev # http://localhost:2024에서 Start local server")
+print("$ langgraph dev  # starts the local server at http://localhost:2024")
 `````)
 
 == 10.3 LangGraph Studio — Visual Debugging tool
@@ -54,8 +54,8 @@ _Function:_
 
 _How to use:_
 `$ langgraph dev`
-== 브라우저에서 http://localhost:2024 접속
-== 또는 LangSmith Studio에서 원격 접속
+== Open http://localhost:2024 in your browser
+== Or connect remotely from LangSmith Studio
 #code-block(`````python
 
 `````)
@@ -102,7 +102,7 @@ graph = builder.compile()
 def test_process():
     result = graph.invoke({"input": "hello"})
 
-    assert result["output"] == "HELLO", f"HELLO 예상, {result['output']} 반환됨"
+    assert result["output"] == "HELLO", f"Expected HELLO, got {result['output']}"
 
     print("  OK test_process")
 
@@ -110,7 +110,7 @@ def test_process():
 def test_empty_input():
     result = graph.invoke({"input": ""})
 
-    assert result["output"] == "", f"빈 문자열 예상, {result['output']} 반환됨"
+    assert result["output"] == "", f"Expected an empty string, got {result['output']}"
 
     print("  OK test_empty_input")
 
@@ -161,7 +161,7 @@ result = test_graph.invoke(
 assert "42" in result["messages"][-1].content
 
 print("GenericFakeChatModel test passed!")
-print(f"  응답: {result['messages'][-1].content}")
+print(f"  Response: {result['messages'][-1].content}")
 `````)
 
 == 10.7 Deployment Options
@@ -203,10 +203,10 @@ LANGSMITH_TRACING=true
 - Generally no need to use it directly (Graph/Functional API abstracts it)
 
 _LangGraph Execution Model:_
-[Super-step 1] Node A, Node B (병렬)
-↓ 상태 업데이트
-[Super-step 2] Node C (A, B 결과 기반)
-↓ 상태 업데이트
+[Super-step 1] Node A, Node B (parallel)
+↓ State update
+[Super-step 2] Node C (based on the results of A and B)
+↓ State update
 [Super-step 3] Node D
 ↓
 END
@@ -270,9 +270,9 @@ END
   [observability],
   [LangSmith Tracing],
   [runtime],
-  [Pregel superstep Execution Model → Deeper in #link("13_api_guide_and_pregel.ipynb")[13번 __TERM_104__북]],
+  [Pregel superstep Execution Model → Deeper in #link("13_api_guide_and_pregel.ipynb")[Chapter 13]],
 )
 
 === Next Steps
 → Proceed to _#link("11_local_server.ipynb")[11. Local Server]_!
-→ Skip to _#link("../04_deepagents/01_introduction.ipynb")[__TERM_007__ __TERM_100__ 과정]_
+→ Skip to _#link("../04_deepagents/01_introduction.ipynb")[Deep Agents track]_

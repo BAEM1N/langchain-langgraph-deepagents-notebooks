@@ -36,7 +36,7 @@ model = ChatOpenAI(
 from langchain.agents import create_agent
 from langchain.tools import tool
 
-print("환경 준비 완료.")
+print("Environment ready.")
 `````)
 
 == 10.2 LangSmith Studio
@@ -52,7 +52,7 @@ Studio is a powerful tool for visualizing agent execution flow and debugging eac
 
 
 #code-block(`````python
-# langgraph.json 설정 예시
+# Example langgraph.json configuration
 import json
 
 langgraph_config = {
@@ -63,11 +63,11 @@ langgraph_config = {
     "env": ".env"
 }
 
-print("langgraph.json 설정 예시:")
+print("Example langgraph.json configuration:")
 print(json.dumps(langgraph_config, indent=2))
-print("\n실행 방법:")
+print("\nHow to run:")
 print("  $ langgraph dev")
-print("  → http://localhost:2024 에서 Studio UI 접근")
+print("  → Open the Studio UI at http://localhost:2024")
 `````)
 
 == 10.3 Agent Testing
@@ -88,27 +88,27 @@ from langchain.tools import tool
 
 @tool
 def get_capital(country: str) -> str:
-    """국가의 수도를 반환합니다."""
+    """Returns the capital of a country."""
     capitals = {"Korea": "Seoul", "Japan": "Tokyo", "France": "Paris"}
-    return capitals.get(country, "알 수 없음")
+    return capitals.get(country, "Unknown")
 
-# 가짜 모델로 결정론적 테스트
+# Deterministic test with a fake model
 fake_model = GenericFakeChatModel(
     messages=iter([
-        AIMessage(content="대한민국의 수도는 서울입니다.")
+        AIMessage(content="The capital of South Korea is Seoul.")
     ])
 )
 
-# 테스트 에이전트
+# Test agent
 test_agent = create_agent(
     model=fake_model,
     tools=[get_capital],
-    system_prompt="당신은 지리 전문가입니다.",
+    system_prompt="You are a geography expert.",
 )
 
-print("GenericFakeChatModel 테스트:")
-print("  → 결정론적 응답으로 에이전트 동작을 테스트합니다")
-print("  → CI/CD 파이프라인에서 API 호출 없이 테스트 가능")
+print("GenericFakeChatModel test:")
+print("  → Tests agent behavior with deterministic responses")
+print("  → Can be tested in CI/CD without live API calls")
 `````)
 
 == 10.4 Trajectory-Based Testing
@@ -117,30 +117,30 @@ Validate the order in which the agent calls tools. A trajectory test checks whet
 
 
 #code-block(`````python
-# 트라젝토리 테스트 예시
+# Example trajectory test
 def test_agent_trajectory():
-    """에이전트가 예상된 순서로 도구를 호출하는지 테스트합니다."""
+    """Tests whether the agent calls tools in the expected order."""
     result = test_agent.invoke(
-        {"messages": [{"role": "user", "content": "대한민국의 수도는 어디인가요?"}]}
+        {"messages": [{"role": "user", "content": "What is the capital of South Korea?"}]}
     )
     
     messages = result["messages"]
     
-    # 검증: 메시지가 존재하는지
-    assert len(messages) > 0, "에이전트가 응답하지 않았습니다"
+    # Check: verify that messages exist
+    assert len(messages) > 0, "The agent did not respond"
     
-    # 검증: 마지막 메시지가 AI 응답인지
+    # Check: verify that the last message is an AI response
     last_msg = messages[-1]
-    assert hasattr(last_msg, 'content'), "마지막 메시지에 content가 없습니다"
+    assert hasattr(last_msg, 'content'), "The last message does not contain content"
     
-    print("✓ 트라젝토리 테스트 통과")
-    print(f"  메시지 수: {len(messages)}")
-    print(f"  최종 응답: {last_msg.content[:100]}")
+    print("✓ Trajectory test passed")
+    print(f"  Message count: {len(messages)}")
+    print(f"  Final response: {last_msg.content[:100]}")
 
 try:
     test_agent_trajectory()
 except Exception as e:
-    print(f"테스트 참고: {e}")
+    print(f"Testing note: {e}")
 `````)
 
 == 10.5 Agent Chat UI
@@ -155,23 +155,23 @@ Key features:
 
 
 #code-block(`````python
-print("Agent Chat UI 설정:")
+print("Agent Chat UI setup:")
 print("=" * 50)
 print("""
-# 1. Agent Chat UI 설치
+# 1. Install Agent Chat UI
 `$ npx @anthropic-ai/agent-chat-ui`
 
-# 2. LangGraph 서버 시작
+# 2. Start the LangGraph server
 `$ langgraph dev`
 
-# 3. UI에서 http://localhost:2024 연결
-#    → 웹 브라우저에서 에이전트와 대화
+# 3. Connect the UI to http://localhost:2024
+#    -> Talk to the agent in a web browser
 """)
-print("주요 기능:")
-print("  - 실시간 스트리밍 채팅")
-print("  - 도구 호출 시각화")
-print("  - 대화 분기(branching)")
-print("  - Human-in-the-loop 승인")
+print("Key features:")
+print("  - Real-time streaming chat")
+print("  - Tool-call visualization")
+print("  - Conversation branching")
+print("  - Human-in-the-loop approval")
 `````)
 
 == 10.6 Deployment
@@ -180,20 +180,20 @@ You can deploy an agent through LangGraph Platform (managed) or your own server.
 
 
 #code-block(`````python
-print("배포 옵션:")
+print("Deployment options:")
 print("=" * 50)
 
 print("""
-# 옵션 1: LangGraph Platform (관리형)
+# Option 1: LangGraph Platform (managed)
 `$ langgraph deploy`
 
 
-# 옵션 2: 자체 Docker 배포
+# Option 2: self-hosted Docker deployment
 `$ langgraph build -t my-agent`
 `$ docker run -p 2024:2024 my-agent`
 
 
-# 옵션 3: FastAPI/Flask 래핑
+# Option 3: wrap with FastAPI/Flask
 from fastapi import FastAPI
 
 app = FastAPI()

@@ -293,7 +293,7 @@
     breakable: true,
   )[
     #text(weight: "bold", fill: color-secondary, size: 9pt, tracking: 0.5pt)[
-      핵심 질문
+      Key Question
     ]
     #v(4pt)
     #set text(size: 9.5pt)
@@ -313,7 +313,7 @@
     breakable: true,
   )[
     #text(weight: "bold", fill: color-primary-dark, size: 9pt, tracking: 0.5pt)[
-      한눈에 보는 핵심
+      Key Takeaways at a Glance
     ]
     #v(4pt)
     #set text(size: 9.5pt)
@@ -335,7 +335,7 @@
     breakable: true,
   )[
     #text(weight: "bold", fill: luma(110), size: 8.8pt, tracking: 0.5pt)[
-      그림 읽는 법
+      How to Read This Diagram
     ]
     #v(4pt)
     #set text(size: 9.2pt, fill: luma(60))

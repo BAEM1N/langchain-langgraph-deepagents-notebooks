@@ -60,9 +60,9 @@ from langchain.tools import tool
 def get_weather(city: str) -> str:
     """Look up the current weather for a city."""
     weather_data = {
-        "Seoul": "맑음, 15\u00b0C",
-        "Tokyo": "흐림, 12\u00b0C",
-        "New York": "비, 8\u00b0C",
+        "Seoul": "Clear, 15\u00b0C",
+        "Tokyo": "Cloudy, 12\u00b0C",
+        "New York": "Rain, 8\u00b0C",
     }
     return weather_data.get(city, f"Weather data is not available for: {city}")
 
@@ -93,7 +93,7 @@ class SearchQuery(BaseModel):
 @tool(args_schema=SearchQuery)
 def search_database(query: str, max_results: int = 5, category: str = "all") -> str:
     """Search the database with advanced filtering options."""
-    return f"'{category}' 카테고리에서 '{query}'에 대한 {max_results}개의 결과를 찾았습니다"
+    return f"Found {max_results} results for '{query}' in the '{category}' category"
 
 print("Complex schema:", search_database.args_schema.model_json_schema())
 `````)

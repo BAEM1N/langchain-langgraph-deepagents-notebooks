@@ -230,12 +230,12 @@ call_count = 0
 def step_one(state: PipelineState) -> dict:
     global call_count
     call_count += 1
-    print(f"  step_one 실행 (호출 횟수: {call_count})")
+    print(f"  step_one executed (call count: {call_count})")
     return {"data": state["data"].upper(), "step": 1}
 
 
 def step_two(state: PipelineState) -> dict:
-    print(f"  step_two 실행")
+    print("  step_two executed")
     return {"result": f"Processed: {state['data']}", "step": 2}
 
 
@@ -257,13 +257,13 @@ result = pipeline.invoke(
     {"data": "hello", "step": 0, "result": ""},
     config
 )
-print(f"결과: {result}")
+print(f"Result: {result}")
 
 # Check checkpoint
 print("=== Restore state from checkpoint ===")
 saved = pipeline.get_state(config)
-print(f"저장된 상태: {saved.values}")
-print(f"step_one 총 호출 횟수: {call_count}")
+print(f"Saved state: {saved.values}")
+print(f"Total step_one call count: {call_count}")
 `````)
 
 == 12.10 resume Starting point
@@ -344,7 +344,7 @@ Upon failover, use resume with the same `thread_id`.
 )
 
 === Next Steps
-→ Proceed to _#link("13_api_guide_and_pregel.ipynb")[13. API 선택 가이드와 Pregel]_!
+→ Proceed to _#link("13_api_guide_and_pregel.ipynb")[13. API Selection Guide and Pregel]_!
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 _References:_

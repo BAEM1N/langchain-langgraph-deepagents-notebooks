@@ -49,18 +49,18 @@ In v1, the `langchain` namespace has been significantly reduced to five core mod
 Chains, Retrievers, Hub, and Indexing API, which were previously used in the `langchain` package, have all been separated into a separate package called `langchain-classic`. If you need to keep your existing code, change the import path after installation to `pip install langchain-classic`:
 
 The 
-== v0 — 기존 방식
+== v0 — Legacy approach
 from langchain.chains import LLMChain
 from langchain.retrievers import MultiQueryRetriever
 from langchain import hub
 
-== v1 — langchain-classic으로 이전
+== v1 — langchain-classicmigration path
 from langchain_classic.chains import LLMChain
 from langchain_classic.retrievers import MultiQueryRetriever
 from langchain_classic import hub
 #code-block(`````python
 
-이 분리를 통해 v1의 `langchain` package has become a lightweight structure that focuses only on agent building, and legacy functionality is maintained independently.
+Because of this split, the v1 `langchain` package became a lightweight layer focused on agent building, while legacy functionality is maintained separately.
 `````)
 
 == 0.2 Agent creation API changes
@@ -152,7 +152,7 @@ def handle_errors(request, handler):
         return handler(request)
     except Exception as e:
         return ToolMessage(
-            content=f"도구 오류: {e}",
+            content=f"Tool error: {e}",
             tool_call_id=request.tool_call["id"],
         )
 

@@ -34,7 +34,7 @@ model = ChatOpenAI(
 from langchain.agents import create_agent
 from langchain.tools import tool
 
-print("환경 준비 완료.")
+print("Environment ready.")
 `````)
 
 == 9.2 `StateGraph` Basics
@@ -110,7 +110,7 @@ Split text into chunks and implement RAG with simple keyword-based retrieval. Ev
 #code-block(`````python
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-# 샘플 문서
+# Sample documents
 documents = [
     "LangChain is a framework for building applications with large language models. It provides tools for prompt engineering, memory management, and agent creation.",
     "LangGraph is a low-level orchestration framework for building stateful agents. It uses a graph-based approach with nodes and edges.",
@@ -119,7 +119,7 @@ documents = [
     "RAG (Retrieval-Augmented Generation) combines information retrieval with text generation to provide grounded, factual responses.",
 ]
 
-# 텍스트 분할
+# Split text
 text_splitter = RecursiveCharacterTextSplitter(
     chunk_size=200,
     chunk_overlap=50,
@@ -129,8 +129,8 @@ chunks = []
 for doc in documents:
     chunks.extend(text_splitter.split_text(doc))
 
-print(f"원본 문서: {len(documents)}개")
-print(f"분할 청크: {len(chunks)}개")
+print(f"Original documents: {len(documents)}")
+print(f"Split chunks: {len(chunks)}")
 for i, chunk in enumerate(chunks):
     print(f"  [{i}] {chunk[:80]}...")
 `````)
@@ -144,13 +144,13 @@ Similarity search with embeddings is far more accurate than keyword matching. Th
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 
-# 임베딩 모델  생성
+# Create the embedding model
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
-# 벡터 스토어 생성
+# Create the vector store
 vectorstore = FAISS.from_texts(chunks, embeddings)
 
-# 검색
+# Retrieve
 results = vectorstore.similarity_search("LangChain agent patterns", k=3)
 for doc in results:
     print(doc.page_content)

@@ -80,24 +80,24 @@ Audio In -> [STT: AssemblyAI] -> Text -> [Agent: LangChain] -> Text -> [TTS: Car
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[레이어],
-  text(weight: "bold")[제공자],
-  text(weight: "bold")[역할],
+  text(weight: "bold")[Layer],
+  text(weight: "bold")[Provider],
+  text(weight: "bold")[Role],
   [_STT_],
   [AssemblyAI],
-  [사용자 음성을 텍스트로 변환],
+  [User Converts speech into text],
   [_Agent_],
   [LangChain],
-  [텍스트 쿼리를 처리하고 응답 생성],
+  [Processes the text query and generates a response],
   [_TTS_],
   [Cartesia],
-  [에이전트의 텍스트 응답을 음성으로 변환],
+  [Converts the agent's text response into speech],
 )
 
-각 레이어가 _스트리밍_으로 연결되어, 이전 단계의 완전한 출력을 기다리지 않고 부분 결과를 즉시 __T10__로 전달합니다:
+Each layer is connected through _streaming_, so partial results can be forwarded immediately without waiting for the previous step to finish completely:
 
-+ _STT_ — 부분 전사 결과를 스트리밍 (발화 완료 감지 시 최종 전사)
-+ _Agent_ — 토큰 단위 스트리밍 응답 생성 (`astream()`)
++ _STT_ — streams partial transcriptions (emits a final transcript when the utterance is complete)
++ _Agent_ — streams responses token by token (`astream()`)
 + _TTS_ — Start speech synthesis before the entire response is complete (WebSocket-based)
 
 === Why Streaming Matters
@@ -200,9 +200,9 @@ def on_transcription_error(error: aai.RealtimeError):
 transcriber.connect()
 `````)
 
-=== 마이크 오디오 캡처
+=== Capturing Microphone Audio
 
-PCM 16-bit, 16kHz 단일 채널 오디오를 캡처하여 실시간으로 전사기에 전송합니다:
+PCM 16-bit, 16kHz Capture mono audio and send it to the transcriber in real time:
 
 #code-block(`````python
 import pyaudio
@@ -238,11 +238,11 @@ from langchain.agents import create_agent
 
 def search_tool(query: str) -> str:
     """Search the web for the latest information."""
-    return f"검색 결과: {query}"
+    return f"Search result: {query}"
 
 def calendar_tool(action: str, details: str) -> str:
     """Manage calendar events."""
-    return f"캘린더 {action}: {details}"
+    return f"Calendar {action}: {details}"
 `````)
 
 #code-block(`````python
@@ -355,9 +355,9 @@ async def transform_input(input_stream):
 agent_runnable = RunnableGenerator(transform_input)
 `````)
 
-=== 전체 파이프라인 연결 (개념 코드)
+=== Wiring the Full Pipeline (conceptual code)
 
-`asyncio.Queue`를 사용하여 STT의 최종 전사 결과를 에이전트로 전달하고, 에이전트의 스트리밍 응답을 TTS로 중계합니다. `Queue`는 비동기 Producer-Consumer 패턴의 핵심 구성 요소입니다.
+Use `asyncio.Queue` to pass the final STT transcript to the agent and forward the agent's streaming response to TTS. `Queue` is a core building block in an async producer-consumer pattern.
 
 #code-block(`````python
 async def voice_pipeline(audio_input_stream):
@@ -502,11 +502,11 @@ tool of voice agents _fast response_ is important. tool As the execution time in
 #code-block(`````python
 def weather_tool(city: str) -> str:
     """View the current weather in your city."""
-    return f"{city} 날씨: 15도, 구름 조금"
+    return f"{city} weather: 15°C, partly cloudy"
 
 def reminder_tool(time: str, message: str) -> str:
     """Set reminders at specified times."""
-    return f"{time}에 알림 설정됨: {message}"
+    return f"{time}Reminder scheduled for {message}"
 `````)
 
 #code-block(`````python

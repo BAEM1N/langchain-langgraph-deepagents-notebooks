@@ -79,33 +79,33 @@ def create_calendar_event(
     attendees: list[str] = None,
 ) -> str:
     """Create a new calendar event."""
-    return f"이벤트 '{title}' 생성됨: {start_time} ~ {end_time}"
+    return f"Event '{title}' created: {start_time} ~ {end_time}"
 `````)
 
 #code-block(`````python
 @tool
 def read_calendar_events(date: str) -> str:
     """Look up calendar events for a date (YYYY-MM-DD)."""
-    return f"{date}에 이벤트가 없습니다."
+    return f"No events found on {date}."
 `````)
 
 #code-block(`````python
 @tool
 def send_email(to: str, subject: str, body: str) -> str:
     """Send an email message."""
-    return f"{to}에게 이메일 전송됨: '{subject}'"
+    return f"Email sent to {to}: '{subject}'"
 
 @tool
 def read_emails(folder: str = "inbox", limit: int = 10) -> str:
     """Read recent emails from a folder."""
-    return f"{folder}에 이메일 3개"
+    return f"3 emails found in {folder}"
 `````)
 
 #code-block(`````python
 @tool
 def search_emails(query: str, limit: int = 10) -> str:
     """Search for emails with your search term."""
-    return f"'{query}' 검색 결과 2건"
+    return f"2 search results for '{query}'"
 `````)
 
 == 2.4 Create subagent
@@ -172,10 +172,10 @@ supervisor = create_agent(
 == 2.7 Run test
 
 #code-block(`````python
-User: "내일 2시 Sarah 미팅 잡고 초대 이메일 보내줘"
+User: "Schedule a meeting with Sarah tomorrow at 2 PM and send the invitation email"
 Supervisor → call_calendar → create_calendar_event
 Supervisor → call_email → send_email
-Supervisor: "미팅과 초대 이메일 완료"
+Supervisor: "The meeting and invitation email are complete"
 `````)
 
 == 2.8 HITL (Human-in-the-Loop) Integration
@@ -271,7 +271,7 @@ def send_email_ctx(
 ) -> str:
     """Send an email to the current user."""
     sender = runtime_context["user_email"]
-    return f"{sender}에서 {to}로 이메일 전송됨: '{subject}'"
+    return f"Email sent from {sender} to {to}: '{subject}'"
 `````)
 
 == 2.10 Asynchronous execution pattern
@@ -306,7 +306,7 @@ def call_calendar_async(query: str) -> str:
     """Starts an asynchronous calendar task and returns the task ID."""
     job_id = str(uuid.uuid4())[:8]
     job_store[job_id] = {"status": "done", "result": "Event created"}
-    return f"작업 시작됨: {job_id}"
+    return f"Job started: {job_id}"
 `````)
 
 #code-block(`````python
@@ -314,7 +314,7 @@ def call_calendar_async(query: str) -> str:
 def check_job(job_id: str) -> str:
     """Check the status of an asynchronous operation."""
     job = job_store.get(job_id, {"status": "not_found"})
-    return f"상태: {job['status']}, 결과: {job.get('result')}"
+    return f"Status: {job['status']}, result: {job.get('result')}"
 `````)
 
 == 2.11 Single Dispatch tool Pattern

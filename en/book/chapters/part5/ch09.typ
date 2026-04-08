@@ -8,7 +8,7 @@
 We cover the entire pipeline for deploying agents into production. We ensure quality through unit testing and LangSmith evaluation, secure observability through tracing, and deploy to the LangGraph Platform.
 
 #code-block(`````python
-개발 -> 테스트 (단위 + 평가) -> __T13__ (트레이싱) -> 배포 (LangGraph Platform)
+Development -> Testing (unit + evaluation) -> Observability (tracing) -> Deployment (LangGraph Platform)
 `````)
 
 === Why do you need an agent-specific production pipeline?
@@ -150,7 +150,7 @@ try:
     )
     print("Dataset created:", dataset.name)
 except Exception as e:
-    print(f"LangSmith 미설정 (건너뜀): {e}")
+    print(f"LangSmith not configured (skipped): {e}")
     ls_client = None
     dataset = None
 `````)
@@ -170,7 +170,7 @@ except ImportError:
     print("agentevals not installed. Installation: pip install agentevals")
     evaluator = None
 except Exception as e:
-    print(f"평가자 생성 건너뜀 (LLM API 키 필요): {e}")
+    print(f"Evaluator creation skipped (LLM API key required): {e}")
     evaluator = None
 `````)
 
@@ -195,7 +195,7 @@ When I call the actual LLM API from my agent tests, I run into the following iss
 #code-block(`````python
 def search_tool(query: str) -> str:
     """Search for information on the web."""
-    return f"검색 결과: {query}"
+    return f"Search result: {query}"
 
 def test_search_tool():
     """Tests whether search tool returns the expected format."""
@@ -265,9 +265,9 @@ export LANGSMITH_TRACING=true
 export LANGSMITH_API_KEY=<your-api-key>
 `````)
 
-`create_agent`로 생성한 에이전트는 환경 변수 설정 시 자동으로 실행 데이터를 LangSmith에 전송합니다. LangChain의 모든 컴포넌트(LLM, 체인, __T16__ 등)가 내장 계측(instrumentation)을 포함하고 있어 별도의 코드 수정이 필요 없습니다.
+`create_agent` agents automatically send execution data to LangSmith when the relevant environment variables are configured. All LangChain components (LLMs, chains, tools, etc.) include built-in instrumentation, so no extra code changes are required.
 
-=== 선택적 트레이싱
+=== Selective Tracing
 
 `tracing_context` allows you to selectively trace only specific code blocks. This allows you to intensively monitor only the parts that require debugging or separate traces by project.
 
@@ -337,7 +337,7 @@ try:
     ):
         print("Tagged tracing enabled")
 except Exception as e:
-    print(f"LangSmith 트레이싱 사용 불가: {e}")
+    print(f"LangSmith tracing unavailable: {e}")
 `````)
 
 == 9.7 LangGraph Studio -- Visual Debugging
@@ -367,14 +367,14 @@ LangGraph Studio is a free tool that allows you to _visually_ debug an agent's e
 To use Studio, start your local development server with the LangGraph CLI:
 
 You can access the Studio UI from 
-== LangGraph CLI 설치 (Python 3.11+ 필요)
+== LangGraph CLI installation (Python 3.11+ required)
 pip install --upgrade "langgraph-cli[inmem]"
 
-== 개발 서버 시작
+== Start the development server
 langgraph dev
 #code-block(`````python
 
-서버가 시작되면 `https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024`.
+When the server starts, open `https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024`.
 
 ### Information available in Studio
 
@@ -466,7 +466,7 @@ print(json.dumps(langgraph_config, indent=2))
   [Python package dependencies. `.` references `pyproject.toml` in the current directory],
   [`graphs`],
   [`dict`],
-  [Mapping graph names and module paths. `"모듈경로:변수명"` format],
+  [Mapping graph names and module paths. `"module_path:variable_name"` format],
   [`env`],
   [`str`],
   [Environment variable file path (`.env` format). Contains sensitive information such as API keys],
@@ -474,7 +474,7 @@ print(json.dumps(langgraph_config, indent=2))
 
 === Graph entry point
 
-The value of the `graphs` field is in the format `"./경로/파일.py:변수명"`. The variable must be a `CompiledGraph` instance. Both LangGraph's Graph API (`StateGraph`) and Functional API (`@entrypoint`) are available.
+The value of the `graphs` field is in the format `"./path/file.py:variable_name"`. The variable must be a `CompiledGraph` instance. Both LangGraph's Graph API (`StateGraph`) and Functional API (`@entrypoint`) are available.
 
 ==== Graph API example
 
@@ -489,9 +489,9 @@ graph = create_react_agent(
 )
 `````)
 
-==== Functional API 예시
+==== Functional API Example
 
-LangGraph의 Functional API를 사용하면 기존 Python 코드에 최소한의 변경으로 영속성, 메모리, 스트리밍을 통합할 수 있습니다. `@entrypoint` 데코레이터가 워크플로의 시작점을 정의하고, `@task` 데코레이터가 개별 작업 단위를 나타냅니다.
+LangGraph's Functional API lets you add persistence, memory, and streaming to existing Python code with minimal changes. The `@entrypoint` decorator defines the start of the workflow, and the `@task` decorator marks an individual unit of work.
 
 #code-block(`````python
 # src/agent.py
@@ -499,7 +499,7 @@ from langgraph.func import entrypoint, task
 
 @task
 def process_query(query: str) -> str:
-    return f"처리 완료: {query}"
+    return f"Processing complete: {query}"
 
 @entrypoint(checkpointer=checkpointer)
 def graph(inputs: dict) -> str:
@@ -525,27 +525,27 @@ Create a Docker image based on the `langgraph.json` settings:
 langgraph build -t my-agent:latest
 `````)
 
-=== 2. 로컬 서버 실행
+=== 2. Run the local server
 
-로컬에서 에이전트를 실행하여 테스트합니다. Studio UI와 연동하여 시각적 디버깅이 가능합니다:
+Run the agent locally for testing and connect it to the Studio UI for visual debugging:
 
 #code-block(`````bash
-# 프로덕션 모드 (Docker 기반)
+# Production mode (Docker-based)
 langgraph up --config langgraph.json
 
-# 개발 모드 (인메모리, 빠른 시작)
+# Development mode (in-memory, quick start)
 langgraph dev
 `````)
 
-=== 3. 클라우드 배포
+=== 3. Cloud Deployment
 
-LangSmith 대시보드에서:
+LangSmith In the dashboard:
 + Deployments -\> "+ New Deployment"
-+ GitHub 저장소 연결
-+ 리포지토리 선택 후 제출 (약 15분 소요)
-+ 배포 완료 후 API URL 복사
++ GitHub Connect the repository
++ Select the repository and submit it (about 15 minutes)
++ Copy the API URL after deployment completes
 
-=== Python SDK로 배포된 에이전트 접근
+=== Python SDKAccess the deployed agent from the Python SDK
 
 `langgraph-sdk` allows you to communicate programmatically with the deployed agent. All functions, including streaming, thread management, and status inquiry, are controlled by the SDK.
 
@@ -563,7 +563,7 @@ try:
         )
         print("Client connected:", type(client).__name__)
 except Exception as e:
-    print(f"LangGraph SDK 클라이언트 사용 불가: {e}")
+    print(f"LangGraph SDK client unavailable: {e}")
 `````)
 
 === Access via REST API
@@ -579,14 +579,14 @@ curl --request POST \
     "assistant_id": "agent",
     "input": {
       "messages": [
-        {"role": "user", "content": "안녕하세요!"}
+        {"role": "user", "content": "Hello!"}
       ]
     },
     "stream_mode": "updates"
   }'
 `````)
 
-주요 엔드포인트:
+Key endpoints:
 
 #table(
   columns: 3,
@@ -594,18 +594,18 @@ curl --request POST \
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[엔드포인트],
-  text(weight: "bold")[메서드],
-  text(weight: "bold")[설명],
+  text(weight: "bold")[Endpoint],
+  text(weight: "bold")[Method],
+  text(weight: "bold")[Description],
   [`/runs/stream`],
   [POST],
-  [스트리밍 실행],
+  [Streaming execution],
   [`/runs`],
   [POST],
-  [동기 실행],
+  [Synchronous execution],
   [`/threads`],
   [POST],
-  [새 스레드 생성],
+  [Create a new thread],
   [`/threads/{id}/state`],
   [GET],
   [thread status query],

@@ -296,7 +296,7 @@ Once local development is complete, prepare for production deployment.
 )
 
 === Next Steps
-→ Proceed to _#link("12_durable_execution.ipynb")[12. __TERM_046__]_!
+→ Proceed to _#link("12_durable_execution.ipynb")[12. Durable Execution]_!
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 _References:_

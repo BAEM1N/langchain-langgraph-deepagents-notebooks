@@ -38,19 +38,19 @@ print(f"Dialect: {db.dialect}")
 SQL Agent follows an _8-step_ process to convert natural language questions into SQL queries:
 
 #code-block(`````python
-1. 질문 수신 -> 2. 테이블 목록 -> 3. 관련 테이블 스키마
--> 4. SQL 쿼리 생성 -> 5. 쿼리 검증 -> 6. (선택) 사람 리뷰
--> 7. 쿼리 실행 -> 8. 결과 해석
+1. Receive the question -> 2. List tables -> 3. Inspect the relevant table schema
+-> 4. Generate the SQL query -> 5. Validate the query -> 6. (Optional) Human review
+-> 7. Execute the query -> 8. Interpret the result
 `````)
 
-=== 왜 에이전트가 필요한가?
+=== Why Do You Need an Agent?
 
-단순 text-to-SQL과 달리 에이전트 방식은 _스키마 탐색 → 쿼리 생성 → 검증 → 실행_의 반복 루프를 수행합니다. 잘못된 쿼리가 생성되면 에이전트가 오류를 분석하고 쿼리를 재작성할 수 있어 정확도가 크게 향상됩니다. 또한 에이전트는 필요한 테이블의 스키마만 선택적으로 로드하므로 _컨텍스트 윈도우를 효율적으로_ 사용합니다.
+Unlike a simple text-to-SQL pipeline, an agent can inspect schema, generate a query, validate it, and retry when needed. This improves accuracy because the agent can analyze errors and rewrite the query. It also uses the context window efficiently by loading only the schema that is actually needed.
 
-=== 에이전트 실행 트레이스 예시
+=== Example agent execution trace
 
 #code-block(`````python
-User: "지난달 매출 상위 5개 제품은?"
+User: "What were the top 5 products by sales last month?"
 
 Agent -> sql_db_list_tables()
       <- "customers, orders, order_items, products, categories"
@@ -66,7 +66,7 @@ Agent -> sql_db_query(validated_query)
       <- [("Widget Pro", 45230.00), ("Gadget X", 38100.00), ...]
 `````)
 
-=== 안전 수칙
+=== Safety guidelines
 
 #table(
   columns: 2,
@@ -74,29 +74,29 @@ Agent -> sql_db_query(validated_query)
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[우려사항],
-  text(weight: "bold")[대응],
+  text(weight: "bold")[Concern],
+  text(weight: "bold")[Mitigation],
   [SQL Injection],
-  [파라미터화된 쿼리 사용, Toolkit이 자동 처리],
-  [DML 실행],
-  [시스템 프롬프트에서 INSERT/UPDATE/DELETE 금지, DB 레벨 읽기 전용 권한 설정],
-  [비용 높은 쿼리],
-  [LIMIT 강제, Human-in-the-Loop으로 실행 전 승인],
-  [민감 데이터],
-  [`include_tables`/`exclude_tables`로 접근 가능 테이블 제한, 컬럼 레벨 권한 설정],
-  [데이터 노출],
-  [데이터베이스 뷰(view) 또는 제한된 사용자 권한 활용],
+  [Use parameterized queries; the toolkit helps automatically.],
+  [DML execution],
+  [Ban INSERT/UPDATE/DELETE in the system prompt and enforce read-only DB permissions.],
+  [Expensive queries],
+  [Enforce LIMIT and require Human-in-the-Loop approval before execution.],
+  [Sensitive data],
+  [`include_tables`/`exclude_tables`to restrict accessible tables and enforce column-level permissions],
+  [Data exposure],
+  [Use database views or restricted user permissions.],
 )
 
-=== 접근 가능 테이블 제한
+=== Restricting Accessible Tables
 
-프로덕션에서는 에이전트가 접근할 수 있는 테이블을 명시적으로 제한하는 것이 좋습니다:
+In production, explicitly restrict which tables the agent may access:
 
 #code-block(`````python
 db = SQLDatabase.from_uri(
     "sqlite:///company.db",
-    include_tables=["products", "orders", "order_items"],  # 허용 목록
-    # exclude_tables=["users", "credentials"],             # 또는 차단 목록
+    include_tables=["products", "orders", "order_items"],  # allowlist
+    # exclude_tables=["users", "credentials"],             # or a denylist
 )
 `````)
 
@@ -130,7 +130,7 @@ tools = toolkit.get_tools()
 
 for t in tools:
     print(f"  {t.name}: {t.description[:60]}...")
-print(f"총 도구 수: {len(tools)}")
+print(f"Total tools: {len(tools)}")
 `````)
 
 == 6.4 LangChain SQL Agent -- `create_agent` + ReAct
@@ -154,11 +154,11 @@ System prompts define the agent's instructions for action. In SQL Agent, you mus
 
 #code-block(`````python
 system_prompt = (
-    "당신은 SQL 에이전트입니다. 단계:\n"
+    "You are a SQL agent. Follow these steps:\n"
     "1. sql_db_list_tables\n2. sql_db_schema\n"
-    "3. 쿼리 작성 + sql_db_query_checker\n"
-    "4. sql_db_query\n5. 결과를 해석하세요.\n"
-    f"규칙: LIMIT 10 사용. DML 금지. Dialect: {db.dialect}"
+    "3. Write the query + sql_db_query_checker\n"
+    "4. sql_db_query\n5. Interpret the result.\n"
+    f"Rules: use LIMIT 10. DML is forbidden. Dialect: {db.dialect}"
 )
 `````)
 
@@ -239,9 +239,9 @@ START -> list_tables -> get_schema -> generate_query
       -> check_query -> execute_query -> END
 `````)
 
-각 노드는 공유 `State` 객체를 받아 메시지를 추가하며, 에이전트가 워크플로우를 진행하는 동안 대화 이력이 누적됩니다. `tools_condition`을 사용하면 `check_query` 결과에 따라 쿼리를 재생성하거나 실행으로 진행하는 조건부 분기를 구현할 수 있습니다.
+Each node receives the shared `State` object and appends messages while the workflow runs. With `tools_condition`, you can implement a conditional branch that either regenerates the query or proceeds to execution based on the validation result.
 
-=== LangChain `create_agent` 대비 장점
+=== LangChain `create_agent` Advantages Compared with
 
 #table(
   columns: 3,
@@ -249,17 +249,17 @@ START -> list_tables -> get_schema -> generate_query
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[측면],
+  text(weight: "bold")[Aspect],
   text(weight: "bold")[`create_agent`],
   text(weight: "bold")[`StateGraph`],
-  [__T12__ 순서],
-  [LLM 자율 결정],
-  [그래프 엣지로 강제],
-  [오류 시 재시도],
-  [시스템 프롬프트에 의존],
-  [조건부 엣지로 명시적 구현],
-  [사람 리뷰],
-  [미들웨어 기반],
+  [Execution order],
+  [LLM decides autonomously],
+  [Explicitly enforced with graph edges],
+  [Retry on error],
+  [Depends on the system prompt],
+  [Explicitly implemented with conditional edges],
+  [Human review],
+  [Middleware-based],
   [`interrupt()` based, position free],
   [Debugging],
   [Black box],
@@ -274,7 +274,7 @@ from langgraph.graph.message import add_messages
 class SQLState(TypedDict):
     messages: Annotated[list, add_messages]
 
-print(f"SQLState 키: {list(SQLState.__annotations__)}")
+print(f"SQLState keys: {list(SQLState.__annotations__)}")
 `````)
 
 == 6.8 Dedicated nodes -- `list_tables`, `get_schema`, `generate_query`, `check_query`

@@ -39,14 +39,14 @@ SUCCESS	en/04_deepagents/03_customization.ipynb
 SUCCESS	en/04_deepagents/04_backends.ipynb	
 SUCCESS	en/04_deepagents/05_subagents.ipynb	
 SUCCESS	en/04_deepagents/06_memory_and_skills.ipynb	
-SUCCESS	en/04_deepagents/07_advanced.ipynb	
+FAILED	en/04_deepagents/07_advanced.ipynb	During task with name 'tools' and id '42fc7455-e418-8346-bb5a-d50d7e900017'
 SUCCESS	en/04_deepagents/08_harness.ipynb	
 SUCCESS	en/04_deepagents/09_comparison.ipynb	
 SUCCESS	en/04_deepagents/10_sandboxes_and_acp.ipynb	
 SUCCESS	en/05_advanced/00_migration.ipynb	
 SUCCESS	en/05_advanced/01_middleware.ipynb	
 SUCCESS	en/05_advanced/02_multi_agent_subagents.ipynb	
-SUCCESS	en/05_advanced/03_multi_agent_handoffs_router.ipynb	
+FAILED	en/05_advanced/03_multi_agent_handoffs_router.ipynb	-------------------
 SUCCESS	en/05_advanced/04_context_memory.ipynb	
 SUCCESS	en/05_advanced/05_agentic_rag.ipynb	
 SUCCESS	en/05_advanced/06_sql_agent.ipynb	

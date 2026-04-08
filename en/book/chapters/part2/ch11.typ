@@ -32,7 +32,7 @@ model = ChatOpenAI(
     model="gpt-4.1",
 )
 
-print("환경 준비 완료.")
+print("Environment ready.")
 `````)
 
 == 11.2 MCP Concepts
@@ -81,14 +81,14 @@ To use MCP from LangChain, you need the `langchain-mcp-adapters` package.
 
 
 #code-block(`````python
-# MCP 어댑터 설치 명령어
-print("MCP 어댑터 설치:")
+# MCP adapter installation commands
+print("MCP adapter installation:")
 print("  uv add langchain-mcp-adapters mcp")
 print()
-print("주요 컴포넌트:")
-print("  - MultiServerMCPClient: 여러 MCP 서버를 관리하는 클라이언트")
-print("  - load_mcp_tools(session): MCP 세션을 LangChain Tool로 변환")
-print("  - FastMCP: 빠르게 MCP 서버를 만드는 서버 유틸리티")
+print("Key components:")
+print("  - MultiServerMCPClient: Client that manages multiple MCP servers")
+print("  - load_mcp_tools(session): MCP Converts an MCP session into LangChain tools")
+print("  - FastMCP: Utility for quickly building MCP servers")
 `````)
 
 == 11.4 Stdio Transport
@@ -101,8 +101,8 @@ from pathlib import Path; import json, tempfile, sys
 server_path = Path(tempfile.gettempdir()) / "lc_mcp_math_server.py"
 server_path.write_text('from mcp.server.fastmcp import FastMCP\nmcp = FastMCP("math")\n@mcp.tool()\ndef add(a: int, b: int) -> int:\n    return a + b\nif __name__ == "__main__":\n    mcp.run(transport="stdio")')
 stdio_config = {"math": {"transport": "stdio", "command": sys.executable, "args": [str(server_path)]}}
-print("Stdio 전송 설정:"); print(json.dumps(stdio_config, indent=2))
-print(f"\n서버 파일: {server_path}")
+print("Stdio Transport configuration:"); print(json.dumps(stdio_config, indent=2))
+print(f"\nServer file: {server_path}")
 `````)
 
 == 11.5 SSE / HTTP Transport
@@ -111,12 +111,12 @@ _HTTP (streamable-http)_ transport uses web-based communication and is a good fi
 
 
 #code-block(`````python
-# HTTP/streamable-http 전송 설정 예시
+# Example HTTP / streamable-http transport configuration
 http_config = {
     "weather_server": {"transport": "streamable_http", "url": "https://weather-mcp.example.com/mcp", "headers": {"Authorization": "Bearer YOUR_API_KEY"}}
 }
-import json; print("HTTP 전송 설정:"); print(json.dumps(http_config, indent=2))
-print("\n사용 패턴: client = MultiServerMCPClient(http_config) -> await client.get_tools()")
+import json; print("HTTP Transport configuration:"); print(json.dumps(http_config, indent=2))
+print("\nUsage pattern: client = MultiServerMCPClient(http_config) -> await client.get_tools()")
 `````)
 
 == 11.6 Loading MCP Tools and Integrating Them with an Agent
@@ -130,12 +130,12 @@ As the name suggests, `MultiServerMCPClient` can manage several MCP servers at t
 
 
 #code-block(`````python
-# 다중 MCP 서버 설정 예시
+# Example multi-MCP-server configuration
 import json, sys
 multi_server_config = {"math_server": {"transport": "stdio", "command": sys.executable, "args": [str(server_path)]}, "weather_server": {"transport": "streamable_http", "url": "https://weather-mcp.example.com/mcp"}, "database_server": {"transport": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-postgres"], "env": {"DATABASE_URL": "postgresql://..."}}}
-print("다중 MCP 서버 설정:"); print(json.dumps(multi_server_config, indent=2, ensure_ascii=False))
-print("\n사용 패턴: client = MultiServerMCPClient(multi_server_config) -> await client.get_tools()")
-print("참고: 기본적으로 stateless — 각 도구 호출마다 새 세션 생성 후 정리")
+print("Multi-MCP server configuration:"); print(json.dumps(multi_server_config, indent=2, ensure_ascii=False))
+print("\nUsage pattern: client = MultiServerMCPClient(multi_server_config) -> await client.get_tools()")
+print("Note: it is stateless by default — each tool call creates and then cleans up a new session")
 `````)
 
 == 11.8 Tool Interceptors

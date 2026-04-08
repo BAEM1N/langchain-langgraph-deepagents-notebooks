@@ -20,7 +20,7 @@ Copy `.env.example` to `.env` in the project root and enter the following keys:
 
 #code-block(`````python
 OPENAI_API_KEY=sk-...
-TAVILY_API_KEY=tvly-...   # 선택
+TAVILY_API_KEY=tvly-...   # Optional
 `````)
 
 #table(
@@ -29,11 +29,11 @@ TAVILY_API_KEY=tvly-...   # 선택
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[키],
-  text(weight: "bold")[용도],
-  text(weight: "bold")[발급처],
+  text(weight: "bold")[Key],
+  text(weight: "bold")[Purpose],
+  text(weight: "bold")[Provider],
   [`OPENAI_API_KEY`],
-  [LLM 호출 (필수)],
+  [LLM calls (required)],
   [https://platform.openai.com/api-keys],
   [`TAVILY_API_KEY`],
   [Web Search tool (optional)],

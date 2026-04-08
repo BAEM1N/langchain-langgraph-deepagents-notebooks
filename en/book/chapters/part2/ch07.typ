@@ -31,7 +31,7 @@ model = ChatOpenAI(
     model="gpt-4.1",
 )
 
-print("모델 준비 완료:", model.model_name)
+print("Model ready:", model.model_name)
 `````)
 
 == 7.2 Human-in-the-Loop Concepts
@@ -64,15 +64,15 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 @tool
 def send_email(to: str, subject: str, body: str) -> str:
-    """지정된 수신자에게 이메일을 보냅니다."""
-    return f"{to}에게 이메일 전송 완료: {subject}"
+    """Sends an email to the specified recipient."""
+    return f"{to} email sent to: {subject}"
 
 @tool
 def delete_file(path: str) -> str:
-    """지정된 경로의 파일을 삭제합니다."""
-    return f"파일 삭제 완료: {path}"
+    """Deletes a file at the specified path."""
+    return f"File deleted: {path}"
 
-# 위험한 도구에만 승인 요구
+# Require approval only for risky tools
 hitl = HumanInTheLoopMiddleware(interrupt_on={
     "send_email": True,
     "delete_file": True,
@@ -81,13 +81,13 @@ hitl = HumanInTheLoopMiddleware(interrupt_on={
 agent = create_agent(
     model=model,
     tools=[send_email, delete_file],
-    system_prompt="당신은 이메일을 보내고 파일을 관리할 수 있는 어시스턴트입니다.",
+    system_prompt="You are an assistant that can send emails and manage files.",
     middleware=[hitl],
     checkpointer=InMemorySaver(),
 )
 
-print("HITL 에이전트 생성 완료")
-print("  -> 도구 호출 시 사람의 승인을 위해 중단됩니다")
+print("HITL agent created")
+print("  -> The run pauses for human approval before executing tools")
 `````)
 
 == 7.4 The `interrupt` and `Command(resume=...)` Pattern

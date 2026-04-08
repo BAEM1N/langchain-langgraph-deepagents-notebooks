@@ -124,7 +124,7 @@ for module_name, package_name in packages.items():
         version = getattr(mod, "__version__", "installed")
         print(f"  OK  {package_name}: {version}")
     except ImportError:
-        print(f"  ERR {package_name}: 설치되지 않음")
+        print(f"  ERR {package_name}: not installed")
 `````)
 
 #code-block(`````python
@@ -137,9 +137,9 @@ optional = ["TAVILY_API_KEY", "LANGSMITH_API_KEY"]
 
 print("API key state:")
 for key in required:
-    print(f"  {'OK' if os.environ.get(key) else 'MISSING'} {key} (필수)")
+    print(f"  {'OK' if os.environ.get(key) else 'MISSING'} {key} (required)")
 for key in optional:
-    print(f"  {'OK' if os.environ.get(key) else '--'} {key} (선택)")
+    print(f"  {'OK' if os.environ.get(key) else '--'} {key} (optional)")
 `````)
 
 #code-block(`````python

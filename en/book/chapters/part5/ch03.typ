@@ -117,7 +117,7 @@ def lookup_customer(email: str) -> Command:
 @tool
 def check_service_status(service_name: str) -> str:
     """Check the current status of the service."""
-    return f"서비스 '{service_name}': 정상 (99.9% 가동률)"
+    return f"Service '{service_name}': healthy (99.9% uptime)"
 `````)
 
 #code-block(`````python
@@ -126,7 +126,7 @@ def escalate_to_resolve(diagnosis: str) -> Command:
     """After diagnosis, move on to resolution steps."""
     return Command(
         update={"diagnosis": diagnosis, "current_step": "resolve_issue"},
-        result=f"진단 완료: {diagnosis}. 해결 단계로 이동합니다.",
+        result=f"Diagnosis complete: {diagnosis}. Moving to the resolution step.",
     )
 `````)
 
@@ -137,7 +137,7 @@ def apply_fix(fix_type: str, customer_id: str) -> Command:
     """Apply modifications to customer accounts."""
     return Command(
         update={"resolution": {"type": fix_type}},
-        result=f"수정 적용됨: {customer_id}에 {fix_type}",
+        result=f"Fix applied: {fix_type} for {customer_id}",
     )
 `````)
 
@@ -161,7 +161,7 @@ def send_satisfaction_survey(customer_id: str) -> str:
 @tool
 def close_ticket(ticket_id: str, notes: str) -> str:
     """Close the support ticket."""
-    return f"티켓 {ticket_id} 종료됨."
+    return f"Ticket {ticket_id} closed."
 `````)
 
 == 3.5 \@wrap_model_call middleware
@@ -225,18 +225,18 @@ This is done automatically by tool, which returns
 → lookup_customer("alice\@example.com")
 ← Command(update={customer: {...}, current_step: "diagnose_issue"})
 
-[diagnose_issue] Agent: "계정을 찾았습니다. 어떤 문제가 있나요?"
+[diagnose_issue] Agent: "I found your account. What seems to be the issue?"
 → check_service_status("auth-service") → "healthy"
-→ escalate_to_resolve("3회 로그인 실패로 잠김")
+→ escalate_to_resolve("Locked after three failed login attempts")
 
 [resolve_issue] → apply_fix("reset_password", "C-1234")
-→ mark_resolved("비밀번호 재설정 완료")
+→ mark_resolved("Password reset completed")
 
 [close_ticket] → send_satisfaction_survey("C-1234")
-→ close_ticket("T-5678", notes="비밀번호 재설정")
+→ close_ticket("T-5678", notes="Password reset")
 #code-block(`````python
 
-각 단계 전이는 `Command`.
+Each step transition is driven by a `Command` object.
 `````)
 
 #code-block(`````python
@@ -397,19 +397,19 @@ from langchain.agents import create_agent
 @tool
 def search_github_code(query: str) -> str:
     """Search the GitHub repository."""
-    return f"'{query}'에 대한 GitHub 결과"
+    return f"GitHub result for '{query}'"
 
 @tool
 def search_notion_pages(query: str) -> str:
     """Search for your Notion workspace."""
-    return f"'{query}'에 대한 Notion 결과"
+    return f"Notion result for '{query}'"
 `````)
 
 #code-block(`````python
 @tool
 def search_slack_messages(query: str) -> str:
     """Search for Slack messages."""
-    return f"'{query}'에 대한 Slack 결과"
+    return f"Slack result for '{query}'"
 `````)
 
 #code-block(`````python

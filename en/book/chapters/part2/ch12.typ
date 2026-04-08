@@ -32,7 +32,7 @@ model = ChatOpenAI(
     model="gpt-4.1",
 )
 
-print("환경 준비 완료.")
+print("Environment ready.")
 `````)
 
 == 12.2 Python SDK Streaming Basics
@@ -71,11 +71,11 @@ The `.stream()` method delivers model output token by token in real time. Users 
 import asyncio
 
 async def stream_events_demo():
-    """astream_events()로 이벤트 스트리밍 예시"""
-    print("이벤트 스트리밍:")
+    """Example of event streaming with astream_events()"""
+    print("Event streaming:")
     print("-" * 40)
     async for event in model.astream_events(
-        "파이썬의 장점 2가지",
+        "Two advantages of Python",
         version="v2",
     ):
         kind = event["event"]
@@ -84,9 +84,9 @@ async def stream_events_demo():
             if content:
                 print(content, end="", flush=True)
         elif kind == "on_chat_model_start":
-            print(f"[모델 호출 시작]")
+            print(f"[Model call start]")
         elif kind == "on_chat_model_end":
-            print(f"\n[모델 호출 완료]")
+            print(f"\n[Model call complete]")
 
 await stream_events_demo()
 `````)
@@ -309,8 +309,8 @@ You can stream _custom data_ from the agent to the client. This is useful for pr
 
 
 #code-block(`````python
-# 커스텀 스트리밍 이벤트 — Python writer 패턴
-print("커스텀 스트리밍 이벤트 패턴 (Python 서버 측):")
+# Custom streaming events — Python writer pattern
+print("Custom streaming event pattern (Python server side):")
 print("=" * 50)
 print("""
 from langchain.tools import tool
@@ -320,23 +320,23 @@ from langchain.agents.types import ToolRuntime
 async def analyze_data(
     data_source: str, *, config: ToolRuntime
 ) -> str:
-    \"\"\"데이터를 분석합니다.\"\"\"
+    \"\"\"Analyzes the data.\"\"\"
     if config.writer:
-        # 진행 상황을 클라이언트에 스트리밍
+        # Stream progress updates to the client
         config.writer({
             "type": "progress",
-            "message": "데이터 로딩 중...",
+            "message": "Loading data...",
             "progress": 25,
         })
-        # ... 처리 ...
+        # ... processing ...
         config.writer({
             "type": "progress",
-            "message": "분석 완료!",
+            "message": "Analysis complete!",
             "progress": 100,
         })
-    return '{"result": "분석 완료"}'
+    return '{"result": "Analysis complete"}'
 """)
-print("클라이언트(React) 측: onCustomEvent 콜백으로 수신")
+print("Client side (React): receive it via the onCustomEvent callback")
 print('  onCustomEvent: (data) => setProgress(data.progress)')
 `````)
 

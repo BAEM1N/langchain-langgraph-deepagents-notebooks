@@ -43,10 +43,10 @@ You can check information such as number of messages, checkpoint ID, and next no
 
 #code-block(`````python
 state = graph.get_state(config)
-print(f"스레드: {config['configurable']['thread_id']}")
-print(f"메시지 수: {len(state.values['messages'])}")
-print(f"체크포인트 ID: {state.config['configurable']['checkpoint_id']}")
-print(f"다음 노드: {state.next}")
+print(f"Thread: {config['configurable']['thread_id']}")
+print(f"Message count: {len(state.values['messages'])}")
+print(f"Checkpoint ID: {state.config['configurable']['checkpoint_id']}")
+print(f"Next node: {state.next}")
 `````)
 
 == 6.4 get_state_history() — View entire execution history
@@ -58,7 +58,7 @@ This allows you to trace the entire history of graph execution.
 print("state History (most recent):")
 for i, snapshot in enumerate(graph.get_state_history(config)):
     msg_count = len(snapshot.values.get("messages", []))
-    print(f"  [{i}] 체크포인트={snapshot.config['configurable']['checkpoint_id'][:20]}... 메시지={msg_count}")
+    print(f"  [{i}] checkpoint={snapshot.config['configurable']['checkpoint_id'][:20]}... messages={msg_count}")
     if i >= 4:
         print("... (omitted)")
         break
@@ -98,7 +98,7 @@ print(f"Alice: {alice.value}")
 
 # search
 results = store.search(("users",))
-print(f"\n전체 사용자 ({len(results)}명):")
+print(f"\nTotal users ({len(results)}):")
 for item in results:
     print(f"  {item.key}: {item.value}")
 `````)

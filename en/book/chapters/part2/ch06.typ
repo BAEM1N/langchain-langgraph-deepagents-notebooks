@@ -30,7 +30,7 @@ model = ChatOpenAI(
     model="gpt-4.1",
 )
 
-print("모델 준비 완료:", model.model_name)
+print("Model ready:", model.model_name)
 `````)
 
 == 6.2 Middleware Concepts
@@ -79,10 +79,10 @@ from langchain.tools import tool
 
 @tool
 def search(query: str) -> str:
-    """정보를 검색합니다."""
-    return f"'{query}'에 대한 검색 결과"
+    """Searches for information."""
+    return f"'{query}'search result for"
 
-# SummarizationMiddleware — 긴 대화를 자동 요약
+# SummarizationMiddleware — automatically summarizes long conversations
 from langchain.agents.middleware import SummarizationMiddleware
 
 summarization = SummarizationMiddleware(
@@ -93,10 +93,10 @@ summarization = SummarizationMiddleware(
 agent_with_summary = create_agent(
     model=model,
     tools=[search],
-    system_prompt="당신은 유용한 어시스턴트입니다.",
+    system_prompt="You are a helpful assistant.",
     middleware=[summarization],
 )
-print("SummarizationMiddleware 에이전트 생성 완료")
+print("SummarizationMiddleware agent created")
 `````)
 
 == 6.4 Custom Middleware: `\@before_model`
@@ -134,7 +134,7 @@ import time
 
 @wrap_model_call
 def retry_on_error(request, handler):
-    """실패 시 지수 백오프로 모델 호출을 재시도합니다."""
+    """Retries model calls with exponential backoff on failure."""
     max_retries = 2
     for attempt in range(max_retries + 1):
         try:
@@ -142,7 +142,7 @@ def retry_on_error(request, handler):
         except Exception as e:
             if attempt < max_retries:
                 wait = 2 ** attempt
-                print(f"  재시도 {attempt + 1}/{max_retries} ({wait}초 대기)")
+                print(f"  Retry {attempt + 1}/{max_retries} ({wait}s wait)")
                 time.sleep(wait)
             else:
                 raise
@@ -150,10 +150,10 @@ def retry_on_error(request, handler):
 agent_retry = create_agent(
     model=model,
     tools=[search],
-    system_prompt="당신은 유용한 어시스턴트입니다.",
+    system_prompt="You are a helpful assistant.",
     middleware=[retry_on_error],
 )
-print("재시도 미들웨어 에이전트 생성 완료")
+print("Retry middleware agent created")
 `````)
 
 == 6.7 `\@dynamic_prompt`

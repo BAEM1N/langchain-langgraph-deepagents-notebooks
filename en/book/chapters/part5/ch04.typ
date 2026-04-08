@@ -133,7 +133,7 @@ def get_permissions(runtime: ToolRuntime[UserContext]) -> str:
     """View permissions based on the current user's role."""
     ctx = runtime.context
     perms = {"admin": "read,write,delete", "editor": "read,write"}
-    return f"사용자 {ctx.user_id} ({ctx.department}): {perms.get(ctx.role, 'read')}"
+    return f"User {ctx.user_id} ({ctx.department}): {perms.get(ctx.role, 'read')}"
 `````)
 
 === Key points
@@ -155,7 +155,7 @@ class RAGState(AgentState):
     retrieved_docs: list[str]
     query_count: int
 
-print(f"상태 키: {list(RAGState.__annotations__.keys())}")
+print(f"State keys: {list(RAGState.__annotations__.keys())}")
 `````)
 
 === Static vs Dynamic Comparison
@@ -223,7 +223,7 @@ store.put((user_id, "preferences"), "theme", {"value": "dark"})
 store.put((user_id, "preferences"), "language", {"value": "ko"})
 
 item = store.get((user_id, "preferences"), "theme")
-print(f"테마: {item.value}")
+print(f"Theme: {item.value}")
 `````)
 
 #code-block(`````python
@@ -234,7 +234,7 @@ for item in items:
 filtered = store.search(
     (user_id, "preferences"), filter={"value": "dark"}
 )
-print(f"필터 결과: {len(filtered)}건")
+print(f"Filtered results: {len(filtered)}")
 `````)
 
 == 4.6 Long-Term Memory -- Semantic Search
@@ -326,7 +326,7 @@ def save_preference(key: str, value: str, runtime: ToolRuntime[UserContext]) -> 
     store = runtime.store
     user_id = runtime.context.user_id
     store.put((user_id, "preferences"), key, {"value": value})
-    return f"선호도 저장됨: {key}={value}"
+    return f"Preference saved: {key}={value}"
 `````)
 
 == 4.8 3 types of memory: Semantic, Episodic, Procedural
@@ -419,7 +419,7 @@ episodes = mem_store.search(
     (uid, "episodes"), query="database query help", limit=1
 )
 for ep in episodes:
-    print(f"관련 에피소드: {ep.value['content']}")
+    print(f"Related episode: {ep.value['content']}")
 `````)
 
 == 4.9 Progressive Disclosure -- Skills pattern
@@ -490,7 +490,7 @@ skills = [
      "content": "CREATE TABLE customers (id INT PK, name VARCHAR)"},
 ]
 SKILL_MAP = {s["name"]: s for s in skills}
-print(f"스킬 {len(skills)}개 정의됨.")
+print(f"Defined {len(skills)} skills.")
 `````)
 
 #code-block(`````python
@@ -501,7 +501,7 @@ def load_skill(skill_name: str) -> str:
     """Loads detailed information about the database skill."""
     skill = SKILL_MAP.get(skill_name)
     if skill is None:
-        return f"찾을 수 없음. 사용 가능: {', '.join(SKILL_MAP.keys())}"
+        return f"Not found. Available: {', '.join(SKILL_MAP.keys())}"
     return f"## {skill['name']}\n\n{skill['content']}"
 `````)
 

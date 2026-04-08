@@ -32,7 +32,7 @@ model = ChatOpenAI(
     model="gpt-4.1",
 )
 
-print("모델 준비 완료:", model.model_name)
+print("Model ready:", model.model_name)
 `````)
 
 == 8.2 Comparing Multi-Agent Patterns

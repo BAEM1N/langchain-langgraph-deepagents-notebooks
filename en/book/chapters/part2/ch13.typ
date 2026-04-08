@@ -35,7 +35,7 @@ model = ChatOpenAI(
 from langchain.agents import create_agent
 from langchain.tools import tool
 
-print("환경 준비 완료.")
+print("Environment ready.")
 `````)
 
 == 13.2 Guardrail Concepts
@@ -105,8 +105,8 @@ User input → [input guardrail] → agent execution → [output guardrail] → 
 
 
 #code-block(`````python
-# PII 감지 미들웨어 설정 예시
-print("PII 감지 미들웨어 설정:")
+# Example PII-detection middleware setup
+print("PII-detection middleware setup:")
 print("=" * 50)
 print("""
 from langchain.agents import create_agent
@@ -116,17 +116,17 @@ agent = create_agent(
     model="gpt-4.1",
     tools=[customer_service_tool, email_tool],
     middleware=[
-        # 이메일 주소를 [REDACTED_EMAIL]로 대체
+        # Replace email addresses with [REDACTED_EMAIL]
         PIIMiddleware("email",
             strategy="redact",
             apply_to_input=True),
 
-        # 신용카드 번호를 부분 마스킹 (****-****-****-1234)
+        # Partially mask credit-card numbers (****-****-****-1234)
         PIIMiddleware("credit_card",
             strategy="mask",
             apply_to_input=True),
 
-        # API 키 감지 시 차단 (커스텀 정규식)
+        # Block detected API keys (custom regex)
         PIIMiddleware("api_key",
             detector=r"sk-[a-zA-Z0-9]{32}",
             strategy="block",
@@ -134,8 +134,8 @@ agent = create_agent(
     ],
 )
 """)
-print("내장 PII 타입: email, credit_card, ip, mac_address, url")
-print("커스텀 감지: detector 파라미터에 정규식 또는 함수 전달")
+print("Built-in PII types: email, credit_card, ip, mac_address, url")
+print("Custom detection: pass a regex or function to the detector parameter")
 `````)
 
 == 13.4 Human-in-the-Loop Guardrails
@@ -144,8 +144,8 @@ print("커스텀 감지: detector 파라미터에 정규식 또는 함수 전달
 
 
 #code-block(`````python
-# Human-in-the-Loop 가드레일 예시
-print("Human-in-the-Loop 가드레일:")
+# Human-in-the-Loop guardrail example
+print("Human-in-the-Loop guardrail:")
 print("=" * 50)
 print("""
 from langchain.agents import create_agent
@@ -159,9 +159,9 @@ agent = create_agent(
     middleware=[
         HumanInTheLoopMiddleware(
             interrupt_on={
-                "send_email": True,       # 승인 필요
-                "delete_db": True,         # 승인 필요
-                "search": False,           # 자동 실행
+                "send_email": True,       # approval required
+                "delete_db": True,         # approval required
+                "search": False,           # automatic
             }
         ),
     ],
@@ -170,21 +170,21 @@ agent = create_agent(
 
 config = {"configurable": {"thread_id": "review-123"}}
 
-# 1단계: 에이전트 실행 → send_email에서 중단
+# Step 1: run the agent -> pause at send_email
 result = agent.invoke(
-    {"messages": [{"role": "user", "content": "팀에 이메일 보내"}]},
+    {"messages": [{"role": "user", "content": "Send an email to the team"}]},
     config=config,
 )
-# → 중단됨: send_email 실행 전 승인 대기
+# -> paused: waiting for approval before send_email executes
 
-# 2단계: 승인 후 재개
+# 2Step: resume after approval
 result = agent.invoke(
     Command(resume={"decisions": [{"type": "approve"}]}),
     config=config,
 )
 """)
-print("핵심: checkpointer가 있어야 중단/재개가 가능합니다.")
-print("거부 시: {\"type\": \"reject\"}로 도구 실행을 막을 수 있습니다.")
+print("Key point: a checkpointer is required for pause/resume flows.")
+print("On rejection, use {\"type\": \"reject\"} to block the tool call.")
 `````)
 
 == 13.5 Custom Input Guardrails — `before_agent`
@@ -193,8 +193,8 @@ The `before_agent` hook validates requests _before the agent starts running_. It
 
 
 #code-block(`````python
-# 커스텀 입력 가드레일 — ContentFilterMiddleware 클래스
-print("커스텀 입력 가드레일 (클래스 방식):")
+# Custom input guardrail — ContentFilterMiddleware class
+print("Custom input guardrail (class-based):")
 print("=" * 50)
 print("""
 from langchain.agents.middleware import (
@@ -204,7 +204,7 @@ from langgraph.runtime import Runtime
 from typing import Any
 
 class ContentFilterMiddleware(AgentMiddleware):
-    \"\"\"결정론적 가드레일: 금지 키워드가 포함된 요청을 차단합니다.\"\"\"
+    \"\"\"Deterministic guardrail: blocks requests that contain banned keywords.\"\"\"
 
     def __init__(self, banned_keywords: list[str]):
         super().__init__()
@@ -227,14 +227,14 @@ class ContentFilterMiddleware(AgentMiddleware):
                 return {
                     "messages": [{
                         "role": "assistant",
-                        "content": "부적절한 내용이 포함되어 있습니다."
+                        "content": "The request contains inappropriate content."
                     }],
                     "jump_to": "end"
                 }
         return None
 """)
-print("핵심: jump_to='end'로 에이전트 실행을 건너뛰고 즉시 응답합니다.")
-print("None을 반환하면 다음 단계(에이전트 실행)로 진행합니다.")
+print("Key point: jump_to='end' skips agent execution and returns immediately.")
+print("If the middleware returns None, execution continues to the next step.")
 `````)
 
 == 13.6 Custom Output Guardrails — `after_agent`
@@ -243,8 +243,8 @@ The `after_agent` hook validates the final output _after agent execution is comp
 
 
 #code-block(`````python
-# 커스텀 출력 가드레일 — SafetyGuardrailMiddleware 클래스
-print("커스텀 출력 가드레일 (클래스 방식):")
+# Custom output guardrail — SafetyGuardrailMiddleware class
+print("Custom output guardrail (class-based):")
 print("=" * 50)
 print("""
 from langchain.agents.middleware import (
@@ -256,7 +256,7 @@ from langchain.chat_models import init_chat_model
 from typing import Any
 
 class SafetyGuardrailMiddleware(AgentMiddleware):
-    \"\"\"모델 기반 가드레일: LLM으로 응답 안전성을 평가합니다.\"\"\"
+    \"\"\"Model-based guardrail: uses an LLM to evaluate response safety.\"\"\"
 
     def __init__(self):
         super().__init__()
@@ -284,12 +284,12 @@ class SafetyGuardrailMiddleware(AgentMiddleware):
 
         if "UNSAFE" in result.content:
             last_message.content = (
-                "안전하지 않은 응답입니다. 다시 질문해주세요."
+                "This response was flagged as unsafe. Please ask again."
             )
         return None
 """)
-print("핵심: 별도의 경량 모델(gpt-4.1-mini)로 안전성을 평가합니다.")
-print("UNSAFE 판정 시 응답 내용을 안전한 메시지로 교체합니다.")
+print("Key point: evaluate safety with a smaller helper model (gpt-4.1-mini).")
+print("If the result is UNSAFE, replace the response with a safe fallback message.")
 `````)
 
 == 13.7 Decorator-Based Guardrails
@@ -298,8 +298,8 @@ Instead of defining a class, you can build a concise guardrail with _decorators_
 
 
 #code-block(`````python
-# 데코레이터 방식 가드레일
-print("데코레이터 방식 가드레일:")
+# Decorator-based guardrails
+print("Decorator-based guardrails:")
 print("=" * 50)
 print("""
 from langchain.agents.middleware import (
@@ -310,12 +310,12 @@ from typing import Any
 
 banned_keywords = ["hack", "exploit", "malware"]
 
-# 입력 가드레일 — 데코레이터
+# Input guardrail — decorator
 @before_agent(can_jump_to=["end"])
 def content_filter(
     state: AgentState, runtime: Runtime
 ) -> dict[str, Any] | None:
-    \"\"\"금지 키워드를 차단합니다.\"\"\"
+    \"\"\"Blocks banned keywords.\"\"\"
     if not state["messages"]:
         return None
     content = state["messages"][0].content.lower()
@@ -323,31 +323,31 @@ def content_filter(
         if kw in content:
             return {
                 "messages": [{"role": "assistant",
-                    "content": "부적절한 요청입니다."}],
+                    "content": "This request is not allowed."}],
                 "jump_to": "end"
             }
     return None
 
-# 출력 가드레일 — 데코레이터
+# Output guardrail — decorator
 @after_agent(can_jump_to=["end"])
 def safety_check(
     state: AgentState, runtime: Runtime
 ) -> dict[str, Any] | None:
-    \"\"\"응답에 민감한 내용이 없는지 확인합니다.\"\"\"
+    \"\"\"Checks whether the response contains sensitive content.\"\"\"
     last = state["messages"][-1]
-    if hasattr(last, 'content') and '비밀번호' in last.content:
-        last.content = "민감한 정보가 포함된 응답입니다."
+    if hasattr(last, 'content') and 'password' in last.content:
+        last.content = "The response contained sensitive information."
     return None
 
-# 에이전트에 적용
+# Apply to the agent
 agent = create_agent(
     model="gpt-4.1",
     tools=[search_tool],
     middleware=[content_filter, safety_check],
 )
 """)
-print("데코레이터 방식은 간단한 가드레일에 적합합니다.")
-print("복잡한 로직(상태 관리, 초기화 등)은 클래스 방식을 사용하세요.")
+print("Decorator-based guardrails work well for simple policies.")
+print("Use the class-based approach for more complex logic such as state handling or initialization.")
 `````)
 
 == 13.8 Combining Multiple Guardrails
@@ -356,8 +356,8 @@ By adding several guardrails in order to the `middleware` list, you can build a 
 
 
 #code-block(`````python
-# 다중 가드레일 조합
-print("다중 가드레일 조합 (다층 방어):")
+# Combine multiple guardrails
+print("Combining multiple guardrails (defense in depth):")
 print("=" * 50)
 print("""
 from langchain.agents import create_agent
@@ -369,32 +369,32 @@ agent = create_agent(
     model="gpt-4.1",
     tools=[search_tool, send_email_tool],
     middleware=[
-        # Layer 1: 결정론적 입력 필터
+        # Layer 1: deterministic input filter
         ContentFilterMiddleware(
             banned_keywords=["hack", "exploit"]
         ),
 
-        # Layer 2: PII 보호 (입력 + 출력)
+        # Layer 2: PII protection (input + output)
         PIIMiddleware("email",
             strategy="redact", apply_to_input=True),
         PIIMiddleware("email",
             strategy="redact", apply_to_output=True),
 
-        # Layer 3: 민감 도구 사람 승인
+        # Layer 3: human approval for sensitive tools
         HumanInTheLoopMiddleware(
             interrupt_on={"send_email": True}
         ),
 
-        # Layer 4: 모델 기반 안전성 검사
+        # Layer 4: model-based safety check
         SafetyGuardrailMiddleware(),
     ],
 )
 """)
-print("실행 순서:")
-print("  입력 → [ContentFilter] → [PII 입력] → 에이전트 실행")
-print("       → [HITL 승인] → [PII 출력] → [Safety] → 응답")
+print("Execution order:")
+print("  input -> [ContentFilter] -> [PII input] -> agent execution")
+print("       -> [HITL approval] -> [PII output] -> [Safety] -> response")
 print()
-print("팁: 빠른 결정론적 가드레일을 앞에, 느린 모델 기반을 뒤에 배치")
+print("Tip: place fast deterministic guardrails first and slower model-based checks later.")
 `````)
 
 == 13.9 Production Guardrail Patterns

@@ -42,9 +42,9 @@ RAG overcomes this limitation by bringing in relevant external information at qu
 === Pipeline: Indexing -\\> Search -\\> Generate
 
 #code-block(`````python
-[문서] -> Text Splitter -> [청크] -> Embeddings -> [벡터 스토어]
+[Documents] -> Text Splitter -> [Chunks] -> Embeddings -> [Vector Store]
                                                       |
-[질문] -> Embedding -> similarity_search -> [관련 청크] -> LLM -> [답변]
+[Question] -> Embedding -> similarity_search -> [Relevant Chunks] -> LLM -> [Answer]
 `````)
 
 === 5 Core Components
@@ -208,7 +208,7 @@ raw_docs = [
         "Interact. The ReAct pattern alternates between reasoning and action.",
         metadata={"source": "agent-guide"}),
 ]
-print(f"문서 {len(raw_docs)}개 로드됨.")
+print(f"Loaded {len(raw_docs)} documents.")
 `````)
 
 #code-block(`````python
@@ -218,8 +218,8 @@ text_splitter = RecursiveCharacterTextSplitter(
 splits = text_splitter.split_documents(raw_docs)
 
 for i, doc in enumerate(splits):
-    print(f"청크 {i}: {doc.page_content[:60]}...")
-print(f"총 청크 수: {len(splits)}")
+    print(f"Chunk {i}: {doc.page_content[:60]}...")
+print(f"Total chunks: {len(splits)}")
 `````)
 
 == 5.4 Building a vector store
@@ -281,7 +281,7 @@ vector_store = InMemoryVectorStore.from_documents(
 test_results = vector_store.similarity_search("LangGraph", k=2)
 for doc in test_results:
     print(f"  [{doc.metadata['source']}] {doc.page_content[:80]}")
-print(f"벡터 스토어 준비 완료. 문서 {len(splits)}개.")
+print(f"Vector store ready with {len(splits)} documents.")
 `````)
 
 == 5.5 Search tool Definition
@@ -300,7 +300,7 @@ def retrieve(query: str):
     """Search our knowledge base for related articles."""
     docs = vector_store.similarity_search(query, k=4)
     serialized = "\n\n".join(
-        f"출처: {d.metadata.get('source', '?')}\n{d.page_content}"
+        f"Source: {d.metadata.get('source', '?')}\n{d.page_content}"
         for d in docs
     )
     return serialized, docs
@@ -363,7 +363,7 @@ def rag_prompt(request):
     user_msg = request.state["messages"][-1].content
     docs = vector_store.similarity_search(user_msg, k=4)
     ctx = "\n\n".join(d.page_content for d in docs)
-    return f"컨텍스트를 기반으로 답변하세요:\n\n{ctx}"
+    return f"Answer based on the following context:\n\n{ctx}"
 `````)
 
 == 5.8 LangGraph Custom RAG -- Building StateGraph
@@ -404,18 +404,18 @@ The custom RAG graph follows this high-level flow:
 
 #code-block(`````python
 
-### 각 노드의 역할
+### Role of Each Node
 
-| 노드 | 역할 |
+| Node | Role |
 |---|---|
-| `generate_query_or_respond` | 진입 노드. 검색할지 직접 응답할지 결정 |
-| `retrieve` | `ToolNode`로 검색 실행 |
-| `grade_documents` | 구조화 출력(`GradeDocuments`)으로 문서 관련성 평가 |
-| `rewrite_question` | 관련 없는 결과 시 더 구체적인 쿼리로 리라이트 |
-| `generate_answer` | 관련 문서 기반 최종 답변 생성 |
+| `generate_query_or_respond` | Entry node. Decides whether to search or answer directly. |
+| `retrieve` | `ToolNode`runs retrieval through |
+| `grade_documents` | Evaluates document relevance through structured output (`GradeDocuments`). |
+| `rewrite_question` | rewrite the query when results are not relevant |
+| `generate_answer` | Generates the final answer from relevant documents. |
 
-### 무한 루프 방지
-`rewrite_question` -> `generate_query_or_respond` 순환이 발생할 수 있으므로, `retry_count` to State. Recommended.
+### Preventing Infinite Loops
+`rewrite_question` -> `generate_query_or_respond` because a loop can occur, `retry_count` to State. Recommended.
 `````)
 
 #code-block(`````python
@@ -425,7 +425,7 @@ class AgentState(MessagesState):
     """Custom RAG agent status."""
     relevance: str  # "relevant" or "not_relevant"
 
-print(f"AgentState 키: {list(AgentState.__annotations__)}")
+print(f"AgentState keys: {list(AgentState.__annotations__)}")
 `````)
 
 == 5.9 `generate_query_or_respond` node
@@ -453,7 +453,7 @@ grader = llm.with_structured_output(GradeDocuments)
 #code-block(`````python
 def grade_documents(state: AgentState):
     """
-    검색된 문서의 관련성을 평가합니다.
+    Evaluates the relevance of the retrieved documents.
     """
 
     msgs = state["messages"]
@@ -466,8 +466,8 @@ def grade_documents(state: AgentState):
     tool_content = msgs[-1].content
 
     grade = grader.invoke(
-        f"질문: {user_q}\n문서:\n{tool_content}\n"
-        f"이 문서들이 관련이 있습니까?"
+        f"Question: {user_q}\nDocument:\n{tool_content}\n"
+        f"Are these documents relevant?"
     )
 
     return {

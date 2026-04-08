@@ -398,7 +398,7 @@ from langchain.agents.middleware import before_model
 @before_model
 def log_before(state, runtime):
     """Record the number of messages before calling the model."""
-    print(f"[LOG] 메시지 {len(state.get('messages', []))}개")
+    print(f"[LOG] {len(state.get('messages', []))} messages")
 `````)
 
 #code-block(`````python
