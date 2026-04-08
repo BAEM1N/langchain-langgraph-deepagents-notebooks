@@ -30,9 +30,9 @@ model = ChatOpenAI(model="gpt-4.1")
 
 LangGraph provides three checkpointer:
 
-- **`InMemorySaver`**: For development use (stored in memory, deleted when process ends)
-- **`SqliteSaver`**: Local development (save to file, persist across restarts)
-- **`PostgresSaver`**: Production (stored in DB, expandable)
+- *`InMemorySaver`*: For development use (stored in memory, deleted when process ends)
+- *`SqliteSaver`*: Local development (save to file, persist across restarts)
+- *`PostgresSaver`*: Production (stored in DB, expandable)
 
 If you pass checkpointer to `compile()`, state will be automatically saved after each node in the graph is executed.
 

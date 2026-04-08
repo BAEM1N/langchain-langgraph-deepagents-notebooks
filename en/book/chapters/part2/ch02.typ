@@ -5,7 +5,7 @@
 
 #chapter(2, "Your First Agent")
 
-**Getting Started with `create_agent()`**
+*Getting Started with `create_agent()`*
 
 
 == Learning Objectives

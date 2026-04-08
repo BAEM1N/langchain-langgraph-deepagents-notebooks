@@ -278,7 +278,7 @@ With `stream(subgraphs=True)`, you can follow the execution of the main agent an
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[Item],
   text(weight: "bold")[Key Point],
-  [**`think_tool`**],
+  [`think_tool`],
   [Strategic reflection — analyze search results and plan the next step],
   [_Subagents_],
   [Parallel execution with `researcher-1`, `researcher-2`, and `fact-checker`],

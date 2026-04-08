@@ -336,7 +336,7 @@ They are loaded progressively when relevant, which reduces token usage.
 - They package tools, prompts, and workflows together
 
 === Memory
-Memory uses **`AGENTS.md`**-style persistent context files.
+Memory uses *`AGENTS.md`*-style persistent context files.
 It stores reusable guidelines, preferences, and project knowledge beyond a single conversation.
 
 #table(

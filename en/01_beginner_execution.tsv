@@ -1,9 +1,0 @@
-status	path	message
-SUCCESS	en/01_beginner/00_setup.ipynb	
-SUCCESS	en/01_beginner/01_llm_basics.ipynb	
-SUCCESS	en/01_beginner/02_langchain_basics.ipynb	
-SUCCESS	en/01_beginner/03_langchain_memory.ipynb	
-SUCCESS	en/01_beginner/04_langgraph_basics.ipynb	
-SUCCESS	en/01_beginner/05_deep_agents_basics.ipynb	
-SUCCESS	en/01_beginner/06_comparison.ipynb	
-FAILED	en/01_beginner/07_mini_project.ipynb	-------------------

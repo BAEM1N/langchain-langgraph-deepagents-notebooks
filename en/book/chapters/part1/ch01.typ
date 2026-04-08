@@ -78,9 +78,9 @@ If you use `model.stream()`, tokens are printed as they are generated in real ti
 This can make the application feel much faster to the user.
 
 LangChain models provide three main call styles:
-- **`invoke()`**: A synchronous call that returns the full response at once
-- **`stream()`**: Returns `AIMessageChunk` objects token by token for real-time output
-- **`batch()`**: Handles multiple requests at once for better throughput
+- *`invoke()`*: A synchronous call that returns the full response at once
+- *`stream()`*: Returns `AIMessageChunk` objects token by token for real-time output
+- *`batch()`*: Handles multiple requests at once for better throughput
 
 During streaming, each `AIMessageChunk` is progressively combined into the final message, and token usage can also be tracked incrementally.
 

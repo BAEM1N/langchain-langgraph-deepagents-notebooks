@@ -94,8 +94,8 @@ print("  -> The run pauses for human approval before executing tools")
 
 A HITL agent works in two phases:
 
-+ **Phase 1 (`invoke`)_: the agent proposes a tool call and is automatically _interrupted**
-+ **Phase 2 (`Command(resume=True)`)_: after a human approves, execution _resumes** with `Command(resume=True)`
++ *Phase 1 (`invoke`):* the agent proposes a tool call and is automatically *interrupted*
++ *Phase 2 (`Command(resume=True)`):* after a human approves, execution *resumes* with `Command(resume=True)`
 
 To reject a request, use `Command(resume=False)` or provide a different decision.
 

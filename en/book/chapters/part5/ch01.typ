@@ -131,7 +131,7 @@ summarizer = SummarizationMiddleware(
 
 Stop agent execution before high-risk tool calling and wait for human approval. Use when human supervision is required for high-risk tasks or compliance workflows, such as database writes, financial transactions, and email sending.
 
-**`checkpointer` Required** — checkpointer is absolutely required to restore state after an interruption.
+*`checkpointer` required* — a checkpointer is absolutely required to restore state after an interruption.
 
 === Decision type
 
@@ -289,7 +289,7 @@ Personally identifiable information (PII) is automatically detected and processe
 === Custom Detector
 In addition to the built-in PII types, you can create custom detectors in three ways:
 + _Regular Expression String_: Simple pattern matching
-+ **Compiled Regular Expressions (`re.compile`)**: Complex regular expressions
++ *Compiled regular expressions (`re.compile`):* complex regular expressions
 + _Function_: Advanced detection that requires validation logic (returns: `list[dict]` — contains `text`, `start`, `end` keys)
 
 #code-block(`````python

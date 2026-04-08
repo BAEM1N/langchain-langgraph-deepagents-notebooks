@@ -139,7 +139,7 @@ print(f"Total tools: {len(tools)}")
 
 === How ReAct loop works
 
-+ LLM analyzes user questions and conversation history to determine _T16___ to call next
++ The LLM analyzes the user question and conversation history to decide *which tool* to call next
 + tool is executed and the results are added to the conversation history
 + LLM will check the results and return to step 1 if additional tool calling is needed
 + Return a text response when the final answer is ready

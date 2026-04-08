@@ -165,8 +165,6 @@ For the full list, see [`.env.example`](../.env.example).
 | Item | Status |
 |------|--------|
 | English notebooks | **59 / 59 executed successfully** |
-| Execution summary | [EXECUTION_STATUS.md](EXECUTION_STATUS.md) |
-| Raw results | [execution_results.tsv](execution_results.tsv) |
 
 ---
 
@@ -175,10 +173,6 @@ For the full list, see [`.env.example`](../.env.example).
 The English handbook assets and Typst sources are organized under [`book/`](book/).
 
 > **[`book/agent-handbook-en.pdf`](book/agent-handbook-en.pdf)**
-
-The full-compile artifact is also available:
-
-> **[`book/agent-handbook-en-full.pdf`](book/agent-handbook-en-full.pdf)**
 
 ---
 

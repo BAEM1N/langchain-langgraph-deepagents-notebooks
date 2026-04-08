@@ -98,7 +98,7 @@ In the example below, thread 1 stores preferences and thread 2 reads them later.
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 3. Injecting Context with `AGENTS.md`
 
-If you use the `memory` parameter, the agent automatically loads **`AGENTS.md` files at startup** and injects them into the system prompt.
+If you use the `memory` parameter, the agent automatically loads *`AGENTS.md` files at startup* and injects them into the system prompt.
 
 === What is `AGENTS.md`?
 It is a Markdown file that contains _rules, conventions, and context information_ that should always apply to the agent.

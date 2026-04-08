@@ -182,11 +182,11 @@ _3. LangGraph Cloud:_
 
 == 10.8 observability — LangSmith Tracing
 
-**Settings (`.env`):**
+*Settings (`.env`):*
 LANGSMITH_API_KEY=lsv2-...
 LANGSMITH_TRACING=true
 #code-block(`````python
-**Automatically tracked items:**
+*Automatically tracked items:*
 - Each node execution time
 - LLM input/output, token usage
 - tool calling and results
@@ -211,7 +211,7 @@ _LangGraph Execution Model:_
 ↓
 END
 #code-block(`````python
-**Each superstep:**
+*Each superstep:*
 1. Parallel execution of relevant nodes
 2. Update state (apply reducer)
 3. Save checkpoint

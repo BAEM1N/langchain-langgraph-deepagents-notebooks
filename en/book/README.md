@@ -11,7 +11,7 @@ This directory contains the English Typst handbook worktree.
 
 ## Key files
 
-- `main.typ` — current stable English handbook entry point
-- `agent-handbook-en.pdf` — current compiled English handbook PDF
+- `main.typ` — current English handbook entry point
+- `agent-handbook-en.pdf` — final compiled English handbook PDF
 - `scripts/config.yaml` — English notebook-to-Typst mapping
 - `chapters/` — generated English chapter sources

@@ -63,7 +63,7 @@ You can use multiple modes _simultaneously_ by passing a list to `stream_mode`. 
 
 == 7.7 stream_mode="custom" — custom streaming
 
-`custom` mode allows you to streaming** arbitrary data directly inside a node.
+`custom` mode lets you stream arbitrary data directly inside a node.
 
 If you call `get_stream_writer()` of `langgraph.config`, you can get the `writer` function. If you pass data such as a dictionary to this function, it will be sent to the client in real time while the graph is running.
 

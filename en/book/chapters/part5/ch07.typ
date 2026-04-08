@@ -109,10 +109,10 @@ Deep Agents provide a filesystem and code execution environment through a _plugg
 
 === Details by backend type
 
-- **`StateBackend`** (default): Store files in LangGraph agent state. It is suitable for use as a scratch pad, and large printouts are automatically removed.
-- **`FilesystemBackend`**: Provides local disk access with `root_dir` settings. The `virtual_mode=True` option allows restricting paths and preventing directory traversal.
-- **`LocalShellBackend`_: Provides _unlimited shell command execution** via `execute` tool in addition to filesystem access. Runs with full user privileges on the host system.
-- **`CompositeBackend`**: Route different backends per route. Example: `StateBackend` for temporary files, `StoreBackend` for `/memories/`.
+- *`StateBackend`* (default): Stores files in the LangGraph agent state. It works well as a scratch pad, and large printouts are automatically removed.
+- *`FilesystemBackend`*: Provides local disk access with `root_dir` settings. The `virtual_mode=True` option restricts paths and prevents directory traversal.
+- *`LocalShellBackend`*: Provides *unlimited shell command execution* through the `execute` tool in addition to filesystem access. It runs with full user privileges on the host system.
+- *`CompositeBackend`*: Routes different backends by route. Example: `StateBackend` for temporary files and `StoreBackend` for `/memories/`.
 
 === Sandbox Security Principles
 
@@ -303,9 +303,9 @@ mode, data = chunk
 ### Tracking the Subagent Lifecycle
 
 A subagent goes through three stages:
-1. **Pending** — detected when the main agent includes a delegated task in its `model_request`
-2. **Running** -- `tools:UUID` starts when events appear under the namespace
-3. **Complete** -- finishes when the main agent's `tools` node returns its result.
+1. *Pending* — detected when the main agent includes a delegated task in its `model_request`
+2. *Running* -- `tools:UUID` starts when events appear under the namespace
+3. *Complete* -- finishes when the main agent's `tools` node returns its result.
 `````)
 
 == 7.9 Utilizing built-in tool
@@ -387,7 +387,7 @@ checkpointer saves agent state to enable _abort and resume_. A conversation sess
 checkpointer goes beyond simply saving conversation history and allows you to:
 
 - _Interruption Recovery_: Resume from the last completed step in case of network error or timeout
-- **`interrupt()` Support**: Save the graph state in Human-in-the-Loop and resume at the correct location after the human responds.
+- *`interrupt()` support*: Saves the graph state in human-in-the-loop flows and resumes at the correct location after the human responds.
 - _Multi-turn analysis_: Process multiple analysis requests consecutively in the same session while referencing previous results
 
 === Sandbox Lifetime Management

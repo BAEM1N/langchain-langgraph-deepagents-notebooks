@@ -36,7 +36,7 @@ The basic LangGraph flow has five steps:
 StateGraph(State) → add_node() → add_edge() → compile() → invoke()
 `````)
 
-**Core ideas behind `StateGraph`:**
+*Core ideas behind `StateGraph`:*
 
 LangGraph models agent workflows as _graphs_, and it relies on three core building blocks:
 
@@ -63,7 +63,7 @@ START → uppercase → counter → END
 
 If you use `MessagesState`, you can model an LLM conversation as a graph.
 
-**What is `MessagesState`?**
+*What is `MessagesState`?*
 
 `MessagesState` is a _predefined state class_ provided by LangGraph. It contains a single `messages` key and uses `add_messages` as its reducer. Internally, it looks like this:
 

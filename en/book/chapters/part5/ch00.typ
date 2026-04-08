@@ -210,7 +210,7 @@ structured output was split into two branches: `ToolStrategy` (based on tool cal
   [The `example` parameter has been removed. Use `additional_kwargs`.],
   [_AIMessageChunk_],
   [Added `chunk_position` attribute (value `'last'` in last chunk).],
-  [**`.text` Properties**],
+  [`.text` properties],
   [`.text()` method changed to `.text` property.],
   [_File Encoding_],
   [Files open with UTF-8 encoding by default.],

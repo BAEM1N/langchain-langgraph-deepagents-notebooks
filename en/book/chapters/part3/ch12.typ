@@ -59,7 +59,7 @@ Example: `InMemorySaver` (for development), `PostgresSaver` (for production)
 workflow A unique ID that tracks the execution history of the instance.
 Using the same `thread_id`, you can continue resume from previous executions.
 
-+ **`@task` Wrapping (Task Wrapping)**
++ *`@task` wrapping (task wrapping)*
 Non-deterministic operations and side-effect operations
 Wrap it in `@task` to prevent re-execution on resume.
 

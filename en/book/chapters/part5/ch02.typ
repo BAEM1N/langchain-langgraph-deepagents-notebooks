@@ -114,7 +114,7 @@ Each subagent is created by `create_agent()` and has three core elements:
 
 + _Specialized system prompts_: Define domain-specific roles and behavioral guidelines
 + _Set tool by domain_: Separate concerns by assigning only tool for that domain
-+ **`name` identifier**: Used by the supervisor to identify and call subagent
++ *`name` identifier*: used by the supervisor to identify and call a subagent
 
 The recommended granularity of subagent is domain-level (calendar, email, etc.). Too much granularity increases the routing burden on the supervisor, while too much integration reduces the benefits of context isolation.
 

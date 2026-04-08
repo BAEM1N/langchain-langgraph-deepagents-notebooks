@@ -379,7 +379,7 @@ print("BinaryOperatorAggregate:", app_agg.invoke({"a": "foo"}))
 
 == 13.11 superstep Execution Model
 
-Pregel runs in **supersteps**.
+Pregel runs in *supersteps*.
 In each superstep, nodes (actors) at the same level can run in parallel. Once all of them finish, the channel state is updated and the runtime moves to the next superstep.
 
 #note-box[Features of a superstep: nodes in the same superstep cannot see each other's new outputs, the next step begins only after all nodes finish, a checkpointer can persist state after each step, and execution stops automatically when there are no actors left to run.]

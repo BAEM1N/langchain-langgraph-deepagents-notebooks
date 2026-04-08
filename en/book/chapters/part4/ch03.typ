@@ -34,7 +34,7 @@ print(f"Default model: {model.model_name}")
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 1. Choosing a Model
 
-Deep Agents supports a wide range of LLMs through either a _LangChain ChatModel object_ or the **`provider:model`** format.
+Deep Agents supports a wide range of LLMs through either a *LangChain chat model object* or the *`provider:model`* format.
 
 This notebook uses _OpenAI gpt-4.1_ as the default model.
 

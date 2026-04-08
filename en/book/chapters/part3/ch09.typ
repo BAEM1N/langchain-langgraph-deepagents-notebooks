@@ -33,7 +33,7 @@ model = ChatOpenAI(model="gpt-4.1")
 
 In the above example (9.4), the parent graph and subgraph shared _the same keys_ (`text`, `word_count`, `char_count`), so the compiled subgraph could be passed directly to `add_node()`.
 
-However, in practice, the **`state_schema`_ of the parent graph and subgraph are often completely different_. In this case, using a _wrapper function_:
+However, in practice, the *`state_schema`* of the parent graph and subgraph is often completely different. In this case, use a *wrapper function*:
 
 + _Extract_ the required fields from the parent state and convert them to subgraph input.
 + _Run_ the subgraph
