@@ -60,7 +60,29 @@ agent = create_agent(
 )
 ```
 
-Use `SystemMessage` for advanced features like Anthropic's prompt caching.
+**`SystemMessage` 직접 주입 (langchain 1.1+)**: 문자열 대신 `SystemMessage` 인스턴스를 그대로 넘길 수 있다. Anthropic 프롬프트 캐싱 블록, 이미지 포함 시스템 메시지, content blocks 등 고급 기능이 필요할 때 사용한다.
+
+```python
+from langchain_core.messages import SystemMessage
+
+system_message = SystemMessage(
+    content=[
+        {"type": "text", "text": "You are a senior data analyst."},
+        {
+            "type": "text",
+            "text": LONG_PLAYBOOK,
+            # Anthropic 프롬프트 캐싱
+            "cache_control": {"type": "ephemeral"},
+        },
+    ],
+)
+
+agent = create_agent(
+    model,
+    tools,
+    system_prompt=system_message,
+)
+```
 
 **Dynamic Prompts:** Generate system prompts based on runtime context using the `@dynamic_prompt` decorator.
 

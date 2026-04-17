@@ -32,6 +32,64 @@ for chunk in graph.stream(inputs, stream_mode="updates"):
     print(chunk)
 ```
 
+## Type-safe streaming (`version="v2"`) — LangGraph 1.1+
+
+Opt-in으로 `version="v2"`를 전달하면 모든 청크가 **통일된 `StreamPart` dict** 형태로 반환된다. v1 동작은 그대로 유지되며, v2는 후방 호환성 손실 없이 점진 도입 가능하다.
+
+### StreamPart 구조
+
+```python
+{
+    "type": "values" | "updates" | "messages" | "custom" | "checkpoints" | "tasks" | "debug",
+    "ns":   (),    # 서브그래프 namespace 튜플
+    "data": ...,   # 모드별 payload
+}
+```
+
+### 모드별 TypedDict
+
+`langgraph.types`에서 import 가능하다. 편집기/타입체커에서 `data` 타입을 자동 내로잉할 수 있다.
+
+| Mode | TypedDict |
+|------|-----------|
+| `values` | `ValuesStreamPart` |
+| `updates` | `UpdatesStreamPart` |
+| `messages` | `MessagesStreamPart` |
+| `custom` | `CustomStreamPart` |
+| `checkpoints` | `CheckpointStreamPart` |
+| `tasks` | `TasksStreamPart` |
+| `debug` | `DebugStreamPart` |
+
+### 사용 예시
+
+```python
+from langgraph.types import UpdatesStreamPart, CustomStreamPart  # 타입 힌트용
+
+for chunk in graph.stream(
+    {"topic": "ice cream"},
+    stream_mode=["updates", "custom"],
+    version="v2",
+):
+    if chunk["type"] == "updates":
+        for node_name, state in chunk["data"].items():
+            print(f"[{node_name}] {state}")
+    elif chunk["type"] == "custom":
+        print(f"status: {chunk['data']}")
+```
+
+### v1 vs v2 비교
+
+| 측면 | v1 (기본) | v2 (opt-in) |
+|------|-----------|-------------|
+| 반환 형태 | 모드/subgraph 조합에 따라 dict/tuple 혼재 | 항상 `StreamPart` dict |
+| 모드 식별 | 튜플 첫 원소(다중모드) / 암묵적 | `chunk["type"]` 명시 필드 |
+| namespace | `subgraphs=True` 시에만 tuple | 항상 `chunk["ns"]` |
+| 타입 추론 | 추론 제한 | TypedDict로 자동 내로잉 |
+
+### values 모드 + Pydantic/dataclass 강제
+
+v2에서 `stream_mode="values"`는 그래프 state의 Pydantic 모델 / dataclass 타입으로 자동 강제된다. (invoke와 동일한 강제 규칙)
+
 ## State Streaming
 
 **Updates mode** -- receive only state modifications:

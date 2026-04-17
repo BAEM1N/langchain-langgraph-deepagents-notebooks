@@ -14,7 +14,16 @@ wheels/
 advanced/Chinook.db
 en/05_advanced/Chinook.db
 .omx/
-.codex/
+.codex/*
+!.codex/skills/
+.codex/skills/*
+!.codex/skills/langchain-v1-modern/
+!.codex/skills/langgraph-docs-official/
+!.codex/skills/langchain-v1-modern/SKILL.md
+!.codex/skills/langgraph-docs-official/SKILL.md
 
 # Local lecture planning workspace
 lecture/
+
+# Local-only working notes (version snapshots, verification recipes)
+.local/

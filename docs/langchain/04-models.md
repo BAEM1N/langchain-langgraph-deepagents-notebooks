@@ -115,7 +115,34 @@ for chunk in model.stream("Complex question"):
 
 ### Model Profiles
 
-Access model capabilities via `.profile` attribute showing supported features like max tokens, tool calling, and reasoning support.
+**Since langchain 1.1**: 모든 chat model이 `.profile` 속성으로 capability dict를 노출한다. 데이터는 오픈소스 [models.dev](https://models.dev) 프로젝트에서 가져오고 LangChain 고유 필드가 추가된다.
+
+```python
+from langchain.chat_models import init_chat_model
+
+model = init_chat_model("openai:gpt-5")
+model.profile
+# {
+#   "max_input_tokens": 400000,
+#   "image_inputs": True,
+#   "reasoning_output": True,
+#   "tool_calling": True,
+#   ...
+# }
+```
+
+주요 용도:
+
+- **동적 컨텍스트 관리** — `SummarizationMiddleware`가 `fraction` trigger를 `.profile["max_input_tokens"]` 기준으로 자동 계산
+- **구조화 출력 전략 자동 선택** — `ProviderStrategy` vs `ToolStrategy`를 `.profile`로 추론
+- **입력 게이팅** — `image_inputs: False`이면 이미지 메시지 사전 차단
+
+profile 데이터가 없는 모델(private / 커스텀)은 수동 지정 가능:
+
+```python
+custom_profile = {"max_input_tokens": 100_000, "tool_calling": True}
+model = init_chat_model("my-private-model", profile=custom_profile)
+```
 
 ### Prompt Caching
 

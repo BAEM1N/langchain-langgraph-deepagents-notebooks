@@ -35,10 +35,23 @@ agent = create_agent(
 
 **Key Parameters**:
 - `model`: Chat model for generating summaries
-- `trigger`: Conditions for starting summarization (tokens, messages, or fraction)
+- `trigger`: Conditions for starting summarization (tokens, messages, or fraction). 리스트로 전달 시 OR 논리
 - `keep`: How much context to preserve after summarization
 - `token_counter`: Custom token counting function
-- `summary_prompt`: Custom prompt template
+- `summary_prompt`: Custom prompt template with `{messages}` placeholder
+- `trim_tokens_to_summarize`: Maximum tokens included when generating summary (default 4000)
+
+**Dynamic trigger via `.profile` (langchain 1.1+)**: `trigger=("fraction", 0.8)`처럼 분수 조건을 쓰면 모델의 `.profile["max_input_tokens"]`를 참조해 자동으로 토큰 임계치를 계산한다. 모델을 바꿔도 설정을 다시 고치지 않아도 된다.
+
+```python
+SummarizationMiddleware(
+    model="gpt-4.1-mini",
+    trigger=("fraction", 0.8),   # max_input_tokens의 80%에서 트리거
+    keep=("messages", 20),
+)
+```
+
+**Deprecated aliases**: `summary_prefix`(→ `summary_prompt`), `max_tokens_before_summary`(→ `trigger=("tokens", ...)`) , `messages_to_keep`(→ `keep=("messages", ...)`)
 
 ---
 
@@ -696,7 +709,42 @@ agent = create_agent(
 
 **Anthropic Middleware**: Prompt caching, bash tool, text editor, memory, and file search for Claude models.
 
-**OpenAI Middleware**: Content moderation middleware for OpenAI models.
+### OpenAI Content Moderation (langchain 1.1+)
+
+**Purpose**: OpenAI의 moderation API로 에이전트 입출력을 사전/사후 검사해 정책 위반 콘텐츠를 차단한다.
+
+**Use Cases**:
+- 사용자 입력 선검사 (unsafe content를 도구 호출 전 차단)
+- 모델 출력 후처리 검사
+- 규제 / 컴플라이언스 요구사항 대응
+
+**Configuration**:
+```python
+from langchain.agents import create_agent
+from langchain_openai.middleware import OpenAIModerationMiddleware
+
+agent = create_agent(
+    model="openai:gpt-4.1",
+    tools=[search_tool],
+    middleware=[
+        OpenAIModerationMiddleware(
+            # input/output 모두 검사
+            check_input=True,
+            check_output=True,
+            # 위반 시 동작: "block"(기본) | "warn"
+            on_violation="block",
+        ),
+    ],
+)
+```
+
+**동작**:
+- `check_input=True`: user 메시지가 모델에 도달하기 전에 OpenAI moderation API 호출
+- `check_output=True`: AI 응답을 사용자에게 전달하기 전에 검사
+- `on_violation="block"`: 차단하고 안전 메시지로 대체
+- `on_violation="warn"`: 통과시키되 메타데이터에 태깅
+
+**주의**: OpenAI Moderation API 호출 비용 / 레이턴시가 추가된다. 프로덕션에서는 `check_input`만 쓰고 `check_output`은 샘플링 전략으로 운영하는 경우가 많다.
 
 ---
 
