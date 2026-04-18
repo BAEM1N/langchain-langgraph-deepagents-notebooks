@@ -728,23 +728,29 @@ agent = create_agent(
     tools=[search_tool],
     middleware=[
         OpenAIModerationMiddleware(
-            # input/output 모두 검사
+            model="omni-moderation-latest",
             check_input=True,
             check_output=True,
-            # 위반 시 동작: "block"(기본) | "warn"
-            on_violation="block",
+            check_tool_results=False,
+            exit_behavior="end",   # "end" | "error" | "replace"
         ),
     ],
 )
 ```
 
-**동작**:
-- `check_input=True`: user 메시지가 모델에 도달하기 전에 OpenAI moderation API 호출
-- `check_output=True`: AI 응답을 사용자에게 전달하기 전에 검사
-- `on_violation="block"`: 차단하고 안전 메시지로 대체
-- `on_violation="warn"`: 통과시키되 메타데이터에 태깅
+**Parameters (1.2 기준)**:
+- `model`: `"omni-moderation-latest"`(기본) · `"omni-moderation-2024-09-26"` · `"text-moderation-latest"` · `"text-moderation-stable"`
+- `check_input` (bool, 기본 `True`): 사용자 메시지 사전 검사
+- `check_output` (bool, 기본 `True`): 모델 응답 사후 검사
+- `check_tool_results` (bool, 기본 `False`): 도구 실행 결과 검사
+- `exit_behavior` (기본 `"end"`):
+  - `"end"`: 그래프 종료 + 안전 메시지로 교체
+  - `"error"`: 예외 발생(개발/테스트용)
+  - `"replace"`: 위반 내용만 교체하고 실행 계속
+- `violation_message` (str | None): 교체용 메시지 템플릿. `{categories}`, `{category_scores}`, `{original_content}` 변수 지원
+- `client`, `async_client`: 사전 구성된 OpenAI 클라이언트 주입(선택)
 
-**주의**: OpenAI Moderation API 호출 비용 / 레이턴시가 추가된다. 프로덕션에서는 `check_input`만 쓰고 `check_output`은 샘플링 전략으로 운영하는 경우가 많다.
+**주의**: OpenAI Moderation API 호출 비용 / 레이턴시가 추가된다. 프로덕션에서는 `check_input`만 쓰고 `check_output`은 샘플링 전략으로 운영하는 경우가 많다. 실행 예제는 `07_integration/11_provider_middleware/07_openai_moderation.ipynb` 참고.
 
 ---
 
