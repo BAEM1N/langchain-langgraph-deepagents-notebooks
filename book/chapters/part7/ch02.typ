@@ -136,9 +136,19 @@ runs = client.list_runs(
 SaaS LangSmith는 _ingestion 시점부터 400일_ 후 trace가 삭제됩니다. 평가 회귀에 쓰고 싶은 중요한 실행은 _Dataset으로 영구화_해야 합니다. 3장에서 자세히 다루지만, 여기선 패턴만 봅니다.
 
 #code-block(`````python
-client.add_runs_to_dataset(
-    dataset_name="agent-golden-traces",
-    runs=[r.id for r in runs if r.feedback.get("user_thumbs") == 1],
+# langsmith 0.7+에서는 add_runs_to_dataset이 제거되었으므로
+# create_examples로 run의 inputs/outputs를 직접 example로 변환한다.
+golden_runs = [r for r in runs if r.feedback.get("user_thumbs") == 1]
+ds = client.create_dataset("agent-golden-traces",
+                           description="사람이 승인한 황금 trace")
+client.create_examples(
+    dataset_id=ds.id,
+    examples=[
+        {"inputs": r.inputs,
+         "outputs": r.outputs,
+         "metadata": {"source_run_id": str(r.id)}}
+        for r in golden_runs if r.outputs
+    ],
 )
 `````)
 

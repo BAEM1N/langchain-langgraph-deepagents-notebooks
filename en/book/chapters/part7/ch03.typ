@@ -9,7 +9,7 @@ Traces show "how the system is running right now"; evaluation answers "did it ge
 #learning-header()
 #learning-objectives(
   [Create a dataset and examples with `client.create_dataset` + `client.create_examples`],
-  [Ingest production traces into a dataset with `client.add_runs_to_dataset`],
+  [Ingest production traces into a dataset with `client.create_examples(dataset_id=..., examples=[...])`],
   [Write a code evaluator with the `(inputs, outputs, reference_outputs) → dict` signature],
   [Run an LLM-as-judge evaluator that produces a structured score],
   [Use pairwise / summary evaluators for A/B comparison and dataset-level metrics],
@@ -49,13 +49,18 @@ client.create_examples(
 
 == 3.2 Ingesting production traces into a dataset
 
-Manual authoring only seeds the initial set; real volume comes from _production traces_. `client.add_runs_to_dataset` copies each run's `inputs` / `outputs` directly into examples. In practice you usually push only runs that a human has approved via the Annotation Queue.
+Manual authoring only seeds the initial set; real volume comes from _production traces_. `add_runs_to_dataset` was removed in `langsmith 0.7`, so use `client.create_examples(...)` to convert each run's `inputs`/`outputs` into examples. In practice you usually push only runs that a human has approved via the Annotation Queue.
 
 #code-block(`````python
 good_runs = [r for r in client.list_runs(project_name="prod") if is_good(r)]
-client.add_runs_to_dataset(
-    dataset_name="weather-bot-qa",
-    runs=[r.id for r in good_runs],
+client.create_examples(
+    dataset_id=client.read_dataset(dataset_name="weather-bot-qa").id,
+    examples=[
+        {"inputs": r.inputs,
+         "outputs": r.outputs,
+         "metadata": {"source_run_id": str(r.id)}}
+        for r in good_runs if r.outputs
+    ],
 )
 `````)
 
