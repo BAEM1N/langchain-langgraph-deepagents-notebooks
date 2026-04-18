@@ -492,6 +492,192 @@ production_agent = create_agent(
 )
 `````)
 
+== 1.12 Provider-specific Middleware
+
+While the seven built-in middleware above cover _provider-agnostic_ patterns, provider-specific middleware wires _vendor-only features_ into the agent. Capabilities that must be toggled on a provider's server — Anthropic prompt cache, Bedrock TTL cache, OpenAI Moderation API — are exposed as dedicated middleware.
+
+=== Anthropic Prompt Caching
+
+`langchain_anthropic.middleware.AnthropicPromptCachingMiddleware` attaches `cache_control` markers automatically at the _system prompt · tool definitions · last message_ positions when calling Claude models. Agents that repeatedly send long system prompts or RAG context can cut input-token cost by up to 90%.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Parameter],
+  text(weight: "bold")[Default],
+  text(weight: "bold")[Description],
+  [`type`],
+  [`"ephemeral"`],
+  [The only type Anthropic currently supports],
+  [`ttl`],
+  [`"5m"`],
+  [`"5m"` or `"1h"` (1h is an Anthropic beta)],
+  [`min_messages_to_cache`],
+  [`0`],
+  [Attach `cache_control` only when message count is at least this value],
+  [`unsupported_model_behavior`],
+  [`"warn"`],
+  [When applied to non-Anthropic models: `"warn"` / `"ignore"` / `"raise"`],
+)
+
+#code-block(`````python
+from langchain.agents import create_agent
+from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    tools=[],
+    middleware=[
+        AnthropicPromptCachingMiddleware(
+            ttl="1h",
+            min_messages_to_cache=2,
+            unsupported_model_behavior="warn",
+        ),
+    ],
+)
+`````)
+
+On successive calls, check `usage_metadata.input_token_details` for `cache_creation_input_tokens` (first call) and `cache_read_input_tokens` (subsequent calls) to confirm cache hits.
+
+=== Claude native tool middleware
+
+Claude models are trained on native tool schemas (`bash_20250124`, `text_editor_20250728`, `memory_20250818`) that the Anthropic server interprets directly. Compared to building the same behavior with a generic `@tool` decorator, _tool-schema token usage approaches zero_ and error rates are lower. LangChain ships middleware that wraps these native tools in two variants — state-backed and filesystem-backed.
+
+- `ClaudeBashToolMiddleware` — native bash execution tool. Takes `workspace_root`, `startup_commands`, `execution_policy` (`HostExecutionPolicy` / `DockerExecutionPolicy` / `CodexSandboxExecutionPolicy`), and `redaction_rules`. The Docker policy is the recommended default.
+- `StateClaudeTextEditorMiddleware` / `FilesystemClaudeTextEditorMiddleware` — native text editor supporting `view` / `create` / `str_replace` / `insert` / `delete` / `rename`. The state variant writes into the `text_editor_files` state key; the filesystem variant writes into an actual `root_path` directory.
+- `StateClaudeMemoryMiddleware` / `FilesystemClaudeMemoryMiddleware` — native memory tool that follows the `/memories/*` path contract. The state variant, combined with a checkpointer, is restored on `thread_id` resume; the filesystem variant persists to disk across process restarts.
+- `StateFileSearchMiddleware` — native tool that runs `glob` / `grep` across the virtual files accumulated by the text editor or memory middleware. `state_key="text_editor_files"` is the default; switch to `"memory_files"` to search memory-side files.
+
+#code-block(`````python
+from langchain_anthropic.middleware import (
+    ClaudeBashToolMiddleware,
+    StateClaudeTextEditorMiddleware,
+    StateClaudeMemoryMiddleware,
+    StateFileSearchMiddleware,
+)
+from langchain.agents.middleware import DockerExecutionPolicy
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    middleware=[
+        ClaudeBashToolMiddleware(execution_policy=DockerExecutionPolicy()),
+        StateClaudeTextEditorMiddleware(allowed_path_prefixes=["/src"]),
+        StateClaudeMemoryMiddleware(),
+        StateFileSearchMiddleware(state_key="text_editor_files"),
+    ],
+)
+`````)
+
+#warning-box[LangChain 1.2 `create_agent` rejects duplicate instances of the same middleware class. To search both text-editor files and memory files with `StateFileSearchMiddleware` at once, split them into separate subclasses.]
+
+=== Bedrock Prompt Caching
+
+In enterprise setups that call Claude/Nova through AWS Bedrock, use `langchain_aws.middleware.BedrockPromptCachingMiddleware`. Parameter names and semantics are almost identical to `AnthropicPromptCachingMiddleware`, but the target package and model-specific constraints differ.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Item],
+  text(weight: "bold")[ChatBedrockConverse + Anthropic],
+  text(weight: "bold")[ChatBedrockConverse + Nova],
+  [System-prompt cache],
+  [O],
+  [O],
+  [Tool-definition cache],
+  [O],
+  [X],
+  [Message cache],
+  [O],
+  [O (excluding tool-result messages)],
+  [TTL `"1h"`],
+  [O],
+  [X (5m only)],
+)
+
+The `type` parameter only takes effect on `ChatBedrock` (the legacy invoke-model wrapper); on `ChatBedrockConverse` it is pinned to `"default"`. For a checkpoint to actually hit, the cached block must be roughly _1,024 tokens or more_. For Nova models, pin `ttl="5m"` and set `unsupported_model_behavior="warn"` so an accidental `"1h"` is not silently ignored.
+
+#code-block(`````python
+from langchain_aws.middleware import BedrockPromptCachingMiddleware
+
+agent = create_agent(
+    model="bedrock_converse:anthropic.claude-sonnet-4-20250514-v2:0",
+    tools=[],
+    middleware=[
+        BedrockPromptCachingMiddleware(
+            ttl="1h",
+            min_messages_to_cache=2,
+            unsupported_model_behavior="warn",
+        ),
+    ],
+)
+`````)
+
+=== OpenAI Content Moderation (in depth)
+
+Here is the full parameter set for `OpenAIModerationMiddleware`, which we introduced briefly earlier. `check_tool_results` adds a scan over tool outputs before they enter the model; it is cost-effective only in pipelines that mix in _third-party authored content_ such as web search or email.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Parameter],
+  text(weight: "bold")[Default],
+  text(weight: "bold")[Description],
+  [`model`],
+  [`"omni-moderation-latest"`],
+  [Moderation model. Pinning to `"omni-moderation-2024-09-26"` etc. is supported],
+  [`check_input`],
+  [`True`],
+  [Scan user messages before they reach the model],
+  [`check_output`],
+  [`True`],
+  [Scan model-generated responses before returning],
+  [`check_tool_results`],
+  [`False`],
+  [Scan tool outputs before they enter the model],
+  [`exit_behavior`],
+  [`"end"`],
+  [`"end"` (end the graph) / `"error"` (raise) / `"replace"` (swap message only)],
+  [`violation_message`],
+  [default template],
+  [Supports the `{categories}` · `{category_scores}` · `{original_content}` variables],
+  [`client` / `async_client`],
+  [`None`],
+  [Inject a pre-configured OpenAI client (optional)],
+)
+
+#code-block(`````python
+from langchain_openai.middleware import OpenAIModerationMiddleware
+
+agent = create_agent(
+    model="openai:gpt-4.1",
+    tools=[search_tool],
+    middleware=[
+        OpenAIModerationMiddleware(
+            model="omni-moderation-latest",
+            check_input=True,
+            check_output=True,
+            check_tool_results=False,
+            exit_behavior="replace",
+            violation_message=(
+                "A safety-policy violation was detected "
+                "(categories: {categories}). The original content is not recorded."
+            ),
+        ),
+    ],
+)
+`````)
+
+#tip-box[In production it is common to always keep `check_input` on and run `check_output` under a sampling strategy (for example, 10% random sampling). The Moderation API itself adds call cost and latency.]
+
 == Summary
 
 #table(
@@ -512,7 +698,11 @@ production_agent = create_agent(
   [`before`: forward, `after`: reverse, `wrap`: nested],
   [_Production_],
   [PII → Fallback → Limit → Summarization → ToolSelector → HITL],
+  [_Provider-specific_],
+  [Anthropic (caching · bash · editor · memory · search), Bedrock (caching), OpenAI (Moderation)],
 )
+
+Middleware is a powerful tool for controlling a single agent's behavior. But solving complex domain problems requires multi-agent architectures where several agents collaborate. The next chapter covers multi-agent systems that coordinate subagents with the supervisor pattern.
 
 === Next Steps
 → _#link("./02_multi_agent_subagents.ipynb")[02_multi_agent_subagents.ipynb]_: Multi-Agent: Learn the Subagents pattern.
