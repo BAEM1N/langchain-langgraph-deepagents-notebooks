@@ -136,9 +136,19 @@ runs = client.list_runs(
 SaaS LangSmith deletes traces _400 days after ingestion_. Runs you want to keep for evaluation regression must be _persisted as a Dataset_. We cover datasets in depth in chapter 3; here, just the pattern.
 
 #code-block(`````python
-client.add_runs_to_dataset(
-    dataset_name="agent-golden-traces",
-    runs=[r.id for r in runs if r.feedback.get("user_thumbs") == 1],
+# langsmith 0.7 removed add_runs_to_dataset — use create_examples to convert
+# each run's inputs/outputs into examples directly.
+golden_runs = [r for r in runs if r.feedback.get("user_thumbs") == 1]
+ds = client.create_dataset("agent-golden-traces",
+                           description="Human-approved golden traces")
+client.create_examples(
+    dataset_id=ds.id,
+    examples=[
+        {"inputs": r.inputs,
+         "outputs": r.outputs,
+         "metadata": {"source_run_id": str(r.id)}}
+        for r in golden_runs if r.outputs
+    ],
 )
 `````)
 

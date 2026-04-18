@@ -81,7 +81,7 @@ The container is created on the first bash call and cleaned up at session end. F
 
 == 3.6 Output redaction (`redaction_rules`)
 
-Shell output can leak sensitive values — API keys, tokens, emails. Pass a list of `RedactionRule(pattern=..., replacement=...)` to mask tool responses _before they enter the agent context_.
+Shell output can leak sensitive values — API keys, tokens, emails. Pass a list of `RedactionRule` objects to mask tool responses _before they enter the agent context_. LangChain 1.2 unified the `RedactionRule` signature with `PIIMiddleware` — use `(pii_type, strategy, detector)` instead of the removed `pattern=` / `replacement=` kwargs.
 
 #code-block(`````python
 from langchain.agents.middleware import RedactionRule
@@ -93,12 +93,14 @@ agent = create_agent(
             execution_policy=DockerExecutionPolicy(),
             redaction_rules=[
                 RedactionRule(
-                    pattern=r"sk-[a-zA-Z0-9]{32,}",
-                    replacement="[REDACTED_OPENAI_KEY]",
+                    pii_type="openai_api_key",
+                    strategy="redact",
+                    detector=r"sk-[a-zA-Z0-9]{32,}",
                 ),
                 RedactionRule(
-                    pattern=r"ghp_[a-zA-Z0-9]{36}",
-                    replacement="[REDACTED_GITHUB_TOKEN]",
+                    pii_type="github_token",
+                    strategy="redact",
+                    detector=r"ghp_[a-zA-Z0-9]{36}",
                 ),
             ],
         ),

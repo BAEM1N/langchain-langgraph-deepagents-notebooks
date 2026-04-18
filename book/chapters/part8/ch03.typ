@@ -19,7 +19,7 @@
 - Claude에게 실제 쉘 명령을 실행시켜 코드 실행, 파일 조사, 빌드를 맡길 때
 - Deep Agents처럼 장시간 작업 공간에서 세션 상태(cwd, 환경변수)를 유지해야 할 때
 - 격리된 Docker 컨테이너에서 안전하게 임의 코드를 실행하고 싶을 때
-- 쉘 출력에 API 키·자격증명이 섞일 가능성이 있어 출력 리다ek션이 필요할 때
+- 쉘 출력에 API 키·자격증명이 섞일 가능성이 있어 출력 리다이렉션이 필요할 때
 
 == 3.2 환경 설정
 
@@ -79,9 +79,9 @@ agent = create_agent(
 
 `CodexSandboxExecutionPolicy`는 Anthropic이 제공하는 샌드박스 러너에서 실행합니다. 로컬 Docker 없이 격리를 얻고 싶을 때의 대안입니다. 네트워크 화이트리스트와 리소스 한도가 기본값으로 강하게 설정됩니다.
 
-== 3.6 출력 리다ek션 (`redaction_rules`)
+== 3.6 출력 리다이렉션 (`redaction_rules`)
 
-쉘 출력에 API 키·토큰·이메일 같은 민감정보가 흘러나올 수 있습니다. `RedactionRule(pattern=..., replacement=...)`을 리스트로 넘겨 도구 응답을 _에이전트 컨텍스트에 담기 전에_ 마스킹합니다.
+쉘 출력에 API 키·토큰·이메일 같은 민감정보가 흘러나올 수 있습니다. `RedactionRule`을 리스트로 넘겨 도구 응답을 _에이전트 컨텍스트에 담기 전에_ 마스킹합니다. LangChain 1.2부터 `RedactionRule`은 `PIIMiddleware`와 동일한 `(pii_type, strategy, detector)` 시그니처를 사용합니다 — 과거 `pattern=` / `replacement=` 인자는 제거되었습니다.
 
 #code-block(`````python
 from langchain.agents.middleware import RedactionRule
@@ -93,12 +93,14 @@ agent = create_agent(
             execution_policy=DockerExecutionPolicy(),
             redaction_rules=[
                 RedactionRule(
-                    pattern=r"sk-[a-zA-Z0-9]{32,}",
-                    replacement="[REDACTED_OPENAI_KEY]",
+                    pii_type="openai_api_key",
+                    strategy="redact",
+                    detector=r"sk-[a-zA-Z0-9]{32,}",
                 ),
                 RedactionRule(
-                    pattern=r"ghp_[a-zA-Z0-9]{36}",
-                    replacement="[REDACTED_GITHUB_TOKEN]",
+                    pii_type="github_token",
+                    strategy="redact",
+                    detector=r"ghp_[a-zA-Z0-9]{36}",
                 ),
             ],
         ),

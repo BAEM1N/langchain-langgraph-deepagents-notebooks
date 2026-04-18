@@ -9,7 +9,7 @@
 #learning-header()
 #learning-objectives(
   [`client.create_dataset` + `client.create_examples`로 데이터셋과 예시를 만든다],
-  [프로덕션 trace를 `client.add_runs_to_dataset`로 데이터셋에 이관한다],
+  [프로덕션 trace를 `client.create_examples(dataset_id=..., examples=[...])`로 데이터셋에 이관한다],
   [Code evaluator를 `(inputs, outputs, reference_outputs) → dict` 형식으로 작성한다],
   [LLM-as-judge evaluator를 구조적 score로 돌린다],
   [Pairwise / summary evaluator로 두 실험 비교와 데이터셋 수준 지표를 낸다],
@@ -49,13 +49,18 @@ client.create_examples(
 
 == 3.2 프로덕션 trace를 데이터셋으로 이관
 
-수동 작성은 초기 시드에만 쓰고, 실제 규모는 _프로덕션 trace_에서 옵니다. `client.add_runs_to_dataset`로 run의 `inputs`/`outputs`가 그대로 example로 복사됩니다. 실제 운영에서는 Annotation Queue로 사람이 리뷰한 run만 올리는 게 일반적입니다.
+수동 작성은 초기 시드에만 쓰고, 실제 규모는 _프로덕션 trace_에서 옵니다. `langsmith 0.7`부터 `add_runs_to_dataset`이 제거되었으므로 `client.create_examples(...)`로 run의 `inputs`/`outputs`를 example로 변환해 넣습니다. 실제 운영에서는 Annotation Queue로 사람이 리뷰한 run만 올리는 게 일반적입니다.
 
 #code-block(`````python
 good_runs = [r for r in client.list_runs(project_name="prod") if is_good(r)]
-client.add_runs_to_dataset(
-    dataset_name="weather-bot-qa",
-    runs=[r.id for r in good_runs],
+client.create_examples(
+    dataset_id=client.read_dataset(dataset_name="weather-bot-qa").id,
+    examples=[
+        {"inputs": r.inputs,
+         "outputs": r.outputs,
+         "metadata": {"source_run_id": str(r.id)}}
+        for r in good_runs if r.outputs
+    ],
 )
 `````)
 
