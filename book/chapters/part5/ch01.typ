@@ -553,6 +553,192 @@ production_agent = create_agent(
 )
 `````)
 
+== 1.12 공급자 특화 미들웨어
+
+빌트인 7종이 _프로바이더 무관_ 공통 패턴을 다룬다면, 공급자 특화 미들웨어는 각 LLM 프로바이더가 제공하는 _고유 기능_을 에이전트에 주입합니다. Anthropic의 프롬프트 캐시, Bedrock의 TTL 캐시, OpenAI의 Moderation API처럼 공급자 서버 측에서만 활성화할 수 있는 기능들은 별도 미들웨어로 노출됩니다.
+
+=== Anthropic Prompt Caching
+
+`langchain_anthropic.middleware.AnthropicPromptCachingMiddleware`는 Claude 모델 호출 시 _시스템 프롬프트 · 도구 정의 · 마지막 메시지_ 위치에 `cache_control` 마커를 자동 부착합니다. 긴 system prompt나 RAG 컨텍스트를 반복 전송하는 에이전트의 입력 토큰 비용을 최대 90% 절감합니다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[파라미터],
+  text(weight: "bold")[기본값],
+  text(weight: "bold")[설명],
+  [`type`],
+  [`"ephemeral"`],
+  [현재 Anthropic이 지원하는 유일한 타입],
+  [`ttl`],
+  [`"5m"`],
+  [`"5m"` 또는 `"1h"` (1h는 Anthropic beta)],
+  [`min_messages_to_cache`],
+  [`0`],
+  [메시지 수가 이 값 이상일 때만 cache_control 부착],
+  [`unsupported_model_behavior`],
+  [`"warn"`],
+  [비 Anthropic 모델에 적용 시: `"warn"` / `"ignore"` / `"raise"`],
+)
+
+#code-block(`````python
+from langchain.agents import create_agent
+from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    tools=[],
+    middleware=[
+        AnthropicPromptCachingMiddleware(
+            ttl="1h",
+            min_messages_to_cache=2,
+            unsupported_model_behavior="warn",
+        ),
+    ],
+)
+`````)
+
+연속 호출 시 `usage_metadata.input_token_details`에서 `cache_creation_input_tokens`(1회차)와 `cache_read_input_tokens`(2회차 이후)로 캐시 적중 여부를 확인할 수 있습니다.
+
+=== Claude 네이티브 도구 미들웨어
+
+Claude 모델은 Anthropic 서버가 직접 해석하는 네이티브 도구 스키마(`bash_20250124`, `text_editor_20250728`, `memory_20250818`)를 학습해 두었습니다. 범용 `@tool` 데코레이터로 동일 기능을 구현하는 것보다 _tool schema 토큰이 거의 0에 수렴_하고 오류율이 낮습니다. LangChain은 네이티브 도구를 상태(State) 기반과 디스크(Filesystem) 기반 두 변형으로 래핑한 미들웨어를 제공합니다.
+
+- `ClaudeBashToolMiddleware` — 네이티브 bash 실행 도구. `workspace_root`, `startup_commands`, `execution_policy`(`HostExecutionPolicy` / `DockerExecutionPolicy` / `CodexSandboxExecutionPolicy`), `redaction_rules`를 받습니다. Docker 정책이 기본 권장치입니다.
+- `StateClaudeTextEditorMiddleware` / `FilesystemClaudeTextEditorMiddleware` — 네이티브 text editor로 `view` / `create` / `str_replace` / `insert` / `delete` / `rename`을 지원합니다. State 변형은 `text_editor_files` 상태 키에, Filesystem 변형은 실제 `root_path` 디렉터리에 파일을 씁니다.
+- `StateClaudeMemoryMiddleware` / `FilesystemClaudeMemoryMiddleware` — `/memories/*` 경로 계약을 따르는 네이티브 메모리 도구. State 변형은 체크포인터와 결합해 thread_id 재개 시 복원되고, Filesystem 변형은 디스크에 남기므로 프로세스 재시작에도 보존됩니다.
+- `StateFileSearchMiddleware` — text editor/메모리가 쌓은 가상 파일을 `glob` / `grep`으로 검색하는 네이티브 도구. `state_key="text_editor_files"`가 기본이며 `"memory_files"`로 바꾸면 메모리 쪽을 검색합니다.
+
+#code-block(`````python
+from langchain_anthropic.middleware import (
+    ClaudeBashToolMiddleware,
+    StateClaudeTextEditorMiddleware,
+    StateClaudeMemoryMiddleware,
+    StateFileSearchMiddleware,
+)
+from langchain.agents.middleware import DockerExecutionPolicy
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    middleware=[
+        ClaudeBashToolMiddleware(execution_policy=DockerExecutionPolicy()),
+        StateClaudeTextEditorMiddleware(allowed_path_prefixes=["/src"]),
+        StateClaudeMemoryMiddleware(),
+        StateFileSearchMiddleware(state_key="text_editor_files"),
+    ],
+)
+`````)
+
+#warning-box[LangChain 1.2의 `create_agent`는 같은 미들웨어 클래스의 중복 인스턴스를 거부합니다. text editor 파일과 메모리 파일 두 저장소를 동시에 `StateFileSearchMiddleware`로 검색하려면 서브클래싱으로 분리해야 합니다.]
+
+=== Bedrock Prompt Caching
+
+AWS Bedrock 경유로 Claude/Nova를 호출하는 기업 환경에서는 `langchain_aws.middleware.BedrockPromptCachingMiddleware`를 사용합니다. `AnthropicPromptCachingMiddleware`와 파라미터 이름과 의미가 거의 같지만 대상 패키지와 모델별 제약이 다릅니다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[항목],
+  text(weight: "bold")[ChatBedrockConverse + Anthropic],
+  text(weight: "bold")[ChatBedrockConverse + Nova],
+  [시스템 프롬프트 캐시],
+  [O],
+  [O],
+  [도구 정의 캐시],
+  [O],
+  [X],
+  [메시지 캐시],
+  [O],
+  [O (tool result 메시지 제외)],
+  [TTL `"1h"`],
+  [O],
+  [X (5m 전용)],
+)
+
+`type` 파라미터는 `ChatBedrock`(이전 세대 invoke-model 래퍼)에서만 실제로 반영되고, `ChatBedrockConverse`에서는 `"default"`로 고정됩니다. 체크포인트가 실제로 작동하려면 캐시 대상 블록이 약 _1,024 토큰 이상_이어야 합니다. Nova 모델에서는 `ttl="5m"`로 고정하고 `unsupported_model_behavior="warn"`을 명시해 실수로 `"1h"`를 지정했을 때 조용히 무시되지 않도록 하세요.
+
+#code-block(`````python
+from langchain_aws.middleware import BedrockPromptCachingMiddleware
+
+agent = create_agent(
+    model="bedrock_converse:anthropic.claude-sonnet-4-20250514-v2:0",
+    tools=[],
+    middleware=[
+        BedrockPromptCachingMiddleware(
+            ttl="1h",
+            min_messages_to_cache=2,
+            unsupported_model_behavior="warn",
+        ),
+    ],
+)
+`````)
+
+=== OpenAI Content Moderation (보강)
+
+앞서 소개한 `OpenAIModerationMiddleware`의 전체 파라미터를 정리합니다. `check_tool_results`는 도구 결과를 모델에 넣기 전에 추가로 스캔하는 옵션으로, 웹 검색이나 이메일처럼 _제3자가 작성한 콘텐츠_가 섞이는 파이프라인에서만 켜는 것이 비용 대비 효율적입니다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[파라미터],
+  text(weight: "bold")[기본값],
+  text(weight: "bold")[설명],
+  [`model`],
+  [`"omni-moderation-latest"`],
+  [Moderation 모델. `"omni-moderation-2024-09-26"` 등 핀 가능],
+  [`check_input`],
+  [`True`],
+  [사용자 메시지를 모델에 넘기기 전 검사],
+  [`check_output`],
+  [`True`],
+  [모델 생성 응답을 반환하기 전 검사],
+  [`check_tool_results`],
+  [`False`],
+  [도구 실행 결과를 모델 입력 전에 검사],
+  [`exit_behavior`],
+  [`"end"`],
+  [`"end"`(그래프 종료) / `"error"`(예외) / `"replace"`(메시지만 교체)],
+  [`violation_message`],
+  [기본 템플릿],
+  [`{categories}` · `{category_scores}` · `{original_content}` 변수 지원],
+  [`client` / `async_client`],
+  [`None`],
+  [사전 구성된 OpenAI 클라이언트 주입 (선택)],
+)
+
+#code-block(`````python
+from langchain_openai.middleware import OpenAIModerationMiddleware
+
+agent = create_agent(
+    model="openai:gpt-4.1",
+    tools=[search_tool],
+    middleware=[
+        OpenAIModerationMiddleware(
+            model="omni-moderation-latest",
+            check_input=True,
+            check_output=True,
+            check_tool_results=False,
+            exit_behavior="replace",
+            violation_message=(
+                "안전 정책 위반이 감지되었습니다 "
+                "(카테고리: {categories}). 원 내용은 기록되지 않습니다."
+            ),
+        ),
+    ],
+)
+`````)
+
+#tip-box[프로덕션에서는 `check_input`만 항상 켜고 `check_output`은 샘플링 전략(예: 10% 랜덤 샘플)으로 운영하는 경우가 많습니다. Moderation API도 호출 비용과 레이턴시가 추가되기 때문입니다.]
+
 #chapter-summary-header()
 
 #table(
@@ -573,6 +759,8 @@ production_agent = create_agent(
   [`before`: 순방향, `after`: 역방향, `wrap`: 중첩],
   [_프로덕션_],
   [PII → Fallback → Limit → Summarization → ToolSelector → HITL],
+  [_공급자 특화_],
+  [Anthropic(캐시·bash·editor·memory·search), Bedrock(캐시), OpenAI(Moderation)],
 )
 
 미들웨어는 단일 에이전트의 동작을 제어하는 강력한 도구입니다. 그러나 복잡한 도메인 문제를 해결하려면 여러 에이전트가 협력하는 멀티에이전트 아키텍처가 필요합니다. 다음 장에서는 감독자 패턴으로 서브에이전트를 조율하는 멀티에이전트 시스템을 다룹니다.

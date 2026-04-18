@@ -284,6 +284,145 @@ subagent = {
 #tip-box[서브에이전트에 스킬을 부여할 때는 _최소 권한 원칙_을 따르라. 리뷰 전문 서브에이전트에 배포 관련 스킬까지 주면 불필요한 토큰 소비와 혼란이 발생한다. 각 서브에이전트의 역할에 딱 맞는 스킬만 할당하라.]
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
+== 6.10 장기 기억 유형 분류 (0.5 기준)
+
+Deep Agents 0.5는 저장되는 정보를 세 범주로 구분해 관리합니다. 각 유형은 저장 메커니즘·업데이트 주기·적합한 백엔드가 다릅니다. 세 유형을 하나의 백엔드로 몰아넣지 말고, _성격에 맞는 메커니즘_에 분산시키는 것이 기본 원칙입니다.
+
+#table(
+  columns: 4,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[유형],
+  text(weight: "bold")[의미],
+  text(weight: "bold")[저장 예],
+  text(weight: "bold")[메커니즘],
+  [*Episodic*],
+  [과거 경험 — 대화 세션, 문제 해결 궤적],
+  [지난 대화의 스레드 히스토리],
+  [Checkpointers (thread 단위)],
+  [*Procedural*],
+  [재사용 가능한 지시·스킬·워크플로우],
+  [`SKILL.md`, 절차 문서],
+  [Skills (on-demand 로드)],
+  [*Semantic*],
+  [사실·선호·정책],
+  [`AGENTS.md`, `/memories/*.txt`],
+  [StoreBackend (always-on 파일)],
+)
+
+예: 장시간 누적 선호는 `/memories/`(semantic) + 일화적 사례 검색은 checkpointer(episodic) + 반복 절차는 skill(procedural).
+
+=== 스코프 패턴: agent-scoped vs user-scoped
+
+`StoreBackend`의 `namespace` 함수가 반환하는 튜플이 곧 메모리의 스코프입니다. 가장 흔한 두 패턴은 다음과 같습니다.
+
+*Agent-scoped — 공통 정체성 축적.* 네임스페이스가 `(assistant_id,)`. 같은 assistant를 쓰는 _모든 사용자 대화_가 같은 메모리를 공유합니다. 조직 공통 컨벤션·도메인 지식에 적합하며, 사용자 간 정보가 섞이므로 _민감 정보 저장 금지_.
+
+#code-block(`````python
+from deepagents.backends import StoreBackend
+
+agent_scoped = StoreBackend(
+    namespace=lambda rt: (rt.server_info.assistant_id,),
+)
+`````)
+
+*User-scoped — 사용자별 격리.* 네임스페이스가 `(user_id,)` 또는 `(assistant_id, user_id,)`. 각 사용자의 메모리가 완전히 격리되어 A의 선호가 B의 대화에 노출되지 않습니다. 프로덕션 개인화 어시스턴트의 기본값입니다.
+
+#code-block(`````python
+user_scoped = StoreBackend(
+    namespace=lambda rt: (rt.server_info.user.identity,),
+)
+`````)
+
+=== Episodic memory via checkpointers
+
+과거 대화를 단순히 "보관"하는 것이 아니라 _검색 가능한 기억_으로 만들려면 체크포인터가 저장한 스레드를 도구로 래핑합니다.
+
+#code-block(`````python
+from langchain.tools import tool, ToolRuntime
+
+@tool
+async def search_past_conversations(query: str, runtime: ToolRuntime) -> str:
+    """지난 대화에서 관련 맥락을 찾는다."""
+    user_id = runtime.server_info.user.identity
+    threads = await client.threads.search(
+        metadata={"user_id": user_id},
+        limit=5,
+    )
+    # threads를 필요한 포맷으로 요약해 반환
+    ...
+`````)
+
+이 패턴으로 에이전트가 "전에 이 문제를 어떻게 풀었는가"를 스스로 참조합니다.
+
+=== Read-only policy (조직 차원)
+
+조직 공유 메모리는 인젝션 벡터입니다. 다음과 같이 _쓰기 차단_을 강제합니다.
+
+#code-block(`````python
+# policies는 조직 스코프, read-only
+routes = {
+    "/policies/": StoreBackend(
+        namespace=lambda rt: (rt.context.org_id,),
+    ),
+}
+`````)
+
+Part IV ch15 권한 관리 패턴 4와 결합해 `/policies/**`에 `write deny`를 겁니다. 정책은 애플리케이션 코드에서만 갱신합니다.
+
+=== Background consolidation agent
+
+메모리 갱신을 _대화 중(hot path)_ 에 하면 지연이 늘고, 요약 품질도 모델이 서두른 결정을 따르게 됩니다. 대안은 별도 consolidation agent를 두고 _cron으로 주기 실행_하는 것입니다.
+
+#code-block(`````json
+// langgraph.json
+{
+  "graphs": {
+    "agent": "./agent.py:agent",
+    "consolidation_agent": "./consolidation_agent.py:agent"
+  }
+}
+`````)
+
+cron 스케줄 등록:
+
+#code-block(`````python
+cron_job = await client.crons.create(
+    assistant_id="consolidation_agent",
+    schedule="0 */6 * * *",   # 6시간마다
+    input={"messages": [{"role": "user", "content": "Consolidate recent memories."}]},
+)
+`````)
+
+#warning-box[cron 주기(`0 */6 * * *`)와 lookback window(`timedelta(hours=6)`)를 _일치_시켜야 누락·중복이 없습니다.]
+
+=== 업데이트 타이밍 비교
+
+#table(
+  columns: 4,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[타이밍],
+  text(weight: "bold")[방식],
+  text(weight: "bold")[지연],
+  text(weight: "bold")[반영 시점],
+  [Hot path],
+  [대화 중 에이전트가 직접 `edit_file`],
+  [있음],
+  [즉시],
+  [Background],
+  [Consolidation agent가 세션 사이에 처리],
+  [사용자 체감 없음],
+  [다음 대화부터],
+)
+
+민감하거나 즉시 반영이 필수인 선호는 hot path, 장기 패턴 누적은 background로 분리하는 것이 기본 구성입니다.
+
+#line(length: 100%, stroke: 0.5pt + luma(200))
 == 핵심 정리
 
 #table(
@@ -306,6 +445,12 @@ subagent = {
   [나중 소스가 우선 (last wins)],
   [Memory vs Skills],
   [Memory = 항상 로드 / Skills = 필요 시 로드],
+  [기억 3유형],
+  [Episodic(checkpointer) / Procedural(skills) / Semantic(store)],
+  [스코프 패턴],
+  [agent-scoped (공통 축적) / user-scoped (격리, 기본값) / org-scoped (read-only)],
+  [Consolidation],
+  [Hot path는 즉시·고지연 / Background cron은 비간섭·다음 대화부터 반영],
 )
 
 장기 메모리와 스킬 시스템을 통해 에이전트는 대화를 넘어서 지식을 축적하고, 필요할 때 전문 능력을 발휘할 수 있게 되었습니다. 다음 장에서는 Human-in-the-Loop, 스트리밍 심화, 샌드박스, ACP, CLI 등 프로덕션 수준의 고급 기능을 다룹니다.

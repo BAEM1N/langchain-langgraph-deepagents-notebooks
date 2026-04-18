@@ -62,6 +62,11 @@
 #include "chapters/part4/ch08.typ"
 #include "chapters/part4/ch09.typ"
 #include "chapters/part4/ch10.typ"
+#include "chapters/part4/ch11.typ"
+#include "chapters/part4/ch12.typ"
+#include "chapters/part4/ch13.typ"
+#include "chapters/part4/ch14.typ"
+#include "chapters/part4/ch15.typ"
 
 // ─── Part V: 고급 패턴 ───────────────────────────────────────
 #include "chapters/part5/_part.typ"
@@ -83,6 +88,25 @@
 #include "chapters/part6/ch03.typ"
 #include "chapters/part6/ch04.typ"
 #include "chapters/part6/ch05.typ"
+
+// ─── Part VII: LangSmith ──────────────────────────────────────
+#include "chapters/part7/_part.typ"
+#include "chapters/part7/ch01.typ"
+#include "chapters/part7/ch02.typ"
+#include "chapters/part7/ch03.typ"
+#include "chapters/part7/ch04.typ"
+#include "chapters/part7/ch05.typ"
+
+// ─── Part VIII: Integrations ──────────────────────────────────
+#include "chapters/part8/_part.typ"
+#include "chapters/part8/ch01.typ"
+#include "chapters/part8/ch02.typ"
+#include "chapters/part8/ch03.typ"
+#include "chapters/part8/ch04.typ"
+#include "chapters/part8/ch05.typ"
+#include "chapters/part8/ch06.typ"
+#include "chapters/part8/ch07.typ"
+#include "chapters/part8/ch08.typ"
 
 // ─── Appendix ────────────────────────────────────────────────
 #include "chapters/appendix_glossary.typ"
