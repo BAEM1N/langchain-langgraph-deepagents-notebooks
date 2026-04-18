@@ -18,6 +18,9 @@ langchain-langgraph-deepagents-notebooks/
 ├── 04_deepagents/               # 중급 — Deep Agents SDK (10개)
 ├── 05_advanced/                 # 고급 과정 (10개)
 ├── 06_examples/                 # 실전 응용 예제 (5개)
+├── 07_integration/              # 통합 — Provider Middleware & 생태계 (12 카테고리)
+├── 08_langsmith/                # LangSmith — 관측성/평가/프롬프트 허브 (5개)
+├── assets/images/langsmith/     # LangSmith UI 스크린샷 (마스킹 처리된 29장)
 └── docs/                        # 참고 문서 및 가이드
 ```
 
@@ -157,6 +160,42 @@ uv run jupyter lab
 | 04 | `04_ml_agent.ipynb` | 머신러닝 에이전트 | FilesystemBackend, run_ml_code, 자유 EDA→모델비교, 사용자 CSV |
 | 05 | `05_deep_research_agent.ipynb` | 딥 리서치 에이전트 | 병렬 서브에이전트 3개, think_tool, 5단계 워크플로 |
 
+### 7. 통합 — Provider Middleware & 생태계 (`07_integration/`, 12 카테고리)
+
+> 대상: LangChain 생태계 통합(벤더별 모델, 벡터 스토어, 미들웨어 등)을 단계적으로 채워나갈 커리큘럼 트랙.
+
+| 카테고리 | 내용 | 상태 |
+|---------|------|------|
+| `01_chat_models/` ~ `10_sandboxes/` | Chat 모델 · 임베딩 · 벡터스토어 · 문서 로더 · 리트리버 · 텍스트 스플리터 · 도구 · 체크포인터 · 스토어 · 샌드박스 | README 체크리스트 (향후 확장) |
+| **`11_provider_middleware/`** | **공급자 특화 미들웨어 7 노트북** (실행 검증 완료) | ✅ 완료 |
+| `12_observability/` | LangSmith · Langfuse · OpenTelemetry | README (향후 확장) |
+
+**11_provider_middleware 세부 (실습 노트북 7종)**:
+
+| # | 파일 | 주제 |
+|---|------|------|
+| 01 | `01_anthropic_prompt_caching.ipynb` | `AnthropicPromptCachingMiddleware` (cache_read_input_tokens 검증) |
+| 02 | `02_claude_bash_tool.ipynb` | `ClaudeBashToolMiddleware` (Host/Docker/Codex 정책, RedactionRule) |
+| 03 | `03_claude_text_editor.ipynb` | State vs Filesystem 변형, path restriction |
+| 04 | `04_claude_memory.ipynb` | `thread_id` 기반 영속성, `/memories` prefix |
+| 05 | `05_anthropic_file_search.ipynb` | glob + grep 조합 검색 |
+| 06 | `06_bedrock_prompt_caching.ipynb` | `BedrockPromptCachingMiddleware` (ChatBedrock/Converse, Nova 5m) |
+| 07 | `07_openai_moderation.ipynb` | `OpenAIModerationMiddleware` (end/error/replace 3 모드) |
+
+### 8. LangSmith — 관측성 · 평가 · 프롬프트 허브 (`08_langsmith/`, 5개)
+
+> 대상: LangSmith로 트레이싱 / 데이터셋 / LLM-as-judge 평가 / 프롬프트 버저닝 / 프로덕션 모니터링까지 다루는 분
+
+모든 노트북은 실제 LangSmith UI에서 검증됐고, 해당 화면 스크린샷 29장이 마스킹 처리된 상태로 포함됩니다 (`assets/images/langsmith/`).
+
+| # | 파일 | 주제 | 핵심 내용 |
+|---|------|------|-----------|
+| 01 | `01_quickstart.ipynb` | 퀵스타트 | API 키 · 첫 트레이스 · `run_name`/`tags`/`metadata` · `@traceable` · `Client.list_runs` |
+| 02 | `02_tracing_agents.ipynb` | 에이전트 트레이싱 | subgraph 네임스페이스 · sync/async subagent · thread view · feedback · 필터 |
+| 03 | `03_datasets_and_evaluation.ipynb` | 데이터셋 · 평가 | `create_examples` · code/LLM-judge/pairwise/summary evaluator · online |
+| 04 | `04_prompt_hub.ipynb` | 프롬프트 허브 | `push_prompt`/`pull_prompt` · commit SHA vs tag · CI 핀 |
+| 05 | `05_production_monitoring.ipynb` | 프로덕션 모니터링 | 대시보드 · online autoeval · feedback API · sampling · PII |
+
 ---
 
 ## 기술 스택
@@ -179,7 +218,23 @@ uv run jupyter lab
 
 > **[`book/agent-handbook.pdf`](book/agent-handbook.pdf)**
 
-6개 Part, 59개 챕터로 구성되어 있으며, 노트북의 코드 + 심화 설명 + 다이어그램을 포함합니다.
+**8개 Part, 82 챕터**로 구성됩니다 (v1 릴리스 기준):
+
+- **Part I** 에이전트 입문 (8)
+- **Part II** LangChain v1 (13)
+- **Part III** LangGraph v1 (13)
+- **Part IV** Deep Agents (15 — ch11~ch15 에 0.5.0 async subagents · production · context engineering · streaming · permissions 추가)
+- **Part V** 고급 패턴 (10)
+- **Part VI** 실전 응용 (5)
+- **Part VII** LangSmith (5, 신규)
+- **Part VIII** Integrations (9, 신규 — Provider Middleware 7종 포함)
+
+로컬 빌드:
+
+```bash
+typst compile --root . book/main.typ book/out/main.pdf       # 한국어
+typst compile --root . en/book/main.typ en/book/out/main.pdf # English
+```
 
 ---
 

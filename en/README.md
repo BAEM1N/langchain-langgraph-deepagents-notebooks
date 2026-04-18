@@ -18,6 +18,9 @@ langchain-langgraph-deepagents-notebooks/
 ├── 04_deepagents/               # Korean intermediate — Deep Agents SDK (10 notebooks)
 ├── 05_advanced/                 # Korean advanced track (10 notebooks)
 ├── 06_examples/                 # Korean applied examples (5 notebooks)
+├── 07_integration/              # Integrations — Provider Middleware & ecosystem (12 categories)
+├── 08_langsmith/                # LangSmith — observability, evaluation, prompt hub (5 notebooks)
+├── assets/images/langsmith/     # Masked LangSmith UI screenshots (29 captures)
 ├── en/                          # English notebook tree + English handbook assets
 └── docs/                        # Reference documents and guides
 ```
@@ -158,6 +161,40 @@ For the full list, see [`.env.example`](../.env.example).
 | 04 | `04_ml_agent.ipynb` | ML Agent | FilesystemBackend, `run_ml_code`, EDA → model comparison |
 | 05 | `05_deep_research_agent.ipynb` | Deep Research Agent | parallel subagents, `think_tool`, five-step workflow |
 
+### 7. Integration — Provider Middleware & Ecosystem (`07_integration/`, 12 categories)
+
+> Target: learners who want to wire the broader LangChain ecosystem (vendor models, vector stores, middleware) to their agents.
+
+| Category | Contents | Status |
+|----------|----------|--------|
+| `01_chat_models/` ~ `10_sandboxes/` | Chat models · embeddings · vector stores · loaders · retrievers · splitters · tools · checkpointers · stores · sandboxes | README checklists (future expansion) |
+| **`11_provider_middleware/`** | **Provider-specific middleware — 7 notebooks (end-to-end verified)** | ✅ Complete |
+| `12_observability/` | LangSmith · Langfuse · OpenTelemetry | README (future expansion) |
+
+`11_provider_middleware/` shipping notebooks:
+
+| # | File | Focus |
+|---|------|-------|
+| 01 | `01_anthropic_prompt_caching.ipynb` | `AnthropicPromptCachingMiddleware` (verified via `cache_read_input_tokens`) |
+| 02 | `02_claude_bash_tool.ipynb` | `ClaudeBashToolMiddleware` with Host/Docker/Codex policies and `RedactionRule` |
+| 03 | `03_claude_text_editor.ipynb` | State vs Filesystem variants, path restriction |
+| 04 | `04_claude_memory.ipynb` | `thread_id`-scoped persistence, `/memories` prefix contract |
+| 05 | `05_anthropic_file_search.ipynb` | glob + grep over in-state files |
+| 06 | `06_bedrock_prompt_caching.ipynb` | `BedrockPromptCachingMiddleware` (ChatBedrock vs Converse, Nova 5m cap) |
+| 07 | `07_openai_moderation.ipynb` | `OpenAIModerationMiddleware` (end/error/replace `exit_behavior`) |
+
+### 8. LangSmith — Observability, Evaluation, Prompt Hub (`08_langsmith/`, 5 notebooks)
+
+> Target: learners going from first trace through datasets, LLM-as-judge evaluation, prompt versioning, and production monitoring. Every notebook was verified against the live LangSmith UI, and 29 masked screenshots ship alongside under `assets/images/langsmith/`.
+
+| # | File | Topic | Core Content |
+|---|------|-------|-----------|
+| 01 | `01_quickstart.ipynb` | Quickstart | API key, first trace, `run_name`/`tags`/`metadata`, `@traceable`, `Client.list_runs` |
+| 02 | `02_tracing_agents.ipynb` | Agent tracing | subgraph namespaces, sync/async subagent, thread view, feedback, filter composition |
+| 03 | `03_datasets_and_evaluation.ipynb` | Datasets & evaluation | `create_examples`, code/LLM-judge/pairwise/summary evaluators, online evaluator |
+| 04 | `04_prompt_hub.ipynb` | Prompt hub | `push_prompt`/`pull_prompt`, commit SHA vs tag, CI pinning |
+| 05 | `05_production_monitoring.ipynb` | Production monitoring | dashboard, online autoeval, feedback API, sampling, PII defense |
+
 ---
 
 ## Execution Status
@@ -173,6 +210,24 @@ For the full list, see [`.env.example`](../.env.example).
 The English handbook assets and Typst sources are organized under [`book/`](book/).
 
 > **[`book/agent-handbook-en.pdf`](book/agent-handbook-en.pdf)**
+
+**8 Parts, 82 chapters** as of v1:
+
+- **Part I** Agent Foundations (8)
+- **Part II** LangChain v1 (13)
+- **Part III** LangGraph v1 (13)
+- **Part IV** Deep Agents (15 — chapters 11–15 add 0.5.0 async subagents · production · context engineering · streaming · permissions)
+- **Part V** Advanced Patterns (10)
+- **Part VI** Applied Examples (5)
+- **Part VII** LangSmith (5, new in v1)
+- **Part VIII** Integrations (9, new in v1 — includes 7 provider-middleware chapters)
+
+Build locally:
+
+```bash
+typst compile --root . en/book/main.typ en/book/out/main.pdf  # English
+typst compile --root . book/main.typ book/out/main.pdf         # Korean
+```
 
 ---
 
