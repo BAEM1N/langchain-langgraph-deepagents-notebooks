@@ -27,3 +27,18 @@ lecture/
 
 # Local-only working notes (version snapshots, verification recipes)
 .local/
+
+# Raw (unmasked) LangSmith UI captures — keep out of git
+assets/images/langsmith/_raw/
+
+# Agent/tooling session state (Claude Code, Playwright MCP)
+.agents/
+.playwright-mcp/
+
+# Typst compile artifacts
+book/out/
+en/book/out/
+
+# macOS metadata
+.DS_Store
+**/.DS_Store
