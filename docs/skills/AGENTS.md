@@ -14,6 +14,7 @@
 | 스킬 | 설명 |
 |------|------|
 | `langchain-fundamentals` | `create_agent`, `@tool`, 미들웨어 |
+| `langchain-v1-modern` | LangChain v1 가드레일 (`create_agent` 우선, `create_react_agent`/LCEL 회피) |
 | `langchain-rag` | RAG 파이프라인 |
 | `langchain-middleware` | HITL, 커스텀 미들웨어 |
 
@@ -23,6 +24,7 @@
 | `langgraph-fundamentals` | StateGraph, 노드, 엣지 |
 | `langgraph-persistence` | 체크포인터, 메모리 |
 | `langgraph-human-in-the-loop` | interrupt, Command |
+| `langgraph-docs-official` | LangChain 공식 example skill 기반 LangGraph docs fetcher |
 
 ### Deep Agents Skills
 | 스킬 | 설명 |

@@ -97,7 +97,7 @@ lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
 
 - `AGENTS.md` — 마스터 라우팅 가이드
 - `framework-selection.md` — 프레임워크 선택 기준
-- `langchain-*.md` — LangChain 스킬 3개
+- `langchain-*.md`, `langchain-v1-modern.md` — LangChain 스킬과 v1 작성 가드레일
 - `langgraph-*.md` — LangGraph 스킬 3개
 - `deep-agents-*.md` — Deep Agents 스킬 3개
 
