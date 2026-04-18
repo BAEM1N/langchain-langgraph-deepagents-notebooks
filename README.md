@@ -1,252 +1,112 @@
 # Agent Engineering Notebooks
 
-> English version: [en/README.md](en/README.md)
-
-LLM 기반 AI 에이전트 개발을 **초급부터 프로덕션 배포까지** 단계별로 학습하는 Jupyter Notebook 교육 자료입니다.
-
----
-
-## 프로젝트 구조
-
-```
-langchain-langgraph-deepagents-notebooks/
-├── .env.example                 # API 키 템플릿
-├── pyproject.toml               # 의존성 관리 (uv)
-├── 01_beginner/                 # 초급 과정 (8개)
-├── 02_langchain/                # 중급 — LangChain v1 (13개)
-├── 03_langgraph/                # 중급 — LangGraph v1 (13개)
-├── 04_deepagents/               # 중급 — Deep Agents SDK (10개)
-├── 05_advanced/                 # 고급 과정 (10개)
-├── 06_examples/                 # 실전 응용 예제 (5개)
-├── 07_integration/              # 통합 — Provider Middleware & 생태계 (12 카테고리)
-├── 08_langsmith/                # LangSmith — 관측성/평가/프롬프트 허브 (5개)
-├── assets/images/langsmith/     # LangSmith UI 스크린샷 (마스킹 처리된 29장)
-└── docs/                        # 참고 문서 및 가이드
-```
+> LLM 에이전트를 **초급부터 프로덕션**까지 단계별로 배우는 Jupyter 실습 + Typst 핸드북.
+> English: [en/README.md](en/README.md) · Handbook PDF: [`book/agent-handbook.pdf`](book/agent-handbook.pdf) · Release: [`v1.0.0`](https://github.com/BAEM1N/langchain-langgraph-deepagents-notebooks/releases/tag/v1.0.0)
 
 ---
 
 ## 시작하기
 
 ```bash
-# 1. 저장소 클론
 git clone https://github.com/BAEM1N/langchain-langgraph-deepagents-notebooks.git
 cd langchain-langgraph-deepagents-notebooks
-
-# 2. 의존 패키지 설치 (uv 기반)
 uv sync
-
-# 3. API 키 설정
-cp .env.example .env
-# .env 파일을 열어 실제 키 입력
-
-# 4. Jupyter 실행
+cp .env.example .env      # OPENAI_API_KEY 최소 1개
 uv run jupyter lab
 ```
 
-### 환경 변수
-
-| 변수 | 용도 | 필수 |
-|------|------|------|
-| `OPENAI_API_KEY` | LLM 호출 | **필수** |
-| `TAVILY_API_KEY` | 웹 검색 도구 | 선택 |
-| `LANGSMITH_API_KEY` | LangSmith 트레이싱 | 선택 |
-| `LANGFUSE_SECRET_KEY` | Langfuse 트레이싱 | 선택 |
-
-전체 환경 변수 목록은 [`.env.example`](.env.example)을 참고하세요.
+필수: `OPENAI_API_KEY`. 선택: `TAVILY_API_KEY` · `ANTHROPIC_API_KEY` · `LANGSMITH_API_KEY` · `LANGFUSE_SECRET_KEY`. 자세한 내용은 [`.env.example`](.env.example).
 
 ---
 
-## 단계별 커리큘럼
+## 커리큘럼 — 8 Parts · 94 노트북
 
-### 1. 초급 — 에이전트 입문 (`01_beginner/`, 8개)
-
-> 대상: 프로그래밍 경험은 있지만 LLM 에이전트는 처음인 분
-
-| # | 파일 | 주제 | 핵심 내용 |
-|---|------|------|-----------|
-| 00 | `00_setup.ipynb` | 환경 설정 | `.env` 파일, `ChatOpenAI`, 모델 동작 확인 |
-| 01 | `01_llm_basics.ipynb` | LLM 기초 | 메시지 역할(system/human/ai), 프롬프트, 스트리밍 |
-| 02 | `02_langchain_basics.ipynb` | LangChain 입문 | `@tool`, `create_agent()`, ReAct 루프 |
-| 03 | `03_langchain_memory.ipynb` | LangChain 대화 | `InMemorySaver`, `thread_id`, 멀티턴 메모리 |
-| 04 | `04_langgraph_basics.ipynb` | LangGraph 입문 | `StateGraph`, 노드, 엣지, `MessagesState` |
-| 05 | `05_deep_agents_basics.ipynb` | Deep Agents 입문 | `create_deep_agent()`, 빌트인 도구, 커스텀 도구 |
-| 06 | `06_comparison.ipynb` | 프레임워크 비교 | LangChain vs LangGraph vs Deep Agents |
-| 07 | `07_mini_project.ipynb` | 미니 프로젝트 | Tavily 검색 + 요약 리서치 에이전트 |
-
-### 2. 중급 — LangChain v1 (`02_langchain/`, 13개)
-
-> 대상: LangChain으로 프로덕션 에이전트를 만들고 싶은 분
-
-| # | 파일 | 주제 | 핵심 내용 |
-|---|------|------|-----------|
-| 01 | `01_introduction.ipynb` | LangChain 소개 | 프레임워크 개요, 아키텍처, ReAct 패턴 |
-| 02 | `02_quickstart.ipynb` | 첫 번째 에이전트 | `create_agent()`, `invoke()`, `stream()` |
-| 03 | `03_models_and_messages.ipynb` | 모델과 메시지 | `init_chat_model()`, 메시지 타입, 멀티모달 |
-| 04 | `04_tools_and_structured_output.ipynb` | 도구와 구조화된 출력 | `@tool`, Pydantic, `with_structured_output()` |
-| 05 | `05_memory_and_streaming.ipynb` | 메모리와 스트리밍 | 단기/장기 메모리, 스트리밍 모드 |
-| 06 | `06_middleware.ipynb` | 미들웨어와 가드레일 | 빌트인/커스텀 미들웨어, 안전성 |
-| 07 | `07_hitl_and_runtime.ipynb` | 사람 개입과 런타임 | HITL, ToolRuntime, 컨텍스트 엔지니어링, MCP |
-| 08 | `08_multi_agent.ipynb` | 멀티 에이전트 패턴 | Subagents, Handoffs, Skills, Router |
-| 09 | `09_custom_workflow_and_rag.ipynb` | 커스텀 워크플로와 RAG | StateGraph, 조건부 엣지, 벡터 검색 |
-| 10 | `10_production.ipynb` | 프로덕션 | Studio, 테스트, UI, 배포, 관측성 |
-| 11 | `11_mcp.ipynb` | MCP | Model Context Protocol, langchain-mcp-adapters, Stdio/SSE |
-| 12 | `12_frontend_streaming.ipynb` | 프론트엔드 스트리밍 | useStream React 훅, StreamEvent, 커스텀 이벤트 |
-| 13 | `13_guardrails.ipynb` | 가드레일 | PII 감지, HITL, 커스텀 미들웨어, 다중 가드레일 |
-
-### 3. 중급 — LangGraph v1 (`03_langgraph/`, 13개)
-
-> 대상: 복잡한 워크플로와 상태 관리가 필요한 분
-
-| # | 파일 | 주제 | 핵심 내용 |
-|---|------|------|-----------|
-| 01 | `01_introduction.ipynb` | LangGraph 소개 | 아키텍처, Graph vs Functional API, 핵심 개념 |
-| 02 | `02_graph_api.ipynb` | Graph API 기초 | StateGraph, 노드, 엣지, 리듀서, 조건부 분기 |
-| 03 | `03_functional_api.ipynb` | Functional API 기초 | `@entrypoint`, `@task`, `previous`, `entrypoint.final` |
-| 04 | `04_workflows.ipynb` | 워크플로 패턴 | Chaining, Parallelization, Routing, Orchestrator |
-| 05 | `05_agents.ipynb` | 에이전트 구축 | ReAct 에이전트 (Graph/Functional), `bind_tools()` |
-| 06 | `06_persistence_and_memory.ipynb` | 지속성과 메모리 | 체크포인터, InMemoryStore, Durable Execution |
-| 07 | `07_streaming.ipynb` | 스트리밍 | values, updates, messages, custom 모드 |
-| 08 | `08_interrupts_and_time_travel.ipynb` | 인터럽트와 타임 트래블 | `interrupt()`, `Command(resume=)`, 체크포인트 리플레이 |
-| 09 | `09_subgraphs.ipynb` | 서브그래프 | 그래프 모듈화, 상태 매핑, 서브그래프 스트리밍 |
-| 10 | `10_production.ipynb` | 프로덕션 | Studio, 테스트, 배포, 관측성, Pregel |
-| 11 | `11_local_server.ipynb` | 로컬 서버 | langgraph dev, Studio, Python SDK, REST API |
-| 12 | `12_durable_execution.ipynb` | 내구성 실행 | 체크포인터, @task, 장애 복구, 내구성 모드 |
-| 13 | `13_api_guide_and_pregel.ipynb` | API 가이드와 Pregel | Graph vs Functional, Pregel 런타임, 슈퍼스텝 |
-
-### 4. 중급 — Deep Agents SDK (`04_deepagents/`, 10개)
-
-> 대상: 올인원 에이전트 시스템을 빠르게 구축하고 싶은 분
-
-| # | 파일 | 주제 | 핵심 API |
+| # | 트랙 | 대상 | 주요 기술 |
 |---|------|------|----------|
-| 01 | `01_introduction.ipynb` | Deep Agents 소개 | 아키텍처, 핵심 개념, 설치 확인 |
-| 02 | `02_quickstart.ipynb` | 첫 번째 에이전트 | `create_deep_agent()`, `invoke()`, `stream()` |
-| 03 | `03_customization.ipynb` | 커스터마이징 | 모델, 시스템 프롬프트, 도구, `response_format` |
-| 04 | `04_backends.ipynb` | 스토리지 백엔드 | State, Filesystem, Store, Composite |
-| 05 | `05_subagents.ipynb` | 서브에이전트 | `SubAgent`, `CompiledSubAgent`, 파이프라인 |
-| 06 | `06_memory_and_skills.ipynb` | 메모리 & 스킬 | `memory`, `skills`, AGENTS.md, SKILL.md |
-| 07 | `07_advanced.ipynb` | 고급 기능 | Human-in-the-Loop, 스트리밍, 샌드박스, ACP, CLI |
-| 08 | `08_harness.ipynb` | 에이전트 하네스 | AgentHarness, 파일시스템, 컨텍스트 관리, 서브에이전트 |
-| 09 | `09_comparison.ipynb` | 외부 프레임워크 비교 | Deep Agents vs OpenCode vs Claude Agent SDK |
-| 10 | `10_sandboxes_and_acp.ipynb` | 샌드박스와 ACP | Modal/Daytona/Runloop, Agent Client Protocol |
+| **01** [`01_beginner/`](01_beginner/) | 에이전트 입문 (8) | LLM 처음 | 메시지·프롬프트·ReAct·비교 |
+| **02** [`02_langchain/`](02_langchain/) | LangChain v1 (13) | 프로덕션 에이전트 | `create_agent` · 미들웨어 · MCP · HITL |
+| **03** [`03_langgraph/`](03_langgraph/) | LangGraph v1 (13) | 복잡한 워크플로 | `StateGraph` · 체크포인터 · subgraph · Pregel |
+| **04** [`04_deepagents/`](04_deepagents/) | Deep Agents SDK (10) | 올인원 시스템 | `create_deep_agent` · backend · subagent · skill |
+| **05** [`05_advanced/`](05_advanced/) | 고급 패턴 (10) | 멀티에이전트 · 배포 | 미들웨어 심화 · RAG · SQL · 보이스 · 프로덕션 |
+| **06** [`06_examples/`](06_examples/) | 실전 예제 (5) | 실무 응용 | RAG · SQL · 데이터분석 · ML · 딥 리서치 |
+| **07** [`07_integration/`](07_integration/) | 생태계 통합 (13 카테고리) | 외부 도구 · 공급자 | **Provider middleware 7개 완료** / 나머지 로드맵 |
+| **08** [`08_langsmith/`](08_langsmith/) | LangSmith (5) | 관측·평가·프롬프트 | Trace · dataset · evaluator · prompt hub · monitoring |
 
-### 5. 고급 — 프로덕션 & 멀티에이전트 (`05_advanced/`, 10개)
-
-> 대상: 프로덕션 배포와 멀티에이전트 아키텍처를 설계하는 분
-
-| # | 파일 | 주제 | 핵심 내용 |
-|---|------|------|-----------|
-| 00 | `00_migration.ipynb` | v0 -> v1 마이그레이션 | 브레이킹 체인지, import 경로, `create_agent` |
-| 01 | `01_middleware.ipynb` | 미들웨어 심화 | 7종 빌트인, 커스텀 작성, 실행 순서 |
-| 02 | `02_multi_agent_subagents.ipynb` | 멀티에이전트: Subagents | 감독자-서브에이전트 3계층, HITL, ToolRuntime |
-| 03 | `03_multi_agent_handoffs_router.ipynb` | 멀티에이전트: Handoffs & Router | 상태 머신, Command 전이, Send API 병렬 라우팅 |
-| 04 | `04_context_memory.ipynb` | 컨텍스트 & 메모리 | `context_schema`, InMemoryStore, Skills 패턴 |
-| 05 | `05_agentic_rag.ipynb` | Agentic RAG | 벡터 검색, 문서 관련성 평가, 쿼리 리라이트 |
-| 06 | `06_sql_agent.ipynb` | SQL 에이전트 | SQLDatabaseToolkit, `interrupt()`, `Command(resume=)` |
-| 07 | `07_data_analysis.ipynb` | 데이터 분석 에이전트 | Deep Agents + 샌드박스, Slack 연동, 스트리밍 |
-| 08 | `08_voice_agent.ipynb` | 보이스 에이전트 | STT/Agent/TTS Sandwich 패턴, Sub-700ms |
-| 09 | `09_production.ipynb` | 프로덕션 배포 | 테스트, LangSmith 평가, 트레이싱, LangGraph Platform |
-
-### 6. 실전 응용 예제 (`06_examples/`, 5개)
-
-> 대상: Deep Agents SDK의 실전 응용 패턴을 따라하며 응용력을 키우고 싶은 분
-
-| # | 파일 | 주제 | 핵심 내용 |
-|---|------|------|-----------|
-| 01 | `01_rag_agent.ipynb` | RAG 에이전트 | InMemoryVectorStore, `content_and_artifact`, create_deep_agent |
-| 02 | `02_sql_agent.ipynb` | SQL 에이전트 | SQLDatabaseToolkit, AGENTS.md 안전규칙, HITL interrupt |
-| 03 | `03_data_analysis_agent.ipynb` | 데이터 분석 에이전트 | LocalShellBackend, run_pandas, 스트리밍, 멀티턴 |
-| 04 | `04_ml_agent.ipynb` | 머신러닝 에이전트 | FilesystemBackend, run_ml_code, 자유 EDA→모델비교, 사용자 CSV |
-| 05 | `05_deep_research_agent.ipynb` | 딥 리서치 에이전트 | 병렬 서브에이전트 3개, think_tool, 5단계 워크플로 |
-
-### 7. 통합 — Provider Middleware & 생태계 (`07_integration/`, 12 카테고리)
-
-> 대상: LangChain 생태계 통합(벤더별 모델, 벡터 스토어, 미들웨어 등)을 단계적으로 채워나갈 커리큘럼 트랙.
-
-| 카테고리 | 내용 | 상태 |
-|---------|------|------|
-| `01_chat_models/` ~ `10_sandboxes/` | Chat 모델 · 임베딩 · 벡터스토어 · 문서 로더 · 리트리버 · 텍스트 스플리터 · 도구 · 체크포인터 · 스토어 · 샌드박스 | README 체크리스트 (향후 확장) |
-| **`11_provider_middleware/`** | **공급자 특화 미들웨어 7 노트북** (실행 검증 완료) | ✅ 완료 |
-| `12_observability/` | LangSmith · Langfuse · OpenTelemetry | README (향후 확장) |
-
-**11_provider_middleware 세부 (실습 노트북 7종)**:
-
-| # | 파일 | 주제 |
-|---|------|------|
-| 01 | `01_anthropic_prompt_caching.ipynb` | `AnthropicPromptCachingMiddleware` (cache_read_input_tokens 검증) |
-| 02 | `02_claude_bash_tool.ipynb` | `ClaudeBashToolMiddleware` (Host/Docker/Codex 정책, RedactionRule) |
-| 03 | `03_claude_text_editor.ipynb` | State vs Filesystem 변형, path restriction |
-| 04 | `04_claude_memory.ipynb` | `thread_id` 기반 영속성, `/memories` prefix |
-| 05 | `05_anthropic_file_search.ipynb` | glob + grep 조합 검색 |
-| 06 | `06_bedrock_prompt_caching.ipynb` | `BedrockPromptCachingMiddleware` (ChatBedrock/Converse, Nova 5m) |
-| 07 | `07_openai_moderation.ipynb` | `OpenAIModerationMiddleware` (end/error/replace 3 모드) |
-
-### 8. LangSmith — 관측성 · 평가 · 프롬프트 허브 (`08_langsmith/`, 5개)
-
-> 대상: LangSmith로 트레이싱 / 데이터셋 / LLM-as-judge 평가 / 프롬프트 버저닝 / 프로덕션 모니터링까지 다루는 분
-
-모든 노트북은 실제 LangSmith UI에서 검증됐고, 해당 화면 스크린샷 29장이 마스킹 처리된 상태로 포함됩니다 (`assets/images/langsmith/`).
-
-| # | 파일 | 주제 | 핵심 내용 |
-|---|------|------|-----------|
-| 01 | `01_quickstart.ipynb` | 퀵스타트 | API 키 · 첫 트레이스 · `run_name`/`tags`/`metadata` · `@traceable` · `Client.list_runs` |
-| 02 | `02_tracing_agents.ipynb` | 에이전트 트레이싱 | subgraph 네임스페이스 · sync/async subagent · thread view · feedback · 필터 |
-| 03 | `03_datasets_and_evaluation.ipynb` | 데이터셋 · 평가 | `create_examples` · code/LLM-judge/pairwise/summary evaluator · online |
-| 04 | `04_prompt_hub.ipynb` | 프롬프트 허브 | `push_prompt`/`pull_prompt` · commit SHA vs tag · CI 핀 |
-| 05 | `05_production_monitoring.ipynb` | 프로덕션 모니터링 | 대시보드 · online autoeval · feedback API · sampling · PII |
+노트북별 상세 토픽 → 각 폴더 `README.md` 참조.
 
 ---
 
-## 기술 스택
+## `07_integration/` · 13 카테고리
 
-| 패키지 | 버전 | 용도 |
-|--------|------|------|
-| `langchain` | >= 1.2 | 에이전트 생성, 도구, 미들웨어 |
-| `langchain-openai` | >= 1.1.10 | OpenAI 모델 연동 |
-| `langgraph` | >= 1.0 | 상태 그래프 워크플로, 오케스트레이션 |
-| `deepagents` | >= 0.4.4 | 올인원 에이전트 SDK |
-| `python-dotenv` | >= 1.2.2 | 환경 변수 관리 |
+LangChain 공식 integrations 섹션 11개 + LangGraph Store + Observability.
 
-전체 의존성은 [`pyproject.toml`](pyproject.toml)을 참고하세요.
+| # | 카테고리 | 상태 |
+|---|----------|------|
+| 01 [chat_models](07_integration/01_chat_models/) | OpenAI · Anthropic · Google · Ollama · Bedrock · Groq · Mistral · Cohere · … | ⬜ |
+| 02 [embeddings](07_integration/02_embeddings/) | OpenAI · Cohere · Voyage · Ollama · HuggingFace | ⬜ |
+| 03 [vectorstores](07_integration/03_vectorstores/) | Chroma · PGVector · Pinecone · Qdrant · Weaviate · Milvus · ES | ⬜ |
+| 04 [document_loaders](07_integration/04_document_loaders/) | PDF · Web · S3/GCS · Notion · Slack · GitHub | ⬜ |
+| 05 [retrievers](07_integration/05_retrievers/) | BM25 · MultiVector · Parent · SelfQuery · Tavily · Kendra | ⬜ |
+| 06 [text_splitters](07_integration/06_text_splitters/) | Recursive · Markdown · 언어별 · Semantic | ⬜ |
+| 07 [tools](07_integration/07_tools/) | Search · Code exec · SQL · Playwright · Gmail · GitHub | ⬜ |
+| 08 [checkpointers](07_integration/08_checkpointers/) | InMemory · SQLite · Postgres · CosmosDB | ⬜ |
+| 09 [stores](07_integration/09_stores/) | InMemoryStore · PostgresStore | ⬜ |
+| 10 [sandboxes](07_integration/10_sandboxes/) | Modal · Daytona · Runloop | ⬜ |
+| **11** [**provider_middleware**](07_integration/11_provider_middleware/) | **Anthropic 5 · Bedrock · OpenAI Moderation** | **✅ 7/7** |
+| 12 [observability](07_integration/12_observability/) | LangSmith · Langfuse · OTel | ⬜ |
+| 13 [providers](07_integration/13_providers/) | Anthropic · OpenAI · Google · AWS · … 공급자별 종합 | ⬜ |
 
 ---
 
 ## 📖 Agent Handbook (PDF)
 
-전체 내용을 Typst로 조판한 책 형태의 PDF입니다.
+Typst 로 조판한 **8 Parts · 82 chapters** 책.
 
-> **[`book/agent-handbook.pdf`](book/agent-handbook.pdf)**
-
-**8개 Part, 82 챕터**로 구성됩니다 (v1 릴리스 기준):
-
-- **Part I** 에이전트 입문 (8)
-- **Part II** LangChain v1 (13)
-- **Part III** LangGraph v1 (13)
-- **Part IV** Deep Agents (15 — ch11~ch15 에 0.5.0 async subagents · production · context engineering · streaming · permissions 추가)
-- **Part V** 고급 패턴 (10)
-- **Part VI** 실전 응용 (5)
-- **Part VII** LangSmith (5, 신규)
-- **Part VIII** Integrations (9, 신규 — Provider Middleware 7종 포함)
+- `book/agent-handbook.pdf` — 한국어 (18 MB)
+- `en/book/agent-handbook-en.pdf` — English (12 MB)
 
 로컬 빌드:
-
 ```bash
-typst compile --root . book/main.typ book/out/main.pdf       # 한국어
-typst compile --root . en/book/main.typ en/book/out/main.pdf # English
+typst compile --root . book/main.typ    book/out/main.pdf      # ko
+typst compile --root . en/book/main.typ en/book/out/main.pdf   # en
 ```
+
+### Part 구성
+
+| Part | 주제 | 챕터 수 |
+|------|------|--------|
+| I | 에이전트 입문 | 8 |
+| II | LangChain v1 | 13 |
+| III | LangGraph v1 | 13 |
+| IV | Deep Agents (0.5 async subagents · production · context engineering · streaming · permissions) | 15 |
+| V | 고급 패턴 | 10 |
+| VI | 실전 응용 | 5 |
+| **VII** | **LangSmith** (v1 신규) | 5 |
+| **VIII** | **Integrations** (v1 신규 — provider middleware 7종 포함) | 9 |
 
 ---
 
-## 추가 문서
+## 기술 스택
 
-| 문서 | 내용 |
-|------|------|
-| [`book/agent-handbook.pdf`](book/agent-handbook.pdf) | Agent Handbook 전체 PDF (6 Part, 59 챕터) |
-| [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) | LangSmith / Langfuse 관측성 설정 |
-| [`docs/MODEL_PROVIDERS.md`](docs/MODEL_PROVIDERS.md) | OpenRouter, Ollama, vLLM, LM Studio 등 다른 모델 사용법 |
-| [`docs/SKILLS.md`](docs/SKILLS.md) | LangChain Skills / langchain-ecosystem-skills 설치 및 사용법 |
-| [`AGENTS.md`](AGENTS.md) | 코딩 에이전트용 프로젝트 컨텍스트 |
+| 패키지 | 최소 버전 | 용도 |
+|--------|----------|------|
+| `langchain` | 1.2 | 에이전트 · 도구 · 미들웨어 |
+| `langgraph` | 1.1 | 상태 그래프 워크플로 |
+| `deepagents` | 0.5 | 올인원 에이전트 SDK |
+| `langsmith` | 0.7 | 관측 · 평가 · 프롬프트 허브 |
+| `langchain-openai` / `langchain-anthropic` / `langchain-aws` | — | 공급자 통합 |
+
+전체 의존성: [`pyproject.toml`](pyproject.toml)
+
+---
+
+## 더 보기
+
+- [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) — LangSmith · Langfuse 가이드
+- [`docs/MODEL_PROVIDERS.md`](docs/MODEL_PROVIDERS.md) — OpenRouter · Ollama · vLLM · LM Studio
+- [`docs/SKILLS.md`](docs/SKILLS.md) — LangChain Skills 사용법
+- [`docs/skills/langchain-v1-modern.md`](docs/skills/langchain-v1-modern.md) — v1 작성 가드레일
+- [`AGENTS.md`](AGENTS.md) — 코딩 에이전트용 프로젝트 컨텍스트
 
 ---
 

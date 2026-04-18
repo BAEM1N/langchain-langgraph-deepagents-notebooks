@@ -28,6 +28,7 @@ LangChain · LangGraph · Deep Agents와 연결되는 **외부 도구·서비스
 | 10 | [Sandboxes](./10_sandboxes/) | 0 / 3 | ⬜ |
 | 11 | [Provider Middleware](./11_provider_middleware/) | 7 / 7 | ✅ |
 | 12 | [Observability](./12_observability/) | 0 / 2 | ⬜ |
+| 13 | [Providers](./13_providers/) | 0 / 9 | ⬜ |
 
 ## 우선순위 근거
 
