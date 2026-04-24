@@ -1,0 +1,27 @@
+[
+  {
+    "sku": "SKU-1",
+    "name": "맥북",
+    "price": 1990000,
+    "tags": [
+      "laptop",
+      "apple"
+    ]
+  },
+  {
+    "sku": "SKU-2",
+    "name": "키보드",
+    "price": 89000,
+    "tags": [
+      "peripheral"
+    ]
+  },
+  {
+    "sku": "SKU-3",
+    "name": "모니터",
+    "price": 450000,
+    "tags": [
+      "display"
+    ]
+  }
+]
