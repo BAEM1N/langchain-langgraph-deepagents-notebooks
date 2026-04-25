@@ -750,7 +750,7 @@ agent = create_agent(
 - `violation_message` (str | None): 교체용 메시지 템플릿. `{categories}`, `{category_scores}`, `{original_content}` 변수 지원
 - `client`, `async_client`: 사전 구성된 OpenAI 클라이언트 주입(선택)
 
-**주의**: OpenAI Moderation API 호출 비용 / 레이턴시가 추가된다. 프로덕션에서는 `check_input`만 쓰고 `check_output`은 샘플링 전략으로 운영하는 경우가 많다. 실행 예제는 `07_integration/11_provider_middleware/07_openai_moderation.ipynb` 참고.
+**주의**: OpenAI Moderation API 호출 비용 / 레이턴시가 추가된다. 프로덕션에서는 `check_input`만 쓰고 `check_output`은 샘플링 전략으로 운영하는 경우가 많다. 실행 예제는 `08_integration/11_provider_middleware/07_openai_moderation.ipynb` 참고.
 
 ---
 

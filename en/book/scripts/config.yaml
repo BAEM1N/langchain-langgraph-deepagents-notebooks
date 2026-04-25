@@ -279,10 +279,10 @@ parts:
     title: Production Deployment
     diagrams:
     - production-deploy
-- number: 6
+- number: 7
   title: Applied Examples
   subtitle: Real-World Applications
-  source_dir: 06_examples
+  source_dir: 07_examples
   chapters:
   - source: 01_rag_agent.ipynb
     output: ch01.typ

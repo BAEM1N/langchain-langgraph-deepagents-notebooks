@@ -36,7 +36,7 @@ Primary source references used to normalize these terms: `book/chapters/appendix
 | 중급 | Intermediate | Track/difficulty label. |
 | 고급 | Advanced | Track/difficulty label. |
 | 에이전트 입문 | Agent Foundations | Preferred track title; broader and more natural than “Agent Introduction”. |
-| 실전 응용 예제 | Applied Examples | Preferred folder/section title for `06_examples`. |
+| 실전 응용 예제 | Applied Examples | Preferred folder/section title for `07_examples`. |
 
 ## Notebook / handbook structural labels
 | Korean | Preferred English | Notes |

@@ -1,4 +1,4 @@
-// Source: 08_langsmith/04_prompt_hub.ipynb
+// Source: 06_langsmith/04_prompt_hub.ipynb
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 

@@ -1,4 +1,4 @@
-// Source: 08_langsmith/01_quickstart.ipynb
+// Source: 06_langsmith/01_quickstart.ipynb
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 

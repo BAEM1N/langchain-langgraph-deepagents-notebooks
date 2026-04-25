@@ -1,4 +1,4 @@
-// Source: 08_langsmith/03_datasets_and_evaluation.ipynb
+// Source: 06_langsmith/03_datasets_and_evaluation.ipynb
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
