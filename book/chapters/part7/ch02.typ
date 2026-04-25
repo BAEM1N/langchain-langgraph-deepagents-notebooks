@@ -5,9 +5,7 @@
 
 #chapter(2, "SQL 에이전트", subtitle: "자연어 데이터베이스 질의")
 
-이전 장에서 구축한 RAG 에이전트가 비정형 문서를 검색했다면, SQL 에이전트는 관계형 데이터베이스의 정형 데이터에 접근합니다. 자연어를 SQL 쿼리로 변환하는 에이전트는 비개발자도 데이터베이스에 접근할 수 있게 하는 대표적인 실전 응용입니다. 이 장에서는 `SQLDatabaseToolkit`으로 도구를 자동 생성하고, `AGENTS.md` 기반 안전 규칙으로 READ-ONLY 제약을 적용하며, `HumanInTheLoopMiddleware`로 쿼리 실행 전 사용자 승인을 구현합니다.
-
-#learning-header()
+== 학습 목표
 #learning-objectives([SQLDatabaseToolkit으로 SQL 도구를 자동 생성한다], [AGENTS.md 기반 안전 규칙(READ-ONLY)을 적용한다], [HITL(Human-in-the-Loop) interrupt로 쿼리 실행 전 승인을 구현한다], [v1 미들웨어(HumanInTheLoopMiddleware, ModelCallLimitMiddleware)를 명시적으로 적용한다])
 
 == 개요
@@ -50,13 +48,9 @@ model = ChatOpenAI(model="gpt-4.1")
 
 `````)
 
-SQL 에이전트의 구현은 _스키마 탐색 → 쿼리 생성 → 검증 → 실행 → 결과 해석_의 워크플로를 따릅니다. `SQLDatabaseToolkit`이 이 워크플로에 필요한 4개 도구를 자동으로 생성해 주므로, 에이전트 구현에 집중할 수 있습니다.
-
 == 1단계: 데이터베이스 연결
 
-Chinook은 디지털 음악 스토어의 샘플 데이터베이스입니다. Artist, Album, Track, Invoice 등의 테이블을 포함합니다. `SQLDatabase.from_uri()`는 SQLAlchemy의 연결 문자열을 받아 데이터베이스에 연결하며, 테이블 메타데이터를 자동으로 반영(reflect)합니다. SQLite, PostgreSQL, MySQL 등 SQLAlchemy가 지원하는 모든 데이터베이스를 동일한 인터페이스로 사용할 수 있습니다.
-
-#warning-box[프로덕션에서는 `SQLDatabase.from_uri()`에 _읽기 전용 사용자_의 연결 문자열을 사용해야 합니다. 시스템 프롬프트의 "DML 금지" 지시만으로는 안전하지 않습니다 -- LLM은 지시를 무시할 수 있으므로, DB 레벨에서 `GRANT SELECT ON ...` 권한만 부여하는 것이 근본적인 안전장치입니다.]
+Chinook은 디지털 음악 스토어의 샘플 데이터베이스입니다. Artist, Album, Track, Invoice 등의 테이블을 포함합니다.
 
 
 #code-block(`````python
@@ -149,11 +143,9 @@ Prompt 'deep-research-agent-label:production' not found during refresh, evicting
 - 복잡한 쿼리는 write_todos로 단계별 계획을 세우세요
 `````)
 
-프롬프트가 에이전트의 _기본 행동 규칙_을 정의한다면, Skills는 특정 작업 수행 시 참조할 수 있는 _전문 지침_을 제공합니다. Skills의 핵심은 _필요한 시점에만 로드_된다는 것입니다.
-
 == 4단계: Skills 개념
 
-Skills는 에이전트의 워크플로 가이드입니다. Part 5 ch04에서 학습한 Progressive Disclosure 패턴의 실전 적용입니다. 에이전트가 SQL 작업을 수행할 때 참조할 수 있는 구조화된 지침을 제공합니다. 반복되는 작업 패턴을 문서화하여 에이전트가 일관된 방식으로 작업하도록 합니다.
+Skills는 에이전트의 워크플로 가이드입니다. 반복되는 작업 패턴을 문서화하여 에이전트가 일관된 방식으로 작업하도록 합니다.
 
 #table(
   columns: 2,
@@ -172,9 +164,7 @@ Skills는 에이전트의 워크플로 가이드입니다. Part 5 ch04에서 학
 
 == 5단계: 기본 SQL 에이전트 생성
 
-도구, 프롬프트, Skills가 모두 준비되었으니 에이전트를 조립합니다. `create_deep_agent`에 SQL 도구와 시스템 프롬프트를 전달하여 에이전트를 생성합니다. `FilesystemBackend`는 에이전트가 분석 결과나 쿼리 이력을 파일로 저장할 수 있도록 파일시스템 접근을 제공합니다.
-
-#tip-box[SQL 에이전트의 시스템 프롬프트에 현재 DB의 dialect(SQLite, PostgreSQL 등)를 명시하면 LLM이 해당 방언에 맞는 SQL 구문을 생성합니다. 예를 들어, SQLite에서는 `LIMIT`을, SQL Server에서는 `TOP`을, Oracle에서는 `ROWNUM`을 사용하도록 안내할 수 있습니다.]
+`create_deep_agent`에 SQL 도구와 AGENTS.md를 전달하여 에이전트를 생성합니다. `system_prompt`로 AGENTS.md 내용을 주입합니다.
 
 
 #code-block(`````python
@@ -190,13 +180,9 @@ agent = create_deep_agent(
 )
 `````)
 
-기본 에이전트가 동작하는 것을 확인했습니다. 프로덕션에서는 에이전트가 생성한 SQL 쿼리를 실행하기 전에 _반드시 사람이 검토_해야 합니다. 의도하지 않은 대규모 조인이나 민감 데이터 접근을 사전에 차단하기 위해서입니다.
-
-기본 에이전트가 동작하는 것을 확인했습니다. 이제 프로덕션에서 가장 중요한 안전 장치인 Human-in-the-Loop을 적용합니다. 에이전트가 생성한 SQL 쿼리가 의도하지 않은 대규모 조인이나 민감 데이터 접근을 포함할 수 있으므로, 실행 전 사람의 검토가 필수입니다.
-
 == 6단계: HITL 에이전트 (interrupt_on)
 
-`create_deep_agent`의 `interrupt_on` 파라미터로 도구별 승인 정책을 설정합니다. `sql_db_query` 도구만 중단 대상으로 지정하면, 테이블 목록 조회나 스키마 조회 같은 안전한 작업은 자동으로 진행되고, 실제 데이터를 반환하는 쿼리 실행 단계에서만 사람의 승인을 요청합니다. `sql_db_query` 호출 전에 실행이 중단되고, `Command(resume=...)`로 재개합니다.
+`create_deep_agent`의 `interrupt_on` 파라미터로 도구별 승인 정책을 설정합니다. `sql_db_query` 호출 전에 실행이 중단되고, `Command(resume=...)`로 재개합니다.
 
 #table(
   columns: 2,
@@ -234,9 +220,7 @@ hitl_agent = create_deep_agent(
 
 == 7단계: 승인 후 재개
 
-에이전트가 `sql_db_query`를 호출하려 하면 실행이 중단됩니다. 이 시점에서 사용자는 에이전트가 생성한 SQL 쿼리를 검토할 수 있습니다. 쿼리가 적절하면 승인하고, 수정이 필요하면 수정된 쿼리를 전달하며, 부적절하면 거부 사유와 함께 거부합니다. 거부 시 에이전트는 사유를 참고하여 새로운 쿼리를 생성할 수 있습니다.
-
-#warning-box[HITL 패턴을 사용할 때 반드시 `InMemorySaver` 등의 체크포인터를 설정해야 합니다. 체크포인터 없이 `interrupt_on`을 설정하면 실행 중단 후 상태가 소실되어 재개가 불가능합니다. 프로덕션에서는 `PostgresSaver`를 사용하여 서버 재시작 후에도 중단된 세션을 재개할 수 있도록 하세요.] 사람이 쿼리를 검토한 후 `Command(resume=...)`로 승인, 수정, 또는 거부를 결정합니다. v1에서는 `HITLResponse` 형식으로 결정을 전달합니다.
+`Command(resume={"decisions": [{"type": "approve"}]})`로 중단된 실행을 재개합니다. v1에서는 `HITLResponse` 형식으로 결정을 전달합니다.
 
 #table(
   columns: 2,

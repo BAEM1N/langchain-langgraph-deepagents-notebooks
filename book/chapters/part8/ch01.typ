@@ -4,7 +4,7 @@
 
 #chapter(1, "통합 카테고리 개요", subtitle: "LangChain 생태계 지도")
 
-LangChain·LangGraph·Deep Agents는 공통 에이전트 인터페이스 아래 _프로바이더별 구현_을 플러그인 형태로 연결하는 구조를 취합니다. Part II~Part IV에서 "에이전트를 어떻게 쓰는가"에 집중했다면, 이 Part는 "에이전트를 _무엇과_ 연결하는가"에 초점을 맞춥니다. 12개 카테고리에 걸친 통합 표면을 한눈에 파악하고, 각 카테고리의 대표 패키지와 선택 기준을 정리합니다.
+LangChain·LangGraph·Deep Agents는 공통 에이전트 인터페이스 아래 _프로바이더별 구현_을 플러그인 형태로 연결합니다. Part II~Part IV가 "에이전트를 어떻게 쓰는가"를 다뤘다면, 이 Part는 "에이전트를 _무엇과_ 연결하는가"를 살핍니다. 12개 카테고리의 통합 표면을 한눈에 파악하고, 각 카테고리의 대표 패키지와 선택 기준을 정리합니다.
 
 #learning-header()
 #learning-objectives(
@@ -73,7 +73,7 @@ LangChain·LangGraph·Deep Agents는 공통 에이전트 인터페이스 아래 
   [SaaS vs 자체 호스팅·PII 정책],
 )
 
-Provider Middleware는 _프로바이더 서버 측_에서 활성화되는 기능(프롬프트 캐시, 네이티브 도구, 컨텐츠 정책)을 LangChain 미들웨어 포맷으로 감싼 것입니다. 공식 문서에 한 줄로만 언급되는 경우가 많아 실행 가능한 코드로 한 번 정리해 두는 가치가 큽니다. 이 Part의 ch2~ch8에서 7개 미들웨어를 각각 1장씩 다룹니다.
+Provider Middleware는 _프로바이더 서버 측_에서 활성화되는 기능(프롬프트 캐시, 네이티브 도구, 컨텐츠 정책)을 LangChain 미들웨어 포맷으로 감싼 것입니다. 공식 문서에는 한 줄 정도만 언급되는 경우가 많아 실행 가능한 코드로 정리해 두는 편이 실용적입니다. 이 Part의 ch2~ch8에서 7개 미들웨어를 각각 1장씩 다룹니다.
 
 == 1.3 Provider Middleware 로드맵
 
@@ -115,7 +115,7 @@ Provider Middleware는 _프로바이더 서버 측_에서 활성화되는 기능
 
 + *환경 설정* — `.env`에 해당 프로바이더 키를 넣고 패키지를 설치합니다.
 + *기본 사용* — `create_agent(..., middleware=[Middleware()])` 한 줄로 기능을 켭니다.
-+ *검증* — `usage_metadata`, `tool_calls`, 또는 Moderation 응답을 읽어 기능이 실제로 동작했는지 확인합니다.
++ *검증* — `usage_metadata`, `tool_calls`, 또는 Moderation 응답을 읽어 기능이 실제로 동작하는지 확인합니다.
 
 #tip-box[프로바이더 특화 미들웨어는 _모델을 같이 정해야_ 합니다. Anthropic 미들웨어를 OpenAI 모델에 붙이면 `unsupported_model_behavior` 설정에 따라 경고만 나오거나 예외가 발생합니다. 멀티 프로바이더 파이프라인에서는 `ModelFallbackMiddleware`와 조합할 때 순서에 주의하세요.]
 

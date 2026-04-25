@@ -4,7 +4,7 @@
 
 #chapter(5, "프로덕션 모니터링", subtitle: "대시보드 · 알림 · 샘플링 · PII")
 
-프로덕션은 "트레이스 한 번 잘 찍어보자"가 아니라 _실시간 대시보드 + 자동 평가 + 알림 + 개인정보 방어_가 같이 돌아야 합니다. 이 장은 배포 후에 필요한 LangSmith 기능을 운영 관점에서 묶습니다 — Monitoring 대시보드, autoeval rule, 사용자 feedback API, 알림 룰, 샘플링, PII 스크러빙, Slack/PagerDuty 웹훅 연동까지.
+프로덕션은 "트레이스 한 번 찍어보자"가 아니라 _실시간 대시보드 + 자동 평가 + 알림 + 개인정보 방어_가 함께 돌아야 합니다. 이 장은 배포 후 필요한 LangSmith 기능을 운영 관점으로 묶습니다 — Monitoring 대시보드, autoeval rule, 사용자 feedback API, 알림 룰, 샘플링, PII 스크러빙, Slack/PagerDuty 웹훅 연동까지.
 
 #learning-header()
 #learning-objectives(
@@ -41,13 +41,13 @@ UI의 프로젝트 페이지에는 기본 3개 탭이 있습니다.
   [특정 key 점수 하락 알림],
 )
 
-대시보드를 _직접 만들고 싶다면_ `Dashboards`에서 커스텀 차트를 묶을 수 있습니다. 같은 지표를 `client.list_runs`로 뽑아 Grafana 같은 사내 시스템에 붙여도 됩니다.
+대시보드를 _직접 구성하고 싶다면_ `Dashboards`에서 커스텀 차트를 묶을 수 있습니다. 같은 지표를 `client.list_runs`로 뽑아 Grafana 같은 사내 시스템에 붙여도 됩니다.
 
 #figure(image("../../../assets/images/langsmith/05_production_monitoring/01_monitoring_dashboards_list.png", width: 95%), caption: [Project Monitoring Dashboards — 6개 탭(Traces / LLM Calls / Cost & Tokens / Tools / Run Types / Feedback Scores) × 기간])
 
 == 5.2 Online evaluator — autoeval rule
 
-3장에서 UI로 붙이는 흐름을 봤다면, 여기선 _운영 관점 설계_입니다.
+3장에서 UI로 붙이는 흐름을 확인했다면, 여기선 _운영 관점 설계_입니다.
 
 #table(
   columns: 2,
@@ -67,13 +67,13 @@ UI의 프로젝트 페이지에는 기본 3개 탭이 있습니다.
   [`metadata.feature == "checkout"`인 run에만 평가 붙이기],
 )
 
-autoeval 결과는 feedback key로 저장되므로, 알림 룰·대시보드·Experiments 비교에 모두 재사용됩니다.
+autoeval 결과는 feedback key로 저장되므로, 알림 룰·대시보드·Experiments 비교에 모두 씁니다.
 
 #figure(image("../../../assets/images/langsmith/05_production_monitoring/03_automations_tab.png", width: 95%), caption: [프로젝트 > Automations 탭 — `+ Automation`으로 조건(Feedback score < 0.5) → 액션(dataset 이관 / 웹훅 / annotation queue) 정의])
 
 == 5.3 사용자 feedback 수집 API
 
-앱 UI의 thumbs-up / 별점 / "이 답 도움 안 됨" 버튼 → 서버에서 `client.create_feedback` 호출이 정석 패턴입니다. 클라이언트가 기다리지 않도록 *background*로 쏩니다 (Python SDK는 `trace_id`를 주면 자동 백그라운드).
+앱 UI의 thumbs-up / 별점 / "이 답 도움 안 됨" 버튼을 누르면 서버에서 `client.create_feedback`을 호출합니다. 클라이언트가 기다리지 않도록 *background*로 쏩니다 (Python SDK는 `trace_id`를 주면 자동 백그라운드).
 
 #code-block(`````python
 from langsmith import Client
@@ -114,7 +114,7 @@ and(
 
 == 5.5 고볼륨 샘플링
 
-초당 수백 요청이 되면 모든 trace를 보내는 건 비용·네트워크 낭비입니다. 두 층으로 제어합니다.
+초당 수백 요청이 되면 모든 trace를 보내는 건 비용·네트워크 낭비입니다. 두 층으로 나눠 제어합니다.
 
 #table(
   columns: 3,
@@ -133,7 +133,7 @@ and(
   [관리자/결제 등 중요 요청만 100%],
 )
 
-조합하면 "일반 트래픽은 10%, 결제 트래픽은 100%" 같은 운영 정책을 구현할 수 있습니다.
+조합하면 "일반 트래픽은 10%, 결제 트래픽은 100%" 같은 운영 정책을 만들 수 있습니다.
 
 == 5.6 PII 스크러빙
 
@@ -142,7 +142,7 @@ and(
 + *모델 입력 단계*: `langchain.agents.middleware.PIIMiddleware`가 LLM에 전달되는 메시지에서 이메일·카드번호·API 키를 차단/마스킹 — 모델 자체가 PII를 보지 않게 합니다
 + *트레이스 전송 단계*: LangSmith 클라이언트의 `hide_inputs`/`hide_outputs` 또는 `anonymizer`가 서버로 올라가는 input/output에서 한 번 더 씻어냅니다
 
-둘 다 걸어야 "모델에 들어갔지만 트레이스엔 안 남는" 혹은 "모델은 못 봤지만 trace에 남았다" 같은 구멍이 없습니다.
+둘 다 걸어야 "모델에 들어갔지만 트레이스엔 안 남는", "모델은 못 봤지만 trace에 남았다" 같은 구멍이 사라집니다.
 
 #code-block(`````dotenv
 # .env
@@ -183,11 +183,11 @@ async def on_alert(req: Request):
     return {"ok": True}
 `````)
 
-UI의 Rules에서 이 엔드포인트 URL을 webhook 대상으로 등록하고, 필터를 `and(has(tags, "env:prod"), eq(status, "error"))`로 잡으면 프로덕션 에러만 Slack으로 뜹니다.
+UI Rules에서 이 엔드포인트 URL을 webhook 대상으로 등록하고, 필터를 `and(has(tags, "env:prod"), eq(status, "error"))`로 잡으면 프로덕션 에러만 Slack으로 뜹니다.
 
 == 5.8 Insights Agent (유료)
 
-프로젝트 > Insights 탭 — LangSmith의 *Insights Agent*로 production trace에서 usage pattern / common failure modes를 자동 추출합니다. 무료 플랜은 upgrade가 필요합니다.
+프로젝트 > Insights 탭 — LangSmith의 *Insights Agent*로 production trace에서 usage pattern / common failure mode를 자동 추출합니다. 무료 플랜은 upgrade가 필요합니다.
 
 #figure(image("../../../assets/images/langsmith/05_production_monitoring/04_insights_tab.png", width: 95%), caption: [Insights 탭 — Upgrade required 상태. 유료 플랜에서 production trace 자동 분석])
 

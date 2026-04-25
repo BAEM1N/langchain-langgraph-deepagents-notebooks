@@ -5,9 +5,7 @@
 
 #chapter(3, "데이터 분석 에이전트", subtitle: "코드 실행과 멀티턴 분석")
 
-이전 장의 SQL 에이전트가 정형 쿼리를 실행했다면, 데이터 분석 에이전트는 Python 코드를 직접 작성하고 실행하여 자유로운 분석을 수행합니다. 데이터 분석 에이전트는 사용자의 자연어 요청을 Python 코드로 변환하여 실행하고, 결과를 해석하는 자율 분석 워크플로를 제공합니다. Deep Agents의 코드 실행 샌드박스와 `SummarizationMiddleware`를 활용하여 장시간 분석 세션에서도 컨텍스트를 효율적으로 관리합니다. 이 장에서는 `LocalShellBackend`로 코드 실행 환경을 구성하고, 빌트인 도구(`execute`, `write_todos`)와 커스텀 도구를 조합하여 스트리밍 기반 멀티턴 분석 에이전트를 구축합니다.
-
-#learning-header()
+== 학습 목표
 #learning-objectives([LocalShellBackend로 코드 실행 환경을 구성한다], [커스텀 도구와 빌트인 도구(write_todos, execute)를 조합한다], [스트리밍과 멀티턴 대화로 반복적 분석을 수행한다], [v1 미들웨어(SummarizationMiddleware, ModelCallLimitMiddleware)를 적용한다])
 
 == 개요
@@ -48,11 +46,9 @@ model = ChatOpenAI(model="gpt-4.1")
 
 `````)
 
-데이터 분석 에이전트의 핵심 설계 결정은 _코드 실행 환경 선택_입니다. 에이전트가 작성한 Python 코드를 어디서, 어떤 권한으로 실행할 것인지가 보안과 기능성의 트레이드오프를 결정합니다.
-
 == 1단계: 백엔드 비교
 
-Deep Agents는 다양한 백엔드를 지원합니다. 데이터 분석에는 코드 실행이 필요하므로 `LocalShellBackend`를 사용합니다. 각 백엔드의 파일 접근 범위와 코드 실행 가능 여부를 비교하여 사용 사례에 맞는 백엔드를 선택하세요.
+Deep Agents는 다양한 백엔드를 지원합니다. 데이터 분석에는 코드 실행이 필요하므로 `LocalShellBackend`를 씁니다.
 
 #table(
   columns: 4,
@@ -91,11 +87,9 @@ from deepagents.backends import LocalShellBackend
 backend = LocalShellBackend(root_dir=".", virtual_mode=True)
 `````)
 
-백엔드가 준비되었으니, 에이전트가 분석할 데이터를 준비합니다. 실제 환경에서는 사용자가 파일을 업로드하거나, 에이전트가 API에서 데이터를 가져올 수 있습니다.
-
 == 2단계: 분석용 CSV 파일 생성
 
-에이전트가 `execute`로 pandas 코드를 실행하려면, 파일 시스템에 CSV 파일이 있어야 합니다. `write_file` 빌트인 도구를 통해 에이전트가 직접 파일을 쓸 수도 있지만, 여기서는 미리 준비합니다.
+에이전트가 `execute`로 pandas 코드를 실행하려면 파일 시스템에 CSV 파일이 있어야 합니다. `write_file` 빌트인 도구로 에이전트가 직접 파일을 쓸 수도 있지만, 여기서는 미리 준비합니다.
 
 #code-block(`````python
 import tempfile, os
@@ -122,8 +116,6 @@ print(f"CSV 저장: {csv_path}")
 CSV 저장: C:\Users\HEESU\AppData\Local\Temp\tmpspv1awp9\sales.csv
 `````)
 
-데이터가 준비되었으니, 에이전트가 데이터를 분석할 수 있는 도구를 정의합니다. 데이터 분석 에이전트의 도구 설계에서 핵심은 _에이전트가 자유롭게 코드를 작성하고 실행할 수 있는 환경_을 제공하는 것입니다.
-
 == 3단계: 분석 도구 정의
 
 두 가지 커스텀 도구를 정의합니다:
@@ -142,7 +134,7 @@ CSV 저장: C:\Users\HEESU\AppData\Local\Temp\tmpspv1awp9\sales.csv
   [pandas 코드를 직접 실행하고 결과 반환],
 )
 
-#tip-box[`run_pandas`는 에이전트가 작성한 pandas 코드를 `exec()`로 실행합니다. `execute` 빌트인보다 venv 환경에서 안정적입니다.]
+#tip-box[`run_pandas`는 에이전트가 작성한 pandas 코드를 Python으로 실행합니다. `execute` 빌트인보다 venv 환경에서 안정적입니다.]
 
 #code-block(`````python
 from langchain.tools import tool
@@ -169,7 +161,7 @@ def run_pandas(code: str) -> str:
 
 == 4단계: 에이전트 생성 (v1 미들웨어)
 
-도구와 백엔드가 준비되었으니, `create_deep_agent`로 에이전트를 조립합니다. `SummarizationMiddleware`는 분석 대화가 길어질 때 이전 메시지를 자동으로 요약하여 컨텍스트 윈도우 초과를 방지합니다. `ModelCallLimitMiddleware`는 에이전트가 무한 루프에 빠지는 것을 방지합니다.
+`LocalShellBackend`와 커스텀 도구(`get_csv_path`, `run_pandas`)를 조합합니다.
 
 #table(
   columns: 2,
@@ -220,13 +212,9 @@ Prompt 'ml-agent-label:production' not found during refresh, evicting from cache
 Prompt 'deep-research-agent-label:production' not found during refresh, evicting from cache.
 `````)
 
-에이전트가 생성되었으니, 실제 분석을 수행합니다. 에이전트에게 자연어로 분석 요청을 하면, 에이전트는 자율적으로 코드를 작성하고 실행합니다. 이 과정에서 에이전트의 _계획-실행-반성_ 루프를 관찰할 수 있습니다.
-
 == 5단계: pandas 코드 실행으로 분석
 
-에이전트에게 분석을 요청하면, `get_csv_path`로 파일 경로를 확인한 뒤 `run_pandas`로 pandas 코드를 직접 작성하고 실행합니다. 에이전트는 데이터의 구조를 먼저 파악한 후, 적절한 집계/통계 코드를 생성합니다. 코드 실행 결과에 오류가 발생하면 에이전트가 오류 메시지를 분석하여 코드를 수정하고 재시도합니다.
-
-#tip-box[에이전트가 생성하는 pandas 코드의 품질을 높이려면, 시스템 프롬프트에 "코드 실행 전 항상 `df.head()`와 `df.dtypes`로 데이터 구조를 확인하세요"라는 지시를 추가하세요. 데이터 구조를 모르고 바로 분석 코드를 실행하면 컬럼명 오류, 타입 불일치 등이 자주 발생합니다.]
+에이전트에게 분석을 요청하면, `get_csv_path`로 파일 경로를 확인한 뒤 `run_pandas`로 pandas 코드를 직접 작성하고 실행합니다.
 
 #code-block(`````python
 에이전트 실행 흐름:
@@ -237,11 +225,8 @@ Prompt 'deep-research-agent-label:production' not found during refresh, evicting
 
 == 6단계: 멀티턴 후속 질문
 
-같은 `thread_id`를 사용하면 이전 대화의 맥락을 유지한 채 후속 질문을 할 수 있습니다. 에이전트는 이전 분석 결과를 기억합니다. 예를 들어, "지역별 매출 합계를 보여줘" 후에 "가장 높은 지역의 분기별 추이는?"이라고 물으면, 에이전트는 이전 결과에서 최고 매출 지역이 서울이었음을 기억하고 서울의 분기별 데이터를 분석합니다.
+같은 `thread_id`를 쓰면 이전 대화의 맥락을 유지한 채 후속 질문을 할 수 있습니다. 에이전트는 이전 분석 결과를 기억합니다.
 
-#warning-box[`SummarizationMiddleware`를 사용하지 않으면 멀티턴 대화가 길어질수록 메시지 히스토리가 누적되어 컨텍스트 윈도우를 초과할 수 있습니다. 특히 `run_pandas` 도구의 코드와 결과가 매 턴마다 추가되므로, 10턴 이상의 분석 세션에서는 `SummarizationMiddleware(trigger=("messages", 10))`로 이전 메시지를 자동 요약하여 토큰 사용량을 관리하세요.]
-
-멀티턴 대화의 기반이 되는 빌트인 도구들을 정리합니다. 이 도구들은 백엔드 유형에 따라 자동으로 에이전트에 제공됩니다.
 
 == 빌트인 도구 정리
 

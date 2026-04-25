@@ -4,7 +4,7 @@
 
 #chapter(5, "Claude Memory", subtitle: "`/memories/*` 경로 계약")
 
-Claude 네이티브 `memory_20250818` 도구는 모델이 스스로 메모를 쓰고 다시 읽는 _장기 기억_을 구현합니다. 주입되는 시스템 프롬프트가 매 턴 "먼저 `/memories`를 확인하라"를 지시하므로, 같은 사용자와 여러 세션에 걸쳐 취향/사실이 자연스럽게 누적됩니다. State와 Filesystem 두 변형의 지속성 차이를 이해하는 것이 이 장의 핵심입니다.
+Claude 네이티브 `memory_20250818` 도구는 모델이 스스로 메모를 쓰고 다시 읽는 _장기 기억_을 구현합니다. 주입되는 시스템 프롬프트가 매 턴 "먼저 `/memories`를 확인하라"고 지시하므로, 같은 사용자와 여러 세션에 걸쳐 취향이나 사실이 자연스럽게 쌓입니다. State와 Filesystem 두 변형의 지속성 차이를 파악하는 것이 이 장의 핵심입니다.
 
 #learning-header()
 #learning-objectives(
@@ -38,7 +38,7 @@ load_dotenv()
 
 == 5.3 State 변형 — 스레드 내 지속
 
-`StateClaudeMemoryMiddleware`는 메모 내용을 LangGraph 상태(`memory_files`)에 넣습니다. `MemorySaver` / `PostgresCheckpointer` 등 체크포인터를 쓰면 _같은 thread_id에서 재개할 때마다_ 자동 복원됩니다.
+`StateClaudeMemoryMiddleware`는 메모 내용을 LangGraph 상태(`memory_files`)에 저장합니다. `MemorySaver` / `PostgresCheckpointer` 등 체크포인터를 쓰면 _같은 thread_id로 재개할 때마다_ 자동 복원됩니다.
 
 #table(
   columns: 3,
@@ -83,7 +83,7 @@ print(result["messages"][-1].content)
 
 == 5.4 Filesystem 변형 — 프로세스 경계를 넘어
 
-`FilesystemClaudeMemoryMiddleware`는 메모를 _실제 디스크 디렉터리_에 남깁니다. 프로세스가 종료되거나 체크포인터 저장소가 달라져도 디스크 파일이 남아 있으면 그대로 다시 읽을 수 있습니다.
+`FilesystemClaudeMemoryMiddleware`는 메모를 _실제 디스크 디렉터리_에 남깁니다. 프로세스가 종료되거나 체크포인터 저장소가 바뀌어도 디스크 파일이 있으면 그대로 다시 읽습니다.
 
 #table(
   columns: 3,
@@ -122,7 +122,7 @@ agent = create_agent(
 
 == 5.5 Deep Agents `StoreBackend`와의 관계
 
-Deep Agents 0.5는 영구 메모리를 위한 `StoreBackend`를 별도로 제공합니다. 둘은 _역할이 유사하지만 범위가 다릅니다_.
+Deep Agents 0.5는 영구 메모리를 위한 `StoreBackend`를 별도로 제공합니다. 역할은 비슷하지만 적용 범위가 다릅니다.
 
 #table(
   columns: 3,
@@ -150,7 +150,7 @@ Deep Agents 0.5는 영구 메모리를 위한 `StoreBackend`를 별도로 제공
   [구조화된 프로필·사실 저장],
 )
 
-*조합 팁*: 둘 다 쓸 수 있습니다. Claude가 단기 작업 노트를 `/memories`에 남기고, 장기 프로필은 Deep Agents `StoreBackend`에 넣어 다른 프로바이더 에이전트와 공유하는 패턴이 실용적입니다.
+*조합 팁*: 둘을 함께 써도 됩니다. Claude가 단기 작업 노트를 `/memories`에 남기고, 장기 프로필은 Deep Agents `StoreBackend`에 넣어 다른 프로바이더 에이전트와 공유하는 패턴이 현실적입니다.
 
 == 핵심 정리
 

@@ -44,7 +44,7 @@ LangSmith의 데이터 계층은 네 레벨로 쌓입니다.
   [한 사용자의 세션],
 )
 
-Run 하나에는 `parent_run_id`, `trace_id`, `start_time`, `end_time`, `inputs`, `outputs`, `total_tokens`, `total_cost` 등이 붙습니다. _Trace는 같은 `trace_id`를 공유하는 run들의 트리_일 뿐입니다.
+Run 하나에는 `parent_run_id`, `trace_id`, `start_time`, `end_time`, `inputs`, `outputs`, `total_tokens`, `total_cost` 등이 붙습니다. _Trace는 같은 `trace_id`를 공유하는 run들의 트리_입니다.
 
 #figure(image("../../../assets/images/langsmith/02_tracing_agents/00_runs_populated_full.png", width: 95%), caption: [프로젝트 Runs 리스트 — Name/Input/Output/Error/Latency/Dataset/Tokens/Cost/Tags/Metadata 등 17개 컬럼])
 
@@ -52,7 +52,7 @@ Run 하나에는 `parent_run_id`, `trace_id`, `start_time`, `end_time`, `inputs`
 
 == 2.2 LangGraph StateGraph 트레이스 트리
 
-LangGraph 그래프는 _그래프가 루트 run_, 각 노드가 자식 run, 서브그래프는 네임스페이스가 붙은 손자 run으로 보입니다. 서브그래프의 노드 이름은 UI에서 `parent_node:child_node` 형식으로 표시됩니다.
+LangGraph 그래프는 _그래프가 루트 run_, 각 노드가 자식 run, 서브그래프는 네임스페이스가 붙은 손자 run으로 나타납니다. 서브그래프 노드 이름은 UI에서 `parent_node:child_node` 형식으로 표시됩니다.
 
 #code-block(`````python
 from langgraph.graph import StateGraph
@@ -86,7 +86,7 @@ researcher = AsyncSubAgent(name="researcher", description="장시간 리서치",
 
 == 2.4 세션 뷰 — `thread_id` · `session_id` · `conversation_id`
 
-여러 번의 invoke를 _하나의 대화_로 묶으려면 `metadata`에 세션 식별자를 넣습니다. LangSmith는 `thread_id`, `session_id`, `conversation_id` 중 하나라도 있으면 자동으로 Threads 뷰에 엮습니다.
+여러 번의 invoke를 _하나의 대화_로 묶으려면 `metadata`에 세션 식별자를 넣습니다. `thread_id`, `session_id`, `conversation_id` 중 하나라도 있으면 LangSmith가 자동으로 Threads 뷰에 묶습니다.
 
 #code-block(`````python
 agent.invoke(
@@ -99,7 +99,7 @@ agent.invoke(
 
 == 2.5 런에 피드백 부착 — `client.create_feedback`
 
-평가 점수·사용자 thumbs-up/down·내부 QA 리뷰 결과는 *Feedback*으로 run에 붙입니다.
+평가 점수, 사용자 thumbs-up/down, 내부 QA 리뷰 결과는 *Feedback*으로 run에 붙입니다.
 
 - `key`: 피드백 이름 (예: `"correctness"`, `"user_thumbs"`)
 - `score`: 0~1 사이 실수 또는 임의 숫자
@@ -119,7 +119,7 @@ client.create_feedback(
 
 == 2.6 태그·메타데이터 기반 필터 쿼리
 
-UI 필터와 똑같은 표현식을 `client.list_runs(filter=...)`로 코드에서 쓸 수 있습니다. 회귀 테스트·야간 배치·대시보드 피딩에 유용합니다.
+UI 필터와 똑같은 표현식을 `client.list_runs(filter=...)`로 코드에서 씁니다. 회귀 테스트, 야간 배치, 대시보드 피딩에 두루 씁니다.
 
 #code-block(`````python
 runs = client.list_runs(
@@ -133,7 +133,7 @@ runs = client.list_runs(
 
 == 2.7 400일 보존 한계 → 데이터셋으로 영구화
 
-SaaS LangSmith는 _ingestion 시점부터 400일_ 후 trace가 삭제됩니다. 평가 회귀에 쓰고 싶은 중요한 실행은 _Dataset으로 영구화_해야 합니다. 3장에서 자세히 다루지만, 여기선 패턴만 봅니다.
+SaaS LangSmith는 _ingestion 시점부터 400일_ 후 trace가 삭제됩니다. 평가 회귀에 쓸 실행은 _Dataset으로 영구화_해야 합니다. 3장에서 자세히 다루고, 여기선 패턴만 확인합니다.
 
 #code-block(`````python
 # langsmith 0.7+에서는 add_runs_to_dataset이 제거되었으므로

@@ -4,7 +4,7 @@
 
 #chapter(7, "Bedrock Prompt Caching", subtitle: "AWS 경유 Claude/Nova 캐시")
 
-AWS Bedrock 경유로 Claude/Nova 같은 모델을 호출할 때 `BedrockPromptCachingMiddleware`로 _시스템 프롬프트 · 도구 정의 · 마지막 메시지_ 위치에 자동으로 캐시 체크포인트를 박아 입력 토큰 비용을 낮춥니다. `AnthropicPromptCachingMiddleware`(ch2)와 _파라미터 이름과 의미는 거의 동일_하지만 대상 패키지와 모델별 제약이 다릅니다.
+AWS Bedrock 경유로 Claude/Nova 모델을 호출할 때 `BedrockPromptCachingMiddleware`로 _시스템 프롬프트 · 도구 정의 · 마지막 메시지_ 위치에 캐시 체크포인트를 자동으로 박아 입력 토큰 비용을 낮춥니다. `AnthropicPromptCachingMiddleware`(ch2)와 _파라미터 이름과 의미는 거의 같지만_ 대상 패키지와 모델별 제약이 다릅니다.
 
 #learning-header()
 #learning-objectives(
@@ -34,7 +34,7 @@ load_dotenv()
 
 == 7.3 ChatBedrockConverse + Claude (권장)
 
-Converse API는 Bedrock의 _통합 인터페이스_로, 다양한 모델을 같은 API로 호출할 수 있습니다. `BedrockPromptCachingMiddleware`를 붙이면 system/tool/last-message 위치에 자동으로 캐시 체크포인트가 들어갑니다.
+Converse API는 Bedrock의 _통합 인터페이스_로, 다양한 모델을 같은 API로 호출합니다. `BedrockPromptCachingMiddleware`를 붙이면 system/tool/last-message 위치에 캐시 체크포인트가 자동으로 삽입됩니다.
 
 #warning-box[체크포인트가 실제로 작동하려면 캐시 대상 블록이 _약 1,024 토큰 이상_이어야 합니다. 짧은 system prompt에서는 `cache_creation`이 잡히지 않을 수 있습니다.]
 
@@ -54,7 +54,7 @@ agent = create_agent(
 
 == 7.4 캐시 적중 검증
 
-두 번 연속 호출하고 `usage_metadata.input_token_details`를 읽어 캐시 생성/적중을 확인합니다.
+두 번 연속 호출한 뒤 `usage_metadata.input_token_details`를 읽어 캐시 생성/적중을 확인합니다.
 
 #code-block(`````python
 for i in range(2):
@@ -65,7 +65,7 @@ for i in range(2):
     print(i, last.usage_metadata.get("input_token_details"))
 `````)
 
-`cache_creation`은 1회차에서 커지고, `cache_read`는 2회차 이후에 채워집니다.
+`cache_creation`은 1회차에 채워지고, `cache_read`는 2회차 이후에 늘어납니다.
 
 == 7.5 파라미터 전체
 
@@ -94,7 +94,7 @@ for i in range(2):
 
 == 7.6 ChatBedrock (Invoke 모델) 예시
 
-`ChatBedrock`은 이전 세대 invoke-model 래퍼입니다. `BedrockPromptCachingMiddleware`는 이쪽도 지원하며 `type="ephemeral"` 파라미터가 _여기서는 실제로 반영_됩니다. ChatBedrock 쪽은 Anthropic 모델 한정으로 tool 정의 캐시와 확장 TTL(1h)을 모두 지원합니다.
+`ChatBedrock`은 이전 세대 invoke-model 래퍼입니다. `BedrockPromptCachingMiddleware`는 이쪽도 지원하며 `type="ephemeral"` 파라미터가 _여기서는 실제로 반영_됩니다. `ChatBedrock`은 Anthropic 모델 한정으로 tool 정의 캐시와 확장 TTL(1h)을 모두 지원합니다.
 
 #code-block(`````python
 from langchain_aws import ChatBedrock
@@ -136,7 +136,7 @@ agent = create_agent(
   [X (5m 전용)],
 )
 
-Nova 모델을 대상으로 설정할 때는 `ttl="5m"`로 고정하고, `unsupported_model_behavior="warn"`으로 실수로 `"1h"`를 지정해도 조용히 무시되지 않도록 경고를 남기세요.
+Nova 모델을 쓸 때는 `ttl="5m"`으로 고정하고, `unsupported_model_behavior="warn"`을 설정해 실수로 `"1h"`를 지정했을 때 조용히 넘어가지 않도록 경고를 남기세요.
 
 == 핵심 정리
 
