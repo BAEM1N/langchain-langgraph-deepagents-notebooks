@@ -1,17 +1,17 @@
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-= Part VI: 실전 응용
+= Part VI: LangSmith
 
 #part-page(
   6,
-  "실전 응용",
-  subtitle: "Real-World Applications",
+  "LangSmith",
+  subtitle: "Tracing · Evaluation · Monitoring",
   chapters: (
-    [1. RAG 에이전트],
-    [2. SQL 에이전트],
-    [3. 데이터 분석 에이전트],
-    [4. 머신러닝 에이전트],
-    [5. 딥 리서치 에이전트],
+    [1. Quickstart: 첫 트레이스],
+    [2. 에이전트 트레이스 구조],
+    [3. 데이터셋과 평가 루프],
+    [4. Prompt Hub 버전 관리],
+    [5. 프로덕션 모니터링],
   ),
 )

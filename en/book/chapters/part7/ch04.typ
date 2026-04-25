@@ -1,76 +1,19 @@
-// Source: 08_langsmith/04_prompt_hub.ipynb
+// Auto-generated from 04_ml_agent.ipynb
+// Do not edit manually -- regenerate with nb2typ.py
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-#chapter(4, "Prompt Hub Versioning", subtitle: "Commit SHA · Tag · Playground")
+#chapter(4, "Machine Learning Agent", subtitle: "A Flexible CSV-Based ML Workflow")
 
-Prompts are effectively _code_, yet non-engineers often edit them and the cadence is tight. Avoiding redeploy on every tweak means keeping prompts in _storage decoupled from the application code_ and pinning versions. LangSmith's Prompt Hub plays that role. This chapter covers the push/pull API, commit SHA vs tag, template-engine choices, Playground experiments, and a CI pin strategy.
+== Learning Objectives
 
-#learning-header()
-#learning-objectives(
-  [Upload a prompt with `client.push_prompt("name", object=...)`],
-  [Understand the difference between pinning a commit SHA and referencing a tag like `prod` / `staging`],
-  [Compare the variable handling of f-string vs mustache templates],
-  [Follow the Playground → experiment → commit → tag flow],
-  [Inject prompts at runtime via `client.pull_prompt("name:prod")`],
-  [Pin a specific commit hash in CI tests to prevent regression],
-)
+- Set a data directory with `FilesystemBackend` and let the agent explore files freely
+- Extend the `run_pandas` pattern from NB03 to create a `run_ml_code` tool with scikit-learn
+- Let the agent explore data with built-in tools (`ls`, `read_file`, `glob`) and analyze it with `run_ml_code`
+- Run EDA → preprocessing → model selection → training → evaluation through multi-turn conversation
 
-== 4.1 Creating and pushing a prompt
 
-The simplest flow is to build a `ChatPromptTemplate` and upload it with `client.push_prompt("name", object=prompt)`. The first push creates a new prompt; subsequent pushes add commits. The returned URL opens the prompt directly in the UI.
-
-#code-block(`````python
-from langchain_core.prompts import ChatPromptTemplate
-from langsmith import Client
-
-client = Client()
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a weather assistant. Extract only the city name."),
-    ("user", "{question}"),
-])
-
-url = client.push_prompt("weather-bot", object=prompt)
-print(url)  # https://smith.langchain.com/hub/...
-`````)
-
-#figure(image("../../../../assets/images/langsmith/04_prompt_hub/01_prompt_hub_list.png", width: 95%), caption: [Prompts hub listing — `city-list` (1 commit), `weather-bot` (2 commits). Visibility and short-SHA Last Commit shown])
-
-== 4.2 Commit SHA pinning vs tags (`prod`, `staging`)
-
-Prompts behave like Git.
-
-#table(
-  columns: 4,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Reference style],
-  text(weight: "bold")[Example],
-  text(weight: "bold")[Characteristic],
-  text(weight: "bold")[When to use],
-  [*Commit SHA*],
-  [`weather-bot:12344e88`],
-  [Immutable, pins exactly that version],
-  [CI regression tests, any time reproducibility is required],
-  [*Tag*],
-  [`weather-bot:prod`, `:staging`],
-  [Movable — can be repointed at a different commit],
-  [Runtime deployment slots],
-  [*Latest*],
-  [`weather-bot`],
-  [The most recent commit],
-  [Early development only; never in production],
-)
-
-Tags are the mechanism that lets you swap a prompt without redeploying application code. In the UI's Commits view, *promote* a specific commit to the `prod` tag.
-
-#figure(image("../../../../assets/images/langsmith/04_prompt_hub/02_prompt_detail.png", width: 95%), caption: [Prompt detail — top commit + tabs (Messages / Code Snippet / Comments) with Production / Staging slots on the Environments panel])
-
-== 4.3 f-string vs mustache
-
-The characteristics of the two template engines often matter in practice.
+== Overview
 
 #table(
   columns: 3,
@@ -79,101 +22,260 @@ The characteristics of the two template engines often matter in practice.
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[Item],
-  text(weight: "bold")[f-string (`{var}`)],
-  text(weight: "bold")[mustache (`{{var}}`)],
-  [Default],
-  [LangChain default],
-  [Opt-in],
-  [Embedded JSON examples],
-  [Need `{{` escaping],
-  [No escaping needed],
-  [Conditionals · loops],
-  [Not supported],
-  [`{{#users}}...{{/users}}`],
-  [Nested keys],
-  [Limited],
-  [`{{user.name}}`],
-  [Playground variable declaration],
-  [Auto-detected],
-  [Manual (Inputs)],
+  text(weight: "bold")[NB03 (Data Analysis)],
+  text(weight: "bold")[NB04 (Machine Learning)],
+  [_Backend_],
+  [`LocalShellBackend`],
+  [`FilesystemBackend`],
+  [_Data_],
+  [Sales CSV (8 rows)],
+  [User-provided CSV (demo: breast cancer, 569 rows)],
+  [_Custom tools_],
+  [`get_csv_path` + `run_pandas`],
+  [`run_ml_code` (adds sklearn)],
+  [_Built-in tools_],
+  [—],
+  [`ls`, `read_file`, `glob` (file exploration)],
+  [_Goal_],
+  [Aggregation, statistics, trend analysis],
+  [EDA → preprocessing → model training → comparison],
 )
 
-Mustache is easier when you embed a lot of JSON / code examples or need loops / conditionals; f-string is easier for plain variable substitution.
-
-== 4.4 Playground — from experiment to commit
-
-The UI's *Playground* is where prompts, models, and input variables run together. Flow:
-
-+ Click `Open in Playground` on the prompt page
-+ Adjust model · temperature · output schema · tools in the side panel
-+ Enter variable values and hit `Run` — results and token/cost are recorded immediately
-+ Use `Compare` to run _multiple prompt/model outputs in parallel_ for the same input
-+ Once satisfied, `Save as...` creates a new commit; promote to `prod` if appropriate
-
-All runs started from Playground flow into the Experiments view and connect directly to the datasets from chapter 3.
-
-#figure(image("../../../../assets/images/langsmith/04_prompt_hub/03_playground.png", width: 95%), caption: [Playground — SYSTEM/HUMAN message editing, `{question}` variable input, and output generation with an f-string↔mustache switcher])
-
-== 4.5 Runtime injection — `pull_prompt` → `create_agent`
-
-In the application, fetch the deployment-slot tag with `pull_prompt` and _wire it straight into the LLM / agent_. Editing the prompt takes effect on the next request without redeployment.
 
 #code-block(`````python
-from langchain.agents import create_agent
+from dotenv import load_dotenv
+import os
 
-prompt = client.pull_prompt("weather-bot:prod")
+load_dotenv()
+assert os.environ.get("OPENAI_API_KEY"), "Set OPENAI_API_KEY in .env"
 
-agent = create_agent(
-    model="openai:gpt-4.1",
-    system_prompt=prompt.format_messages()[0].content,
-    tools=[],
-)
 `````)
-
-== 4.6 Pinning a specific commit hash in CI
-
-Take the production deployment slot via the `:prod` tag, but _CI regression tests must pin a commit SHA_. That way, "someone changed the prompt after the tests passed" is auto-blocked.
 
 #code-block(`````python
-# tests/test_prompt_regression.py
-PINNED_SHA = "12344e88"  # CI pin
+from langchain_openai import ChatOpenAI
 
-def test_weather_prompt_still_extracts_city():
-    prompt = client.pull_prompt(f"weather-bot:{PINNED_SHA}")
-    # ... concrete assertions
+model = ChatOpenAI(model="gpt-4.1")
+
 `````)
 
-=== Deployment-pattern summary
+== NB03 vs. NB04: Extending the Backend and Tooling
+
+In NB03, you used `LocalShellBackend` + `run_pandas` to execute pandas code.
+In NB04, you extend that setup in two ways:
+
++ _Backend_: `FilesystemBackend(root_dir=DATA_DIR)` — the agent can freely explore the data directory with built-in tools such as `ls`, `read_file`, and `glob`
++ _Tool_: `run_ml_code` — adds `sklearn` to the execution namespace so the agent can run ML pipelines
+
+#code-block(`````python
+# NB03: LocalShellBackend + run_pandas
+backend = LocalShellBackend(root_dir=tmp_dir, virtual_mode=True)
+ns = {"pd": pd, "np": np, "csv_path": csv_path}
+
+# NB04: FilesystemBackend + run_ml_code
+backend = FilesystemBackend(root_dir=DATA_DIR, virtual_mode=True)
+ns = {"pd": pd, "np": np, "sklearn": sklearn, "DATA_DIR": DATA_DIR}
+`````)
+
+#tip-box[Because `FilesystemBackend` does not expose `execute`, it is safer than `LocalShellBackend`.]
+
+
+== Step 1: Set the Data Directory
+
+If you change `DATA_DIR`, you can point the agent to _your own CSV data_.
+The agent will inspect the directory with built-in tools such as `ls`, `glob`, and `read_file` to understand which files exist.
+
+#code-block(`````python
+# Example: point to your own data directory
+DATA_DIR = "/path/to/your/data"
+`````)
+
+
+#code-block(`````python
+import tempfile
+import pandas as pd
+from sklearn.datasets import load_breast_cancer
+
+# ── Data directory setup ──────────────────────────────
+# Change this to a directory that contains your own CSV files.
+# For this demo, we save the breast_cancer dataset as a CSV.
+DATA_DIR = tempfile.mkdtemp()
+
+# Demo data creation (remove this block if you already have your own CSV)
+data = load_breast_cancer()
+df = pd.DataFrame(data.data, columns=data.feature_names)
+df["target"] = data.target
+df.to_csv(os.path.join(DATA_DIR, "breast_cancer.csv"), index=False)
+
+print(f"DATA_DIR: {DATA_DIR}")
+print(f"Files: {os.listdir(DATA_DIR)}")
+
+`````)
+
+== Step 2: Create the `FilesystemBackend`
+
+`FilesystemBackend` provides built-in file tools below the `root_dir`:
 
 #table(
-  columns: 3,
+  columns: 2,
   align: left,
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Environment],
-  text(weight: "bold")[Reference],
-  text(weight: "bold")[Reason],
-  [dev / local],
-  [`weather-bot` (latest)],
-  [Immediate reflection],
-  [staging],
-  [`weather-bot:staging`],
-  [Promote a tag to test],
-  [prod],
-  [`weather-bot:prod`],
-  [Zero-downtime rollout by moving the tag; rollback is reverting the tag],
-  [CI],
-  [`weather-bot:{SHA}`],
-  [Reproducible; a prompt change immediately shows up as a test failure],
+  text(weight: "bold")[Built-in Tool],
+  text(weight: "bold")[Role],
+  [`ls`],
+  [List directory contents],
+  [`read_file`],
+  [Read file contents],
+  [`glob`],
+  [Find files by pattern],
+  [`write_file`],
+  [Write files (for saving results)],
 )
 
-When you attach `prompt_commit` as experiment metadata in chapter 3, the UI can trace _which commit produced these numbers_ directly.
+#tip-box[`virtual_mode=True` prevents path escape patterns such as `..` or `~`.]
 
-== Key Takeaways
 
-- Prompt Hub works as push → commit accumulation → tag promotion (similar to Git)
-- Tags are runtime deployment slots; SHAs are CI reproducibility pins
-- Pick f-string vs mustache based on loops / conditionals / nesting
-- Playground → Save → promote is the editing path for non-developers
-- Pin SHAs in CI and reference tags in production — that combination is the core of zero-downtime rollout + regression prevention
+#code-block(`````python
+from deepagents.backends import FilesystemBackend
+
+backend = FilesystemBackend(root_dir=DATA_DIR, virtual_mode=True)
+
+`````)
+
+== Step 3: Define `run_ml_code`
+
+Extend the `run_pandas` pattern from NB03 by adding `sklearn` to the execution namespace.
+Pass `DATA_DIR` into the namespace so the agent can load any CSV file inside the directory.
+
+#tip-box[Use built-in `ls` / `read_file` for file exploration and `run_ml_code` for code execution — keep the responsibilities separate.]
+
+
+#code-block(`````python
+from langchain.tools import tool
+import io, contextlib
+
+@tool
+def run_ml_code(code: str) -> str:
+    """Execute sklearn/pandas Python code. Use print() to display results.
+    Available modules: pd, np, sklearn, os. Access the data directory via DATA_DIR."""
+    import pandas as pd, numpy as np, sklearn
+    buf = io.StringIO()
+    ns = {"pd": pd, "np": np, "sklearn": sklearn, "os": os, "DATA_DIR": DATA_DIR}
+    try:
+        with contextlib.redirect_stdout(buf):
+            exec(code, ns)
+        return buf.getvalue() or "Execution finished (no printed output)"
+    except Exception as e:
+        return f"Error: {e}"
+
+`````)
+
+== Step 4: Create the Agent
+
+The agent workflow is:
++ Explore CSV files inside `DATA_DIR` with built-in `ls` / `glob`
++ Preview data with built-in `read_file`
++ Run EDA → preprocessing → model training/comparison with `run_ml_code`
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Middleware],
+  text(weight: "bold")[Role],
+  [`ToolRetryMiddleware`],
+  [Automatically retries failed tool calls (up to 2 times)],
+  [`ModelCallLimitMiddleware`],
+  [Prevents infinite loops by limiting the run to 20 model calls],
+)
+
+
+#code-block(`````python
+from deepagents import create_deep_agent
+from langgraph.checkpoint.memory import InMemorySaver
+from langchain.agents.middleware import (
+    ToolRetryMiddleware,
+    ModelCallLimitMiddleware,
+)
+from prompts import ML_AGENT_PROMPT
+
+ml_agent = create_deep_agent(
+    model=model,
+    tools=[run_ml_code],
+    system_prompt=ML_AGENT_PROMPT,
+    backend=backend,
+    skills=["/skills/"],
+    checkpointer=InMemorySaver(),
+    middleware=[
+        ToolRetryMiddleware(max_retries=2),
+        ModelCallLimitMiddleware(run_limit=20),
+    ],
+)
+
+`````)
+
+== Step 5: File Exploration + EDA
+
+Ask the agent to explore the data directory and analyze the dataset.
+The agent can inspect the file list with built-in `ls` and then perform EDA with `run_ml_code`.
+
+
+== Step 6: Train and Compare Models
+
+Ask the agent to train at least three suitable models and compare them with cross-validation.
+The agent chooses the algorithms by itself.
+
+
+== Step 7: Multi-Turn Follow-Up — Feature Importance
+
+Reuse the same `thread_id` so the follow-up analysis keeps the earlier conversation context.
+
+
+== Step 8: Streaming — Additional Analysis
+
+Observe the execution process in real time with `stream(subgraphs=True)`.
+
+
+== Summary
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Item],
+  text(weight: "bold")[Key Point],
+  [_Backend_],
+  [`FilesystemBackend(root_dir=DATA_DIR)` — point the agent at your data directory],
+  [_Built-in tools_],
+  [`ls`, `read_file`, `glob` — explore files],
+  [_Custom tool_],
+  [`run_ml_code` (pandas + numpy + sklearn) — execute ML code],
+  [_Workflow_],
+  [File exploration → EDA → preprocessing → model selection → cross-validation comparison],
+  [_Multi-turn_],
+  [`InMemorySaver` + same `thread_id` — preserve analysis context],
+)
+
+=== Using Your Own Data
+
+#code-block(`````python
+# Just change DATA_DIR in Step 1
+DATA_DIR = "/path/to/your/data"  # directory containing CSV files
+`````)
+
+The agent will explore files with `ls` and analyze them freely with `run_ml_code`.
+
+#line(length: 100%, stroke: 0.5pt + luma(200))
+
+_References:_
+- `docs/deepagents/06-backends.md`
+- `docs/deepagents/tutorials/data-analysis.md`
+- #link("https://scikit-learn.org/stable/")[scikit-learn documentation]
+
+_Next Step:_ → #link("./05_deep_research_agent.ipynb")[05_deep_research_agent.ipynb]: Build a deep research agent.
+

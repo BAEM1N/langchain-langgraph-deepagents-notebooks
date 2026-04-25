@@ -1,162 +1,214 @@
-// Source: 08_langsmith/01_quickstart.ipynb
+// Auto-generated from 01_rag_agent.ipynb
+// Do not edit manually -- regenerate with nb2typ.py
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-#chapter(1, "LangSmith Quickstart", subtitle: "From the first trace to a UI tour")
+#chapter(1, "RAG Agent", subtitle: "Vector Search-Based Question Answering")
 
-LangSmith is the _LLM application observability platform_ built by the LangChain team. Without changing a line of agent code, adding three environment variables is enough to record every LLM call and tool execution as traces automatically. This chapter walks from API key issuance, to confirming your first trace in the UI, to incorporating plain Python functions into traces via the `@traceable` decorator and `langsmith.Client`.
+== Learning Objectives
 
-#learning-header()
-#learning-objectives(
-  [Issue a LangSmith API key and load it via `.env`],
-  [Confirm that existing agents are auto-traced with just `LANGSMITH_TRACING=true`],
-  [Make traces searchable with `run_name` · `tags` · `metadata`],
-  [Read the trace tree, latency, token usage, and cost in the UI],
-  [Incorporate plain functions into traces with `@traceable`],
+- Build a vector search pipeline with `InMemoryVectorStore`
+- Define a retrieval tool with the `content_and_artifact` return pattern
+- Create and query a RAG agent with `create_deep_agent`
+- Apply v1 middleware (`ModelCallLimitMiddleware`, `ToolRetryMiddleware`)
+- Use the _Skills system_ to progressively disclose RAG domain knowledge
+
+
+== Overview
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Item],
+  text(weight: "bold")[Details],
+  [_Framework_],
+  [LangChain + Deep Agents],
+  [_Core components_],
+  [`InMemoryVectorStore`, `OpenAIEmbeddings`, `RecursiveCharacterTextSplitter`],
+  [_Agent pattern_],
+  [`content_and_artifact` tool → `create_deep_agent`],
+  [_Backend_],
+  [`FilesystemBackend(root_dir=".", virtual_mode=True)`],
+  [_Skill_],
+  [`skills/rag-agent/SKILL.md` — progressive disclosure of RAG domain knowledge],
 )
 
-== 1.1 API keys and environment variables
-
-LangSmith enables tracing with no code changes — three environment variables do it. Add the following to your `.env`.
-
-#code-block(`````dotenv
-LANGSMITH_API_KEY=lsv2_pt_xxxxxxxx
-LANGSMITH_TRACING=true
-LANGSMITH_PROJECT=langsmith-quickstart
-`````)
-
-`LANGSMITH_PROJECT` is the namespace shown in the UI's left sidebar under _Projects_. If you leave it unset, runs are recorded in the `default` project. API keys are shown only once on creation, so copy the key into `.env` immediately.
-
-=== Onboarding flow (first time only)
-
-The first login goes through a four-step onboarding: role selection → mode selection → home → quickstart dialog. Choose the Technical role and LangSmith (code-first) mode to follow the developer track.
-
-#figure(image("../../../../assets/images/langsmith/01_quickstart/00_onboarding_step1_role.png", width: 85%), caption: [Role selection — choosing Technical takes you into the developer-oriented code-first flow])
-
-#figure(image("../../../../assets/images/langsmith/01_quickstart/01_onboarding_step2_mode.png", width: 85%), caption: [LangSmith (code-first) vs Fleet (no-code) — this chapter follows the LangSmith path])
-
-#figure(image("../../../../assets/images/langsmith/01_quickstart/02_home_empty_state.png", width: 85%), caption: [Home right after onboarding — Tracing / Datasets / Prompts all in initial state])
-
-#figure(image("../../../../assets/images/langsmith/01_quickstart/03_get_started_tracing_dialog.png", width: 85%), caption: [The four-step quickstart dialog that opens as the first card on Home])
-
-#figure(image("../../../../assets/images/langsmith/01_quickstart/04_api_key_generated_RAW.png", width: 85%), caption: [Clicking Generate API Key produces an `lsv2_pt_…` key — shown only once, so copy it into `.env` immediately])
-
-== 1.2 Your first trace — a LangChain agent
-
-`create_agent` is _auto-instrumented_. As soon as the environment variables are set, the moment the code below runs it lands in LangSmith.
 
 #code-block(`````python
 from dotenv import load_dotenv
-from langchain.agents import create_agent
-from langchain.tools import tool
+import os
 
 load_dotenv()
+assert os.environ.get("OPENAI_API_KEY"), "Set OPENAI_API_KEY in .env"
 
-@tool
-def get_weather(city: str) -> str:
-    """Look up the weather for a city."""
-    return f"{city} is sunny"
-
-agent = create_agent(
-    model="openai:gpt-4.1",
-    tools=[get_weather],
-)
-
-agent.invoke({"messages": [{"role": "user", "content": "What's the weather in Seoul?"}]})
 `````)
-
-After running, that invocation appears as a single row under _Projects → langsmith-quickstart_ in the UI. Clicking it reconstructs the LLM-call → tool-call → LLM-call tree visually.
-
-#figure(image("../../../../assets/images/langsmith/01_quickstart/05_projects_list.png", width: 95%), caption: [Projects list — Trace Count, P50/P99 Latency, Total Tokens, and Total Cost are aggregated automatically])
-
-#figure(image("../../../../assets/images/langsmith/01_quickstart/06_project_runs_list.png", width: 95%), caption: [Run table on the project detail page — Input / Output / Latency / Tokens / Cost / Tags / Metadata in one view])
-
-#figure(image("../../../../assets/images/langsmith/01_quickstart/07_trace_tree_view.png", width: 95%), caption: [Trace Tree — `model → tools → model` order with tokens / latency shown as a waterfall at each step])
-
-== 1.3 run_name · tags · metadata
-
-Attach search and filter metadata to traces with `invoke(..., config=...)`. This is the main lever that makes queries like "show only failures this user had this session" possible in operations.
 
 #code-block(`````python
-agent.invoke(
-    {"messages": [{"role": "user", "content": "Weather in Busan"}]},
-    config={
-        "run_name": "weather-query-demo",
-        "tags": ["env:dev", "feature:weather"],
-        "metadata": {
-            "user_id": "u_00123",
-            "session_id": "s_demo",
-            "app_version": "0.1.0",
-        },
-    },
-)
+from langchain_openai import ChatOpenAI
+
+model = ChatOpenAI(model="gpt-4.1")
+
 `````)
 
-Confirm filtering works in the UI with `Filter → Tags contains env:dev` or `Metadata.user_id = u_00123`.
+== Step 1: Create Sample Documents
 
-#figure(image("../../../../assets/images/langsmith/01_quickstart/08_trace_attributes.png", width: 95%), caption: [Attributes tab — attached Tags / Metadata are visible, and environment / runtime info is auto-captured])
+The first step in a RAG pipeline is preparing the documents you want to search. In a real system, you would load documents from PDFs, web pages, or databases. Here, for learning purposes, we create `Document` objects directly.
 
-== 1.4 Tracing plain Python functions — `@traceable`
-
-Preprocessing / postprocessing helpers that do not go through LangChain can also be incorporated into traces via `@traceable`. They nest as child spans under the parent trace, making it possible to track things like "why did we query this city".
 
 #code-block(`````python
-from langsmith import traceable
+from langchain_core.documents import Document
 
-@traceable(run_type="chain", name="normalize_city")
-def normalize_city(raw: str) -> str:
-    return raw.strip().replace("City", "")
+docs = [
+    Document(page_content="LangChain is a framework for building LLM applications. It supports tools, chains, and agents.", metadata={"source": "langchain"}),
+    Document(page_content="LangGraph is a framework for building stateful workflows. It provides a Graph API and a Functional API.", metadata={"source": "langgraph"}),
+    Document(page_content="Deep Agents is an all-in-one agent SDK. It creates agents with create_deep_agent and supports backends and subagents.", metadata={"source": "deepagents"}),
+    Document(page_content="RAG stands for retrieval-augmented generation. It injects external knowledge into an LLM to produce more accurate answers.", metadata={"source": "rag"}),
+    Document(page_content="A vector store is a database that stores embeddings and performs similarity search. FAISS and Chroma are common examples.", metadata={"source": "vectorstore"}),
+    Document(page_content="An agent is a system in which an LLM uses tools to perform tasks autonomously. ReAct is a representative pattern.", metadata={"source": "agent"}),
+]
+print(f"Created {len(docs)} documents")
 
-@traceable(run_type="chain", name="weather-pipeline")
-def run_weather(user_text: str) -> str:
-    city = normalize_city(user_text)
-    result = agent.invoke(
-        {"messages": [{"role": "user", "content": f"Weather in {city}"}]},
-    )
-    return result["messages"][-1].content
-
-run_weather("Busan City")
 `````)
 
-In the UI, `weather-pipeline` is the root with `normalize_city` and `AgentExecutor` grouped beneath it as a single tree.
+== Step 2: Split the Text
 
-== 1.5 Re-querying traces from code
+Split larger documents into chunks that are easier to retrieve. `RecursiveCharacterTextSplitter` tries to split at natural boundaries such as paragraphs, sentences, and then words.
 
-`langsmith.Client` lets you pull traces programmatically without the UI. Use it as inputs for regression tests, source data for nightly batch reports, or seeds for building datasets.
 
 #code-block(`````python
-from langsmith import Client
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-client = Client()
-
-runs = list(
-    client.list_runs(
-        project_name="langsmith-quickstart",
-        filter='and(has(tags, "env:dev"), eq(is_root, true))',
-        limit=10,
-    )
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=200, chunk_overlap=50
 )
+splits = splitter.split_documents(docs)
+print(f"Split result: {len(splits)} chunks")
 
-for r in runs:
-    print(r.id, r.name, r.total_tokens, r.total_cost)
 `````)
 
-The `filter` expression uses the same DSL that the UI `Add filter` emits.
+== Step 3: Build the Vector Store
 
-== 1.6 Cost and token aggregation
+Convert the text into vectors with an OpenAI embedding model and store them in `InMemoryVectorStore`. In production, you would typically use a persistent store such as FAISS or Chroma.
 
-The _Analytics_ tab at the top-right of the UI project page shows project-level total cost and token time series. LangSmith fills `total_cost` automatically using per-model pricing; self-hosted models can have custom prices set under _Settings → Model pricing_.
 
-== 1.7 Re-issuing API keys
+#code-block(`````python
+from langchain_openai import OpenAIEmbeddings
+from langchain_core.vectorstores import InMemoryVectorStore
 
-To re-issue or revoke a key after onboarding, go to _Settings → Access and Security → API Keys_. Existing keys record their Last Used At automatically; if compromise is suspected, revoke immediately and issue a new one.
+embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+vectorstore = InMemoryVectorStore.from_documents(splits, embeddings)
+print(f"Vector store ready — embedded {len(splits)} documents")
 
-#figure(image("../../../../assets/images/langsmith/01_quickstart/09_settings_api_keys.png", width: 95%), caption: [Settings > API Keys — the Key column shows only the prefix/suffix automatically, and Last Used At is tracked])
+`````)
 
-== Key Takeaways
+== Step 4: Define a Retrieval Tool (`content_and_artifact`)
 
-- Three environment variables (`LANGSMITH_API_KEY`, `LANGSMITH_TRACING=true`, `LANGSMITH_PROJECT`) auto-trace existing agents
-- `run_name` · `tags` · `metadata` surface runs in UI filters and `client.list_runs(filter=...)` queries
-- `@traceable` pulls non-LangChain functions into the same trace tree
-- `langsmith.Client` fetches traces programmatically to seed evaluation and regression tests
-- The three UI levels — Projects / Runs / Trace tree — reproduce "which call produced what"
+The `response_format="content_and_artifact"` pattern makes the tool return two things:
+- _content_: a text summary shown to the agent
+- _artifact_: the full `Document` objects for downstream processing
+
+This pattern helps save context tokens while still preserving access to the original data.
+
+
+#code-block(`````python
+from langchain.tools import tool
+
+@tool(response_format="content_and_artifact")
+def retrieve(query: str):
+    """Search for relevant documents in the vector store."""
+    results = vectorstore.similarity_search(query, k=3)
+    content = "\n\n".join(d.page_content for d in results)
+    return content, results
+
+`````)
+
+== Step 5: Test the Retrieval Tool by Itself
+
+Before connecting the tool to the agent, verify that it behaves correctly.
+
+
+#code-block(`````python
+result = retrieve.invoke({"query": "What is an agent?"})
+print(result)
+
+`````)
+
+== Step 6: Create the RAG Agent (with v1 Middleware)
+
+Load the prompt from the prompt module. The flow tries LangSmith Hub → Langfuse → a local default prompt.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Middleware],
+  text(weight: "bold")[Role],
+  [`ModelCallLimitMiddleware`],
+  [Prevents infinite loops by limiting the number of model calls],
+  [`ToolRetryMiddleware`],
+  [Automatically retries failed retrieval tool calls],
+)
+
+
+#code-block(`````python
+from deepagents import create_deep_agent
+from deepagents.backends import FilesystemBackend
+from langchain.agents.middleware import (
+    ModelCallLimitMiddleware,
+    ToolRetryMiddleware,
+)
+from prompts import RAG_AGENT_PROMPT
+
+agent = create_deep_agent(
+    model=model,
+    tools=[retrieve],
+    system_prompt=RAG_AGENT_PROMPT,
+    backend=FilesystemBackend(root_dir=".", virtual_mode=True),
+    skills=["/skills/"],
+    middleware=[
+        ModelCallLimitMiddleware(run_limit=10),
+        ToolRetryMiddleware(max_retries=2),
+    ],
+)
+
+`````)
+
+== Step 7: Run a Simple Query and a Comparison Query
+
+Use a simple query (single retrieval) and a comparison-style query (multiple retrieval steps) to verify that the RAG agent works as expected.
+
+
+== Summary
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Item],
+  text(weight: "bold")[Key Point],
+  [_Vector store_],
+  [`InMemoryVectorStore.from_documents()` — embedding-based similarity search],
+  [_Retrieval tool_],
+  [`\@tool(response_format="content_and_artifact")` — summary + original artifact separation],
+  [_Agent_],
+  [`create_deep_agent(model, tools=[retrieve], backend=..., skills=["/skills/"])`],
+  [_Skill_],
+  [`skills/rag-agent/SKILL.md` — saves tokens through progressive disclosure],
+)
+
+#line(length: 100%, stroke: 0.5pt + luma(200))
+
+_References:_
+- `docs/langchain/24-retrieval.md`
+- #link("https://python.langchain.com/docs/tutorials/rag/")[LangChain RAG Tutorial]
+- `docs/deepagents/10-skills.md`
+
+_Next Step:_ → #link("./02_sql_agent.ipynb")[02_sql_agent.ipynb]: Build a SQL agent.
+
