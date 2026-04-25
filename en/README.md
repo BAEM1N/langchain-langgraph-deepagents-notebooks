@@ -80,9 +80,9 @@ typst compile --root . book/main.typ    book/out/main.pdf     # ko
 | III | LangGraph v1 | 13 |
 | IV | Deep Agents (0.5 async subagents · production · context engineering · streaming · permissions) | 15 |
 | V | Advanced patterns | 10 |
-| VI | Applied examples | 5 |
-| **VII** | **LangSmith** (new in v1) | 5 |
-| **VIII** | **Integrations** (new in v1 — 7 provider-middleware chapters) | 9 |
+| **VI** | **LangSmith** | 5 |
+| VII | Applied examples | 5 |
+| VIII | Integrations (incl. 7 provider-middleware chapters) | 9 |
 
 ---
 

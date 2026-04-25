@@ -80,9 +80,9 @@ typst compile --root . en/book/main.typ en/book/out/main.pdf   # en
 | III | LangGraph v1 | 13 |
 | IV | Deep Agents (0.5 async subagents · production · context engineering · streaming · permissions) | 15 |
 | V | 고급 패턴 | 10 |
-| VI | 실전 응용 | 5 |
-| **VII** | **LangSmith** (v1 신규) | 5 |
-| **VIII** | **Integrations** (v1 신규 — provider middleware 7종 포함) | 9 |
+| **VI** | **LangSmith** | 5 |
+| VII | 실전 응용 예제 | 5 |
+| VIII | Integrations (provider middleware 7종 포함) | 9 |
 
 ---
 

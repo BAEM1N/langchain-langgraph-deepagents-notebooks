@@ -1,162 +1,284 @@
-// Source: 08_langsmith/02_tracing_agents.ipynb
+// Auto-generated from 02_sql_agent.ipynb
+// Do not edit manually -- regenerate with nb2typ.py
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-#chapter(2, "에이전트 트레이스 구조", subtitle: "Subgraph · SubAgent · Thread · Feedback")
+#chapter(2, "SQL 에이전트", subtitle: "자연어 데이터베이스 질의")
 
-1장에서 `create_agent` 한 번의 실행을 UI에서 봤다면, 이 장은 _LangGraph StateGraph · Deep Agents 서브에이전트 · 비동기 태스크_처럼 중첩 구조가 있는 에이전트가 어떻게 트레이스로 그려지는지를 다룹니다. Run/Trace/Project/Thread 4층 개념, 서브그래프 네임스페이스, 동기 vs 비동기 서브에이전트의 트레이스 차이, feedback API, 400일 보존 한계까지 운영 관점 이슈를 정리합니다.
+이전 장에서 구축한 RAG 에이전트가 비정형 문서를 검색했다면, SQL 에이전트는 관계형 데이터베이스의 정형 데이터에 접근합니다. 자연어를 SQL 쿼리로 변환하는 에이전트는 비개발자도 데이터베이스에 접근할 수 있게 하는 대표적인 실전 응용입니다. 이 장에서는 `SQLDatabaseToolkit`으로 도구를 자동 생성하고, `AGENTS.md` 기반 안전 규칙으로 READ-ONLY 제약을 적용하며, `HumanInTheLoopMiddleware`로 쿼리 실행 전 사용자 승인을 구현합니다.
 
 #learning-header()
-#learning-objectives(
-  [Run · Trace · Project · Thread의 관계를 이해한다 (run = span, trace = span tree)],
-  [LangGraph 서브그래프가 부모 트레이스 안에서 네임스페이스 자식으로 표시되는 방식을 확인한다],
-  [Deep Agents 동기 서브에이전트와 비동기 서브에이전트(`async_tasks` 채널) 트레이스 차이를 구분한다],
-  [`thread_id` / `session_id`로 여러 실행을 세션 뷰에 묶는다],
-  [`client.create_feedback(run_id, key, score)`로 런에 평가 점수를 부착한다],
-  [`client.list_runs(filter=...)`로 태그·메타데이터 기반 프로그램 필터링을 한다],
-  [400일 보존 한계를 넘기기 위해 주요 트레이스를 _데이터셋으로 영구화_한다],
-)
+#learning-objectives([SQLDatabaseToolkit으로 SQL 도구를 자동 생성한다], [AGENTS.md 기반 안전 규칙(READ-ONLY)을 적용한다], [HITL(Human-in-the-Loop) interrupt로 쿼리 실행 전 승인을 구현한다], [v1 미들웨어(HumanInTheLoopMiddleware, ModelCallLimitMiddleware)를 명시적으로 적용한다])
 
-== 2.1 Run · Trace · Project · Thread 개념
-
-LangSmith의 데이터 계층은 네 레벨로 쌓입니다.
+== 개요
 
 #table(
-  columns: 3,
+  columns: 2,
   align: left,
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[레벨],
-  text(weight: "bold")[정의],
-  text(weight: "bold")[예],
-  [*Project*],
-  [같은 애플리케이션의 트레이스를 모아두는 컨테이너],
-  [`langsmith-tracing-agents`],
-  [*Trace*],
-  [하나의 사용자 요청을 처리하는 동안 만들어진 run 트리 (최대 25,000 run / trace)],
-  [에이전트 한 번 invoke],
-  [*Run*],
-  [단일 span — LLM 호출, tool 호출, chain 노드 등],
-  [`ChatOpenAI`, `get_weather`],
-  [*Thread*],
-  [`thread_id`/`session_id`/`conversation_id`로 묶인 여러 trace — 멀티턴 대화 뷰],
-  [한 사용자의 세션],
+  text(weight: "bold")[항목],
+  text(weight: "bold")[내용],
+  [_프레임워크_],
+  [LangChain + Deep Agents],
+  [_핵심 컴포넌트_],
+  [SQLDatabaseToolkit, SQLDatabase, InMemorySaver],
+  [_에이전트 패턴_],
+  [AGENTS.md 안전 규칙 + Skills 기반 워크플로],
+  [_HITL_],
+  [`interrupt_on` + `Command(resume="approve")`],
+  [_데이터베이스_],
+  [Chinook (SQLite)],
+  [_스킬_],
+  [`skills/sql-agent/SKILL.md` — SQL 안전 규칙 + 쿼리 워크플로],
 )
 
-Run 하나에는 `parent_run_id`, `trace_id`, `start_time`, `end_time`, `inputs`, `outputs`, `total_tokens`, `total_cost` 등이 붙습니다. _Trace는 같은 `trace_id`를 공유하는 run들의 트리_일 뿐입니다.
-
-#figure(image("../../../assets/images/langsmith/02_tracing_agents/00_runs_populated_full.png", width: 95%), caption: [프로젝트 Runs 리스트 — Name/Input/Output/Error/Latency/Dataset/Tokens/Cost/Tags/Metadata 등 17개 컬럼])
-
-#figure(image("../../../assets/images/langsmith/02_tracing_agents/01_subgraph_tree_namespace.png", width: 95%), caption: [LangGraph subgraph trace tree — `PatchToolCallsMiddleware → model → ChatOpenAI → TodoListMiddleware` 체인이 네임스페이스로 구성됨])
-
-== 2.2 LangGraph StateGraph 트레이스 트리
-
-LangGraph 그래프는 _그래프가 루트 run_, 각 노드가 자식 run, 서브그래프는 네임스페이스가 붙은 손자 run으로 보입니다. 서브그래프의 노드 이름은 UI에서 `parent_node:child_node` 형식으로 표시됩니다.
-
 #code-block(`````python
-from langgraph.graph import StateGraph
-from langsmith import tracing_context
+from dotenv import load_dotenv
+import os
 
-with tracing_context(name="writer-pipeline", tags=["env:dev"]):
-    result = pipeline.invoke({"topic": "agent streaming"})
+load_dotenv()
+assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY를 .env에 설정하세요"
+
 `````)
 
-UI에서 `writer-pipeline` 트레이스를 열면 루트 아래 `research`, `writer` 노드가 자식이고, `writer` 안에 `writer:outline`, `writer:draft` 손자 run이 네임스페이스와 함께 표시됩니다. _서브그래프 경로가 run 이름에 그대로 박히므로_ `name contains writer:` 같은 필터를 쓸 수 있습니다.
-
-== 2.3 Deep Agents 서브에이전트 트레이스 (동기 · 비동기)
-
-Deep Agents의 서브에이전트는 부모 run 아래 독립된 자식 트리로 나타납니다.
-
-- *동기* (`SubAgent` dict): 부모가 블로킹되므로 단일 trace. `task` 툴 호출 run 아래에 서브에이전트의 LLM/tool 호출이 중첩됩니다.
-- *비동기* (`AsyncSubAgent`): 별개의 Agent Protocol 서버에서 실행되므로 부모와 _다른 trace_로 기록됩니다. 부모 상태의 `async_tasks` 채널에 `task_id`만 남고, 부모 trace에는 `start_async_task` / `check_async_task` 같은 관리 tool 호출만 보입니다.
-
-#figure(image("../../../assets/images/langsmith/02_tracing_agents/02_subagent_sync_trace.png", width: 95%), caption: [Deep Agents 동기 서브에이전트 + user_thumbs 1.00 feedback — `tools → task → researcher` 체인과 Feedback 탭])
-
-#figure(image("../../../assets/images/langsmith/02_tracing_agents/05_thread_detail_conversation.png", width: 95%), caption: [Thread Turn View — 각 turn의 Input/Output을 대화 버블로 표시, `task call` description과 `subagent_type: researcher` YAML 노출])
-
 #code-block(`````python
-from deepagents import AsyncSubAgent
+from langchain_openai import ChatOpenAI
 
-researcher = AsyncSubAgent(name="researcher", description="장시간 리서치", graph_id="researcher")
-# 부모 trace: start_async_task 툴 호출만
-# 자식 trace: researcher 그래프가 별개 trace (동일 thread_id로 묶임)
-# 상태 보존: async_tasks 채널은 compaction 을 거쳐도 살아남음
+model = ChatOpenAI(model="gpt-4.1")
+
 `````)
 
-== 2.4 세션 뷰 — `thread_id` · `session_id` · `conversation_id`
+SQL 에이전트의 구현은 _스키마 탐색 → 쿼리 생성 → 검증 → 실행 → 결과 해석_의 워크플로를 따릅니다. `SQLDatabaseToolkit`이 이 워크플로에 필요한 4개 도구를 자동으로 생성해 주므로, 에이전트 구현에 집중할 수 있습니다.
 
-여러 번의 invoke를 _하나의 대화_로 묶으려면 `metadata`에 세션 식별자를 넣습니다. LangSmith는 `thread_id`, `session_id`, `conversation_id` 중 하나라도 있으면 자동으로 Threads 뷰에 엮습니다.
+== 1단계: 데이터베이스 연결
+
+Chinook은 디지털 음악 스토어의 샘플 데이터베이스입니다. Artist, Album, Track, Invoice 등의 테이블을 포함합니다. `SQLDatabase.from_uri()`는 SQLAlchemy의 연결 문자열을 받아 데이터베이스에 연결하며, 테이블 메타데이터를 자동으로 반영(reflect)합니다. SQLite, PostgreSQL, MySQL 등 SQLAlchemy가 지원하는 모든 데이터베이스를 동일한 인터페이스로 사용할 수 있습니다.
+
+#warning-box[프로덕션에서는 `SQLDatabase.from_uri()`에 _읽기 전용 사용자_의 연결 문자열을 사용해야 합니다. 시스템 프롬프트의 "DML 금지" 지시만으로는 안전하지 않습니다 -- LLM은 지시를 무시할 수 있으므로, DB 레벨에서 `GRANT SELECT ON ...` 권한만 부여하는 것이 근본적인 안전장치입니다.]
+
 
 #code-block(`````python
-agent.invoke(
-    {"messages": [{"role": "user", "content": "..."}]},
-    config={"metadata": {"thread_id": "t_demo_0001", "user_id": "u_alice"}},
+from langchain_community.utilities import SQLDatabase
+
+db = SQLDatabase.from_uri("sqlite:///../05_advanced/Chinook.db")
+print(f"테이블: {db.get_usable_table_names()}")
+
+`````)
+#output-block(`````
+테이블: ['Album', 'Artist', 'Customer', 'Employee', 'Genre', 'Invoice', 'InvoiceLine', 'MediaType', 'Playlist', 'PlaylistTrack', 'Track']
+`````)
+
+== 2단계: SQLDatabaseToolkit 도구 생성
+
+`SQLDatabaseToolkit`은 데이터베이스 연결에서 4개의 도구를 자동 생성합니다:
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[도구],
+  text(weight: "bold")[설명],
+  [`sql_db_list_tables`],
+  [사용 가능한 테이블 목록 조회],
+  [`sql_db_schema`],
+  [테이블 스키마(DDL) 조회],
+  [`sql_db_query`],
+  [SQL 쿼리 실행],
+  [`sql_db_query_checker`],
+  [쿼리 실행 전 문법 검증],
+)
+
+
+#code-block(`````python
+from langchain_community.agent_toolkits import SQLDatabaseToolkit
+
+toolkit = SQLDatabaseToolkit(db=db, llm=model)
+sql_tools = toolkit.get_tools()
+for t in sql_tools:
+    print(f"  {t.name}: {t.description[:60]}")
+
+`````)
+#output-block(`````
+sql_db_query: Input to this tool is a detailed and correct SQL query, outp
+  sql_db_schema: Input to this tool is a comma-separated list of tables, outp
+  sql_db_list_tables: Input is an empty string, output is a comma-separated list o
+  sql_db_query_checker: Use this tool to double check if your query is correct befor
+`````)
+
+== 3단계: 프롬프트 로드 (LangSmith / Langfuse / 기본값)
+
+의  함수가 프롬프트를 로드합니다:
++ _LangSmith Hub_ — 가 있으면 Hub에서 pull
++ _Langfuse_ — 가 있으면 Langfuse에서 로드
++ _기본값_ — 둘 다 없으면 코드에 정의된 기본 프롬프트 사용
+
+SQL 에이전트 프롬프트에는 READ-ONLY 안전 규칙과 워크플로가 포함되어 있습니다.
+
+#code-block(`````python
+from prompts import SQL_AGENT_PROMPT
+
+print(SQL_AGENT_PROMPT)
+`````)
+#output-block(`````
+Prompt 'rag-agent-label:production' not found during refresh, evicting from cache.
+
+Prompt 'sql-agent-label:production' not found during refresh, evicting from cache.
+
+Prompt 'data-analysis-agent-label:production' not found during refresh, evicting from cache.
+
+Prompt 'ml-agent-label:production' not found during refresh, evicting from cache.
+
+Prompt 'deep-research-agent-label:production' not found during refresh, evicting from cache.
+
+당신은 SQL 에이전트입니다.
+
+## 워크플로
+1. sql_db_list_tables로 테이블 목록을 확인하세요
+2. sql_db_schema로 관련 테이블의 스키마를 조회하세요
+3. SQL 쿼리를 작성하고 sql_db_query_checker로 검증하세요
+4. sql_db_query로 실행하고 결과를 해석하세요
+
+## 안전 규칙
+- READ-ONLY: SELECT만 허용. INSERT, UPDATE, DELETE, DROP 금지
+- 항상 LIMIT 10을 사용하세요
+- 쿼리 실행 전 반드시 스키마를 확인하세요
+- 복잡한 쿼리는 write_todos로 단계별 계획을 세우세요
+`````)
+
+프롬프트가 에이전트의 _기본 행동 규칙_을 정의한다면, Skills는 특정 작업 수행 시 참조할 수 있는 _전문 지침_을 제공합니다. Skills의 핵심은 _필요한 시점에만 로드_된다는 것입니다.
+
+== 4단계: Skills 개념
+
+Skills는 에이전트의 워크플로 가이드입니다. Part 5 ch04에서 학습한 Progressive Disclosure 패턴의 실전 적용입니다. 에이전트가 SQL 작업을 수행할 때 참조할 수 있는 구조화된 지침을 제공합니다. 반복되는 작업 패턴을 문서화하여 에이전트가 일관된 방식으로 작업하도록 합니다.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[스킬],
+  text(weight: "bold")[용도],
+  [`query-writing`],
+  [테이블 확인 → 스키마 조회 → SQL 작성 → 실행],
+  [`schema-exploration`],
+  [테이블 목록 → DDL 조회 → 관계 매핑],
+)
+
+
+== 5단계: 기본 SQL 에이전트 생성
+
+도구, 프롬프트, Skills가 모두 준비되었으니 에이전트를 조립합니다. `create_deep_agent`에 SQL 도구와 시스템 프롬프트를 전달하여 에이전트를 생성합니다. `FilesystemBackend`는 에이전트가 분석 결과나 쿼리 이력을 파일로 저장할 수 있도록 파일시스템 접근을 제공합니다.
+
+#tip-box[SQL 에이전트의 시스템 프롬프트에 현재 DB의 dialect(SQLite, PostgreSQL 등)를 명시하면 LLM이 해당 방언에 맞는 SQL 구문을 생성합니다. 예를 들어, SQLite에서는 `LIMIT`을, SQL Server에서는 `TOP`을, Oracle에서는 `ROWNUM`을 사용하도록 안내할 수 있습니다.]
+
+
+#code-block(`````python
+from deepagents import create_deep_agent
+from deepagents.backends import FilesystemBackend
+
+agent = create_deep_agent(
+    model=model,
+    tools=sql_tools,
+    system_prompt=SQL_AGENT_PROMPT,
+    backend=FilesystemBackend(root_dir=".", virtual_mode=True),
+    skills=["/skills/"],
 )
 `````)
 
-#figure(image("../../../assets/images/langsmith/02_tracing_agents/04_thread_view.png", width: 95%), caption: [Threads 탭 — 동일 `thread_id` 공유 run들이 대화 세션으로 묶임. First Input / Last Output / turns / tokens / cost / P50·P99 Latency 자동 집계])
+기본 에이전트가 동작하는 것을 확인했습니다. 프로덕션에서는 에이전트가 생성한 SQL 쿼리를 실행하기 전에 _반드시 사람이 검토_해야 합니다. 의도하지 않은 대규모 조인이나 민감 데이터 접근을 사전에 차단하기 위해서입니다.
 
-== 2.5 런에 피드백 부착 — `client.create_feedback`
+기본 에이전트가 동작하는 것을 확인했습니다. 이제 프로덕션에서 가장 중요한 안전 장치인 Human-in-the-Loop을 적용합니다. 에이전트가 생성한 SQL 쿼리가 의도하지 않은 대규모 조인이나 민감 데이터 접근을 포함할 수 있으므로, 실행 전 사람의 검토가 필수입니다.
 
-평가 점수·사용자 thumbs-up/down·내부 QA 리뷰 결과는 *Feedback*으로 run에 붙입니다.
+== 6단계: HITL 에이전트 (interrupt_on)
 
-- `key`: 피드백 이름 (예: `"correctness"`, `"user_thumbs"`)
-- `score`: 0~1 사이 실수 또는 임의 숫자
-- `value`, `comment`: 선택
+`create_deep_agent`의 `interrupt_on` 파라미터로 도구별 승인 정책을 설정합니다. `sql_db_query` 도구만 중단 대상으로 지정하면, 테이블 목록 조회나 스키마 조회 같은 안전한 작업은 자동으로 진행되고, 실제 데이터를 반환하는 쿼리 실행 단계에서만 사람의 승인을 요청합니다. `sql_db_query` 호출 전에 실행이 중단되고, `Command(resume=...)`로 재개합니다.
 
-#code-block(`````python
-from langsmith import Client
-
-client = Client()
-client.create_feedback(
-    run_id=latest_run.id,
-    key="user_thumbs",
-    score=1.0,
-    comment="정답을 정확히 뽑아냄",
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[파라미터],
+  text(weight: "bold")[역할],
+  [`interrupt_on={"sql_db_query": True}`],
+  [`sql_db_query` 호출 전 실행 중단, 사람 승인 대기],
+  [`ModelCallLimitMiddleware`],
+  [무한 루프 방지 — 최대 15회 모델 호출 제한],
+  [`InMemorySaver`],
+  [체크포인팅으로 중단/재개 지원],
 )
-`````)
-
-== 2.6 태그·메타데이터 기반 필터 쿼리
-
-UI 필터와 똑같은 표현식을 `client.list_runs(filter=...)`로 코드에서 쓸 수 있습니다. 회귀 테스트·야간 배치·대시보드 피딩에 유용합니다.
 
 #code-block(`````python
-runs = client.list_runs(
-    project_name="langsmith-tracing-agents",
-    filter='and(has(tags, "env:prod"), eq(run_type, "chain"))',
-    limit=50,
-)
-`````)
+from langgraph.checkpoint.memory import InMemorySaver
+from langchain.agents.middleware import ModelCallLimitMiddleware
 
-#figure(image("../../../assets/images/langsmith/02_tracing_agents/06_add_filter_menu.png", width: 95%), caption: [Add filter 메뉴: Tag·Metadata가 별도 필드로 존재 — `tags contains env:dev` 같은 조건 쿼리 가능])
-
-== 2.7 400일 보존 한계 → 데이터셋으로 영구화
-
-SaaS LangSmith는 _ingestion 시점부터 400일_ 후 trace가 삭제됩니다. 평가 회귀에 쓰고 싶은 중요한 실행은 _Dataset으로 영구화_해야 합니다. 3장에서 자세히 다루지만, 여기선 패턴만 봅니다.
-
-#code-block(`````python
-# langsmith 0.7+에서는 add_runs_to_dataset이 제거되었으므로
-# create_examples로 run의 inputs/outputs를 직접 example로 변환한다.
-golden_runs = [r for r in runs if r.feedback.get("user_thumbs") == 1]
-ds = client.create_dataset("agent-golden-traces",
-                           description="사람이 승인한 황금 trace")
-client.create_examples(
-    dataset_id=ds.id,
-    examples=[
-        {"inputs": r.inputs,
-         "outputs": r.outputs,
-         "metadata": {"source_run_id": str(r.id)}}
-        for r in golden_runs if r.outputs
+hitl_agent = create_deep_agent(
+    model=model,
+    tools=sql_tools,
+    system_prompt=SQL_AGENT_PROMPT,
+    backend=FilesystemBackend(root_dir=".", virtual_mode=True),
+    skills=["/skills/"],
+    checkpointer=InMemorySaver(),
+    interrupt_on={"sql_db_query": True},
+    middleware=[
+        ModelCallLimitMiddleware(run_limit=15),
     ],
 )
 `````)
 
-== 핵심 정리
+== 7단계: 승인 후 재개
 
-- Project → Trace → Run + Thread(세션 묶음) 4층 개념이 모든 UI 뷰의 기초
-- LangGraph 서브그래프는 네임스페이스가 run 이름에 박히므로 필터 가능
-- Deep Agents 동기 서브에이전트는 단일 trace, 비동기는 별개 trace — `async_tasks` 채널로 추적
-- `thread_id`/`session_id` 메타데이터가 Threads 뷰 묶음을 트리거
-- Feedback API + `list_runs(filter=...)`로 평가 루프의 프로그램적 연결
-- 400일 보존 한계를 넘기려면 Dataset으로 이관
+에이전트가 `sql_db_query`를 호출하려 하면 실행이 중단됩니다. 이 시점에서 사용자는 에이전트가 생성한 SQL 쿼리를 검토할 수 있습니다. 쿼리가 적절하면 승인하고, 수정이 필요하면 수정된 쿼리를 전달하며, 부적절하면 거부 사유와 함께 거부합니다. 거부 시 에이전트는 사유를 참고하여 새로운 쿼리를 생성할 수 있습니다.
+
+#warning-box[HITL 패턴을 사용할 때 반드시 `InMemorySaver` 등의 체크포인터를 설정해야 합니다. 체크포인터 없이 `interrupt_on`을 설정하면 실행 중단 후 상태가 소실되어 재개가 불가능합니다. 프로덕션에서는 `PostgresSaver`를 사용하여 서버 재시작 후에도 중단된 세션을 재개할 수 있도록 하세요.] 사람이 쿼리를 검토한 후 `Command(resume=...)`로 승인, 수정, 또는 거부를 결정합니다. v1에서는 `HITLResponse` 형식으로 결정을 전달합니다.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[결정 유형],
+  text(weight: "bold")[설명],
+  [`{"type": "approve"}`],
+  [도구 호출 승인 — 그대로 실행],
+  [`{"type": "edit", "edited_action": {...}}`],
+  [도구 호출 수정 후 실행],
+  [`{"type": "reject", "message": "..."}`],
+  [도구 호출 거부 — 에이전트에 피드백],
+)
+
+#chapter-summary-header()
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[항목],
+  text(weight: "bold")[핵심],
+  [_도구 생성_],
+  [`SQLDatabaseToolkit(db, llm).get_tools()` → 4개 SQL 도구 자동 생성],
+  [_안전 규칙_],
+  [AGENTS.md로 READ-ONLY 정책 적용],
+  [_Skills_],
+  [query-writing, schema-exploration 워크플로 가이드],
+  [_HITL_],
+  [`interrupt_on={"sql_db_query": True}` → `Command(resume="approve")`],
+)
+
+
+#references-box[
+- `docs/deepagents/examples/03-text-to-sql-agent.md`
+- #link("https://python.langchain.com/docs/tutorials/sql_qa/")[LangChain SQL Agent Tutorial]
+- `docs/deepagents/06-backends.md`
+_다음 단계:_ → #link("./03_data_analysis_agent.ipynb")[03_data_analysis_agent.ipynb]: 데이터 분석 에이전트를 구축합니다.
+]
+#chapter-end()

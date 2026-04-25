@@ -1,53 +1,19 @@
-// Source: 08_langsmith/05_production_monitoring.ipynb
+// Auto-generated from 05_deep_research_agent.ipynb
+// Do not edit manually -- regenerate with nb2typ.py
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-#chapter(5, "Production Monitoring", subtitle: "Dashboards · Alerts · Sampling · PII")
+#chapter(5, "Deep Research Agent", subtitle: "Parallel Subagents and a Five-Step Workflow")
 
-Production is not "let's capture a clean trace" — it is a real-time dashboard + automatic evaluation + alerting + PII defense running together. This chapter bundles the LangSmith features you need after deployment from an operational angle: Monitoring dashboards, autoeval rules, the user-feedback API, alert rules, sampling, PII scrubbing, and Slack/PagerDuty webhook integration.
+== Learning Objectives
 
-#learning-header()
-#learning-objectives(
-  [Read latency p50/p95, cost, and success rate on the project dashboard (Overview / Analytics)],
-  [Register an online evaluator as an autoeval rule that runs automatically],
-  [Send user thumbs/ratings from the app with `client.create_feedback(run_id, ...)`],
-  [Understand metadata-based alert rules (failure rate > N% → webhook)],
-  [Sample high-volume production traffic with `LANGSMITH_TRACING_SAMPLING_RATE`],
-  [Defend in depth with `PIIMiddleware` and `hide_inputs`/`anonymizer`],
-  [Configure Slack / PagerDuty webhook receivers],
-)
+- Configure three parallel subagents (`researcher-1`, `researcher-2`, `fact-checker`)
+- Implement strategic reflection with `think_tool`
+- Design a five-step workflow (Plan → Delegate → Synthesize → Verify → Report)
+- Apply v1 middleware (`SummarizationMiddleware`, `ModelCallLimitMiddleware`, `ModelFallbackMiddleware`)
 
-== 5.1 Project dashboard
 
-Each project page has three default tabs in the UI.
-
-#table(
-  columns: 3,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Tab],
-  text(weight: "bold")[What you see],
-  text(weight: "bold")[Alert integration],
-  [*Runs*],
-  [Trace list, filters, quick search],
-  [—],
-  [*Monitor*],
-  [Latency p50·p95·p99, success rate, error distribution, token/cost time series],
-  [Threshold alerts via Rules],
-  [*Evaluators*],
-  [Attached online evaluators and score distributions],
-  [Alerts on specific key-score drops],
-)
-
-To _build your own dashboard_, assemble custom charts in `Dashboards`. Or pull the same metrics with `client.list_runs` and attach them to an in-house system like Grafana.
-
-#figure(image("../../../../assets/images/langsmith/05_production_monitoring/01_monitoring_dashboards_list.png", width: 95%), caption: [Project Monitoring Dashboards — six tabs (Traces / LLM Calls / Cost & Tokens / Tools / Run Types / Feedback Scores) × time range])
-
-== 5.2 Online evaluator — autoeval rule
-
-Chapter 3 showed how to attach one from the UI; here we look at _operational design_.
+== Overview
 
 #table(
   columns: 2,
@@ -55,66 +21,82 @@ Chapter 3 showed how to attach one from the UI; here we look at _operational des
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Role],
-  text(weight: "bold")[Example setup],
-  [Real-time quality gauge],
-  [LLM-as-judge (`useful` score 0–1) on runs matching `has(tags, "env:prod")`],
-  [Cost control],
-  [Sampling rate 0.05 → evaluate only 5%],
-  [Regression detection],
-  [Rule triggers a webhook when the `useful` average drops below N%],
-  [Specific use case],
-  [Attach only to runs with `metadata.feature == "checkout"`],
+  text(weight: "bold")[Item],
+  text(weight: "bold")[Details],
+  [_Framework_],
+  [Deep Agents],
+  [_Core components_],
+  [Three parallel subagents, `think_tool`],
+  [_Workflow_],
+  [5 steps: Plan → Delegate → Synthesize → Verify → Report],
+  [_Backend_],
+  [`FilesystemBackend(root_dir=".", virtual_mode=True)`],
+  [_Built-in tools_],
+  [`write_todos` (planning), `task` (subagent call)],
+  [_Skill_],
+  [`skills/deep-research/SKILL.md` — research method + citation rules],
 )
 
-autoeval results are stored as feedback keys, so alert rules, dashboards, and experiment comparisons all reuse them.
-
-#figure(image("../../../../assets/images/langsmith/05_production_monitoring/03_automations_tab.png", width: 95%), caption: [Project > Automations tab — `+ Automation` to define condition (Feedback score < 0.5) → action (dataset ingestion / webhook / annotation queue)])
-
-== 5.3 User feedback collection API
-
-The canonical pattern is: thumbs-up / rating / "not helpful" button in the app UI → server calls `client.create_feedback`. Fire in the _background_ so the client does not wait (Python SDK handles this automatically if you pass a `trace_id`).
 
 #code-block(`````python
-from langsmith import Client
+from dotenv import load_dotenv
+import os
 
-client = Client()
-client.create_feedback(
-    trace_id=trace_id,
-    key="user_thumbs",
-    score=1.0,
-    comment="Correct",
-)
+load_dotenv()
+assert os.environ.get("OPENAI_API_KEY"), "Set OPENAI_API_KEY in .env"
+
 `````)
 
-== 5.4 Metadata-based alert rules
+#code-block(`````python
+from langchain_openai import ChatOpenAI
 
-Combine the following actions in the project's *Rules* tab.
+model = ChatOpenAI(model="gpt-4.1")
 
-- `Add to annotation queue` (human review)
-- `Add to dataset` (golden set)
-- `Trigger webhook` (Slack, PagerDuty, in-house incident system)
-- `Extend data retention` (extend retention for important traces)
-- `Run online evaluator` (conditional quality evaluation)
-
-*Example filter expression*
-
-#code-block(`````text
-and(
-  has(tags, "env:prod"),
-  eq(status, "error")
-)
 `````)
 
-Action execution order (fixed by LangSmith): annotation queue → dataset → webhook → online evaluator → code evaluator → alert. Sampling rate can also be set per rule (e.g., 0.5 = 50% of matches).
+== Step 1: `think_tool` — A Strategic Reflection Tool
 
-#figure(image("../../../../assets/images/langsmith/05_production_monitoring/02_alerts_page.png", width: 95%), caption: [Monitoring > Alerts — the organization-wide alert hub. Clicking `Create Alert` opens a modal])
+`think_tool` lets the agent record “thoughts” before it acts. This pattern can improve the quality of agent decision-making:
 
-#figure(image("../../../../assets/images/langsmith/05_production_monitoring/05_create_alert_modal.png", width: 95%), caption: [Create Alert modal — select a tracing project, then specify a condition (error rate / latency / feedback change) → webhook URL])
+- Analyze search results and plan the next action
+- Evaluate whether the collected information is sufficient
+- Make delegated tasks more specific before sending them to subagents
 
-== 5.5 High-volume sampling
 
-At hundreds of requests per second, sending every trace wastes cost and bandwidth. Control it in two layers.
+#code-block(`````python
+from langchain.tools import tool
+
+@tool
+def think_tool(thought: str) -> str:
+    """Strategic reflection — analyze the current situation and plan the next action."""
+    return f"Reflection recorded: {thought}"
+
+`````)
+
+== Step 2: A Simplified `web_search` Tool
+
+In a real deep research workflow, you would typically use the Tavily API. Here, for learning purposes, we define a simplified search tool.
+
+
+#code-block(`````python
+@tool
+def web_search(query: str) -> str:
+    """Perform a web search (simulated)."""
+    results = {
+        "AI agent": "AI agents are systems that perform tasks autonomously. Their adoption has accelerated rapidly since 2024.",
+        "LangGraph": "LangGraph is a stateful workflow framework. It supports both the Graph API and the Functional API.",
+        "Deep Agents": "Deep Agents is an all-in-one agent SDK. It supports subagents, backends, and skills.",
+    }
+    for key, val in results.items():
+        if key.lower() in query.lower():
+            return val
+    return f"Search result for '{query}': no relevant information found."
+
+`````)
+
+== Step 3: Prompt for the Five-Step Research Workflow
+
+The prompt loader pulls the prompt using the following order: LangSmith Hub → Langfuse → local default.
 
 #table(
   columns: 3,
@@ -122,80 +104,196 @@ At hundreds of requests per second, sending every trace wastes cost and bandwidt
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Layer],
-  text(weight: "bold")[Mechanism],
-  text(weight: "bold")[Characteristic],
-  [Process-wide],
-  [`LANGSMITH_TRACING_SAMPLING_RATE=0.1`],
-  [Applies to `@traceable`, `RunTree`, and all auto-instrumentation],
-  [Per-request],
-  [`Client(tracing_sampling_rate=...)` + `tracing_context`],
-  [Keep admin / payment requests at 100%],
+  text(weight: "bold")[Step],
+  text(weight: "bold")[Name],
+  text(weight: "bold")[Description],
+  [1],
+  [_Plan_],
+  [Create a research plan with `write_todos`],
+  [2],
+  [_Delegate_],
+  [Parallelize investigation across subagents (up to 3 at once)],
+  [3],
+  [_Synthesize_],
+  [Combine the gathered information],
+  [4],
+  [_Verify_],
+  [Ask the fact-checker to verify the claims],
+  [5],
+  [_Report_],
+  [Produce the final report],
 )
 
-Combining them implements policies such as "10% sampling for normal traffic, 100% for payment traffic."
-
-== 5.6 PII scrubbing
-
-Defend in two layers.
-
-+ *Model-input stage*: `langchain.agents.middleware.PIIMiddleware` blocks or masks email / card numbers / API keys in messages before they reach the LLM — so the model itself never sees PII
-+ *Trace-transmission stage*: the LangSmith client's `hide_inputs` / `hide_outputs` or `anonymizer` scrubs inputs / outputs one more time before they ship to the server
-
-You need both so there is no "made it into the model but not into the trace" and no "model never saw it but it ended up in the trace".
-
-#code-block(`````dotenv
-# .env
-LANGSMITH_HIDE_INPUTS=true
-LANGSMITH_HIDE_OUTPUTS=true
-`````)
-
-== 5.7 Slack / PagerDuty webhook integration
-
-The webhook action in Rules POSTs a payload to the URL you configure. The receiver converts it into Slack/PagerDuty format and raises the alert.
 
 #code-block(`````python
-from fastapi import FastAPI, Request
-import httpx, os
+from prompts import RESEARCH_AGENT_PROMPT
 
-app = FastAPI()
-SLACK_URL     = os.environ["SLACK_INCOMING_WEBHOOK"]
-PAGERDUTY_URL = os.environ.get("PAGERDUTY_EVENTS_V2_URL")
+print(RESEARCH_AGENT_PROMPT)
 
-@app.post("/langsmith/alert")
-async def on_alert(req: Request):
-    event = await req.json()
-    run_id  = event.get("run_id") or event.get("trace_id")
-    status  = event.get("status", "unknown")
-    tags    = event.get("tags", [])
-    trace_url = f"https://smith.langchain.com/o/-/projects/-/r/{run_id}"
-
-    async with httpx.AsyncClient() as hc:
-        await hc.post(SLACK_URL, json={
-            "text": f":rotating_light: LangSmith alert — status={status} tags={tags}\n<{trace_url}|open trace>",
-        })
-        if PAGERDUTY_URL and "critical" in tags:
-            await hc.post(PAGERDUTY_URL, json={
-                "routing_key": os.environ["PAGERDUTY_ROUTING_KEY"],
-                "event_action": "trigger",
-                "payload": {"summary": f"LangSmith {status}", "severity": "error", "source": "langsmith"},
-            })
-    return {"ok": True}
 `````)
 
-Register this endpoint URL as a webhook target in the UI's Rules and set the filter to `and(has(tags, "env:prod"), eq(status, "error"))` to Slack only production errors.
+== Step 4: Define Three Subagents
 
-== 5.8 Insights Agent (paid)
+The deep research agent uses three specialized subagents:
 
-Project > Insights tab — the LangSmith *Insights Agent* automatically extracts usage patterns / common failure modes from production traces. The free plan requires an upgrade.
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Subagent],
+  text(weight: "bold")[Role],
+  text(weight: "bold")[Tools],
+  [`researcher-1`],
+  [Primary topic research],
+  [`web_search`, `think_tool`],
+  [`researcher-2`],
+  [Complementary or contrasting research],
+  [`web_search`, `think_tool`],
+  [`fact-checker`],
+  [Verify factual accuracy],
+  [`web_search`],
+)
 
-#figure(image("../../../../assets/images/langsmith/05_production_monitoring/04_insights_tab.png", width: 95%), caption: [Insights tab — Upgrade required. Production-trace auto-analysis on paid plans])
 
-== Key Takeaways
+#code-block(`````python
+researcher_1 = {
+    "name": "researcher-1",
+    "description": "Performs in-depth research on the topic",
+    "system_prompt": "You are a research specialist. Investigate the topic deeply and summarize the key findings. Reflect with think_tool after searching.",
+    "tools": [web_search, think_tool],
+}
 
-- Dashboards · Evaluators · Automations — the three tabs are the production-observability backbone
-- Online evaluator + Rules webhook connect "real-time quality → alerts"
-- Send user feedback in the background and expose score trends per `key` on the dashboard
-- Sampling combines global (env var) + per-request (`tracing_context`) layers
-- PII is protected in two layers: `PIIMiddleware` (model) + `anonymizer`/`hide_inputs` (trace)
-- A webhook receiver routes to Slack / PagerDuty — the default filter is `env:prod` + `status=error`
+`````)
+
+#code-block(`````python
+researcher_2 = {
+    "name": "researcher-2",
+    "description": "Performs complementary research from another perspective",
+    "system_prompt": "You are a complementary researcher. Collect additional information from a different angle. Reflect with think_tool after searching.",
+    "tools": [web_search, think_tool],
+}
+
+`````)
+
+#code-block(`````python
+fact_checker = {
+    "name": "fact-checker",
+    "description": "Verifies the factual correctness of collected information",
+    "system_prompt": "You are a fact-checker. Verify the accuracy of the provided information and point out any errors.",
+    "tools": [web_search],
+}
+
+`````)
+
+== Step 5: Create the Deep Research Agent (with v1 Middleware)
+
+Combine the tools and subagents into the final agent. The v1 middleware improves stability and reliability:
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Middleware],
+  text(weight: "bold")[Role],
+  [`SummarizationMiddleware`],
+  [Automatically summarizes long research conversations to save context],
+  [`ModelCallLimitMiddleware`],
+  [Prevents research loops by limiting the run to 30 model calls],
+  [`ModelFallbackMiddleware`],
+  [Falls back to a backup model if the primary model fails],
+)
+
+Enable checkpointing with `InMemorySaver` so interrupted research runs can resume.
+
+
+#code-block(`````python
+from deepagents import create_deep_agent
+from deepagents.backends import FilesystemBackend
+from langgraph.checkpoint.memory import InMemorySaver
+from langchain.agents.middleware import (
+    SummarizationMiddleware,
+    ModelCallLimitMiddleware,
+    ModelFallbackMiddleware,
+)
+
+research_agent = create_deep_agent(
+    model=model,
+    tools=[web_search, think_tool],
+    subagents=[researcher_1, researcher_2, fact_checker],
+    system_prompt=RESEARCH_AGENT_PROMPT,
+    backend=FilesystemBackend(root_dir=".", virtual_mode=True),
+    skills=["/skills/"],
+    checkpointer=InMemorySaver(),
+    middleware=[
+        SummarizationMiddleware(model=model, trigger=("messages", 15)),
+        ModelCallLimitMiddleware(run_limit=30),
+        ModelFallbackMiddleware("gpt-4.1-mini"),
+    ],
+)
+
+`````)
+
+== Step 6: Run the Research Workflow
+
+Give the agent a research topic and let it execute the five-step workflow.
+
+
+== Step 7: Streaming — Track Namespaces
+
+With `stream(subgraphs=True)`, you can follow the execution of the main agent and the subagents by namespace. This makes it easy to see when each subagent is called.
+
+
+== Subagent Design Best Practices
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Principle],
+  text(weight: "bold")[Description],
+  [_Clear descriptions_],
+  [Write specific `description` values so the main agent knows when to delegate],
+  [_Specialized prompts_],
+  [Put output format, constraints, and workflow expectations into `system_prompt`],
+  [_Minimal tools_],
+  [Give each subagent only the tools it actually needs],
+  [_Concise outputs_],
+  [Tell subagents to return summaries rather than raw data],
+)
+
+
+== Summary
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Item],
+  text(weight: "bold")[Key Point],
+  [`think_tool`],
+  [Strategic reflection — analyze search results and plan the next step],
+  [_Subagents_],
+  [Parallel execution with `researcher-1`, `researcher-2`, and `fact-checker`],
+  [_Workflow_],
+  [Plan → Delegate → Synthesize → Verify → Report],
+  [_Context management_],
+  [Only subagent results are passed back to the main agent; intermediate work stays isolated],
+)
+
+#line(length: 100%, stroke: 0.5pt + luma(200))
+
+_References:_
+- `docs/deepagents/examples/02-deep-research.md`
+- `docs/deepagents/07-subagents.md`
+- `docs/deepagents/06-backends.md`
+
+_Previous Step:_ ← #link("./04_ml_agent.ipynb")[04_ml_agent.ipynb]: Machine learning agent
+

@@ -1,17 +1,17 @@
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-= Part VII: LangSmith
+= Part VII: Applied Examples
 
 #part-page(
   7,
-  "LangSmith",
-  subtitle: "Tracing · Evaluation · Monitoring",
+  "Applied Examples",
+  subtitle: "Real-World Applications",
   chapters: (
-    [1. Quickstart: Your First Trace],
-    [2. Agent Trace Structure],
-    [3. Datasets and the Evaluation Loop],
-    [4. Prompt Hub Versioning],
-    [5. Production Monitoring],
+    [1. RAG Agent],
+    [2. SQL Agent],
+    [3. Data Analysis Agent],
+    [4. ML Agent],
+    [5. Deep Research Agent],
   ),
 )
