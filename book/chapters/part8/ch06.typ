@@ -4,7 +4,7 @@
 
 #chapter(6, "Anthropic File Search", subtitle: "가상 파일의 glob + grep")
 
-`StateFileSearchMiddleware`는 그래프 상태 안에 들어 있는 가상 파일(예: `text_editor_files`, `memory_files`)을 _glob + grep_으로 검색할 수 있게 해 주는 Claude 네이티브 도구를 제공합니다. 텍스트 에디터/메모리 미들웨어가 "파일을 만들고 편집"한다면, 이 미들웨어는 그 위에서 "파일을 찾고 읽는" 역할을 담당합니다.
+`StateFileSearchMiddleware`는 그래프 상태 안에 있는 가상 파일(예: `text_editor_files`, `memory_files`)을 _glob + grep_으로 검색하는 Claude 네이티브 도구를 제공합니다. 텍스트 에디터/메모리 미들웨어가 "파일을 만들고 편집"한다면, 이 미들웨어는 그 위에서 "파일을 찾고 읽는" 역할입니다.
 
 #learning-header()
 #learning-objectives(
@@ -37,7 +37,7 @@ load_dotenv()
 
 == 6.3 텍스트 에디터 + 파일 검색 조합
 
-검색은 단독으로는 의미가 없습니다 — _파일이 먼저 상태에 있어야_ 합니다. 가장 흔한 조합은 text editor로 파일을 만들고 file search로 찾는 패턴입니다.
+검색은 단독으로 쓸 수 없습니다 — _파일이 먼저 상태에 있어야_ 합니다. 가장 많이 쓰는 조합은 text editor로 파일을 만들고 file search로 찾는 패턴입니다.
 
 #table(
   columns: 3,
@@ -65,7 +65,7 @@ agent = create_agent(
 
 == 6.4 1단계 — 여러 파일을 상태에 심는다
 
-모델에게 몇 개의 노트 파일을 `/docs/` 아래에 만들어 달라고 요청합니다. 이후 검색 쿼리에서 이 파일들이 타깃이 됩니다.
+모델에게 `/docs/` 아래에 노트 파일 몇 개를 만들어 달라고 요청합니다. 이후 검색 쿼리에서 이 파일들이 대상이 됩니다.
 
 #code-block(`````python
 cfg = {"configurable": {"thread_id": "search-demo"}}
@@ -87,7 +87,7 @@ agent.invoke(
 
 == 6.5 2단계 — 같은 에이전트가 glob/grep으로 검색
 
-동일 스레드에서 이어 호출하면 이전 파일들이 상태에 남아 있습니다. 모델은 `StateFileSearchMiddleware`가 제공하는 `glob`과 `grep` 도구로 파일을 찾고 내용을 읽습니다.
+같은 스레드에서 이어 호출하면 이전 파일들이 상태에 남아 있습니다. 모델은 `StateFileSearchMiddleware`가 제공하는 `glob`과 `grep` 도구로 파일을 찾고 내용을 읽습니다.
 
 #code-block(`````python
 result = agent.invoke(
@@ -127,15 +127,15 @@ agent = create_agent(
 
 == 6.7 vectorstore와의 선택 기준
 
-- *정확한 파일명/패턴*이 중요하고, 의미 검색이 아닌 _리터럴 grep_이면 충분할 때
-- 문서 수가 _수십~수백 개_ 수준이고 매 턴 임베딩을 다시 할 비용이 아까울 때
+- *정확한 파일명/패턴*이 중요하고 _리터럴 grep_으로 충분할 때
+- 문서 수가 _수십~수백 개_ 수준이고 매 턴 임베딩을 다시 돌릴 비용이 아까울 때
 - 파일이 _현재 세션에서 방금 만들어진_ 것이라 벡터 인덱스가 없을 때
 
 대규모 코퍼스나 의미 검색이 필요하면 Part VIII Chat Models/Vector Stores 영역(향후 확장)으로 넘어갑니다.
 
 == 핵심 정리
 
-- `StateFileSearchMiddleware`는 상태 안 가상 파일에 대해 glob + grep을 제공한다
+- `StateFileSearchMiddleware`는 상태 안 가상 파일을 glob + grep으로 검색한다
 - text editor + file search 조합이 "쓰고 → 찾고 → 읽는" 루프의 기본
 - `state_key`를 바꿔 메모리 파일도 검색 대상으로 돌리되, 중복 미들웨어 제약은 서브클래싱으로 우회
 - 리터럴 검색이 충분할 때는 벡터스토어보다 이 미들웨어가 저비용

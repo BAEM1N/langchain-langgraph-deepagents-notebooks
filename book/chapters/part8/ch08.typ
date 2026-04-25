@@ -4,7 +4,7 @@
 
 #chapter(8, "OpenAI Moderation", subtitle: "정책 위반 콘텐츠 사전/사후 차단")
 
-`OpenAIModerationMiddleware`는 OpenAI Moderation API로 _사용자 입력 · 모델 출력 · 도구 결과_를 자동 스캔하고, 정책 위반이 감지되면 대화를 차단·교체·예외 처리합니다. 공개 챗봇의 혐오·폭력·자해 카테고리 선제 차단, 외부 도구 결과의 2차 오염 방지에 쓰입니다.
+`OpenAIModerationMiddleware`는 OpenAI Moderation API로 _사용자 입력 · 모델 출력 · 도구 결과_를 자동 스캔하고, 정책 위반이 감지되면 대화를 차단·교체·예외로 처리합니다. 공개 챗봇의 혐오·폭력·자해 카테고리를 선제 차단하거나, 외부 도구 결과의 2차 오염을 막을 때 씁니다.
 
 #learning-header()
 #learning-objectives(
@@ -34,7 +34,7 @@ load_dotenv()
 
 == 8.3 기본 사용 — 입출력 모두 검사, 위반 시 종료
 
-기본 설정은 `check_input=True`, `check_output=True`, `exit_behavior="end"`. 사용자 입력이 Moderation API에 걸리면 모델 호출 자체를 건너뛰고 _위반 메시지로 대화가 종료_됩니다.
+기본 설정은 `check_input=True`, `check_output=True`, `exit_behavior="end"`. 사용자 입력이 Moderation API에 걸리면 모델 호출 없이 바로 _위반 메시지로 대화를 종료_합니다.
 
 #table(
   columns: 3,
@@ -78,11 +78,11 @@ agent = create_agent(
 
 == 8.4 `exit_behavior="end"` — 위반 입력 즉시 종료
 
-유해 카테고리(예: 자해 유도)가 감지되면 모델 호출 없이 바로 위반 메시지로 마감됩니다. 응답 마지막 메시지에는 기본 위반 메시지가 들어갑니다.
+유해 카테고리(예: 자해 유도)가 감지되면 모델 호출 없이 위반 메시지로 바로 마감합니다. 응답 마지막 메시지에는 기본 위반 메시지가 담깁니다.
 
 == 8.5 `exit_behavior="error"` — 예외로 빠르게 실패
 
-테스트/배치 환경에서 위반을 _조용히 넘기지 않고_ 예외로 띄우고 싶을 때 사용합니다. `OpenAIModerationError`가 발생하며 상위 파이프라인에서 catch해 감사 로그에 남길 수 있습니다.
+테스트/배치 환경에서 위반을 _조용히 넘기지 않고_ 예외로 띄울 때 씁니다. `OpenAIModerationError`가 발생하며 상위 파이프라인에서 catch해 감사 로그에 남깁니다.
 
 #code-block(`````python
 from langchain_openai.middleware import OpenAIModerationError
@@ -102,7 +102,7 @@ except OpenAIModerationError as e:
 
 == 8.6 `exit_behavior="replace"` — 메시지만 교체하고 계속
 
-출력 검사에서 위반이 잡히면 _해당 응답만 위반 메시지로 교체_하고 그래프 실행은 계속됩니다. 멀티턴 대화에서 _대화 자체는 끊지 않고_ 특정 응답만 정리할 때 유용합니다.
+출력 검사에서 위반이 잡히면 _해당 응답만 위반 메시지로 교체_하고 그래프 실행은 이어집니다. 멀티턴 대화에서 _흐름은 끊지 않고_ 특정 응답만 정리할 때 쓰는 모드입니다.
 
 #code-block(`````python
 agent = create_agent(
@@ -124,7 +124,7 @@ agent = create_agent(
 
 == 8.7 도구 결과 스캔 (`check_tool_results=True`)
 
-웹 검색·크롤링·DB 조회 도구 결과에 _제3자가 작성한 유해 콘텐츠_가 섞여 모델에 그대로 들어가는 걸 막습니다. 비용은 도구 호출 수에 비례해 늘어나므로 _신뢰할 수 없는 외부 소스_를 건드리는 파이프라인에서만 켭니다.
+웹 검색·크롤링·DB 조회 결과에 _제3자 유해 콘텐츠_가 섞여 모델에 들어가는 것을 막습니다. 비용은 도구 호출 수에 비례해 늘어나므로 _신뢰할 수 없는 외부 소스_를 쓰는 파이프라인에서만 켭니다.
 
 #code-block(`````python
 agent = create_agent(

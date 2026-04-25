@@ -4,7 +4,7 @@
 
 #chapter(2, "Anthropic Prompt Caching", subtitle: "서버 측 캐시로 입력 토큰 90% 절감")
 
-Claude 모델 전용 프롬프트 캐시 미들웨어 `AnthropicPromptCachingMiddleware`는 긴 system prompt, 도구 정의, 초기 대화 컨텍스트를 Anthropic 서버 측에 5분~1시간 캐시해 _입력 토큰 비용과 지연을 크게 절감_합니다. 같은 에이전트가 같은 시스템 프롬프트로 여러 번 호출될 때, 두 번째 호출부터는 입력 토큰 단가가 약 90% 할인됩니다.
+Claude 모델 전용 프롬프트 캐시 미들웨어 `AnthropicPromptCachingMiddleware`는 긴 system prompt, 도구 정의, 초기 대화 컨텍스트를 Anthropic 서버 측에 5분~1시간 캐시해 _입력 토큰 비용과 지연을 크게 줄입니다_. 같은 에이전트가 같은 시스템 프롬프트로 여러 번 호출될 때, 두 번째 호출부터는 입력 토큰 단가가 약 90% 할인됩니다.
 
 #learning-header()
 #learning-objectives(
@@ -52,7 +52,7 @@ agent = create_agent(
 
 == 2.4 캐시 적중 확인
 
-같은 에이전트로 연속 두 번 호출하고 `usage_metadata`를 읽으면 캐시 적중 여부가 드러납니다. 1회차는 `cache_creation_input_tokens`가, 2회차 이후는 `cache_read_input_tokens`가 커집니다.
+같은 에이전트를 연속 두 번 호출하고 `usage_metadata`를 읽으면 캐시 적중 여부가 드러납니다. 1회차는 `cache_creation_input_tokens`가, 2회차 이후는 `cache_read_input_tokens`가 커집니다.
 
 #code-block(`````python
 for i in range(2):
@@ -102,11 +102,11 @@ AnthropicPromptCachingMiddleware(
 )
 `````)
 
-1시간 캐시는 긴 상담 세션, 일간 배치 분석 작업처럼 _같은 시스템 프롬프트로 수 시간 동안 반복 호출_되는 시나리오에 적합합니다. 5분 기본값은 실시간 챗봇의 사용자 연속 입력용입니다.
+1시간 캐시는 긴 상담 세션이나 일간 배치 분석처럼 _같은 시스템 프롬프트로 수 시간 반복 호출_되는 경우에 맞습니다. 5분 기본값은 실시간 챗봇의 연속 입력용입니다.
 
 == 2.6 비 Anthropic 모델 동작
 
-이 미들웨어는 내부적으로 `cache_control` 블록을 주입하므로, 다른 공급자 모델에서는 무시되거나 에러가 됩니다. 모델 교체 가능한 파이프라인을 설계할 때는 `unsupported_model_behavior`를 명시하세요.
+이 미들웨어는 내부적으로 `cache_control` 블록을 주입하므로, 다른 공급자 모델에서는 무시되거나 에러로 이어집니다. 모델을 교체할 수 있는 파이프라인이라면 `unsupported_model_behavior`를 명시하세요.
 
 #code-block(`````python
 # 경고만 남기고 계속
@@ -121,7 +121,7 @@ AnthropicPromptCachingMiddleware(unsupported_model_behavior="raise")
 
 == 2.7 Bedrock과의 차이
 
-AWS Bedrock 경유로 Claude를 호출하는 경우에는 `BedrockPromptCachingMiddleware`(ch7)를 사용합니다. 두 미들웨어는 파라미터 이름과 의미가 거의 같지만, _대상 패키지_와 TTL 제약(Nova 모델은 5m만 지원, tool 정의 캐시 미지원)이 다릅니다.
+AWS Bedrock 경유로 Claude를 호출할 때는 `BedrockPromptCachingMiddleware`(ch7)를 씁니다. 파라미터 이름과 의미는 거의 같지만, _대상 패키지_와 TTL 제약(Nova 모델은 5m만 지원, tool 정의 캐시 미지원)이 다릅니다.
 
 == 핵심 정리
 

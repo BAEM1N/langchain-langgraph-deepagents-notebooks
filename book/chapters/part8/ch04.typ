@@ -4,7 +4,7 @@
 
 #chapter(4, "Claude Text Editor", subtitle: "State vs Filesystem 변형")
 
-Claude 네이티브 `text_editor_20250728` 도구는 `view` / `create` / `str_replace` / `insert` / `delete` / `rename` 6가지 오퍼레이션을 지원합니다. LangChain은 이 도구를 두 변형으로 래핑한 미들웨어를 제공합니다 — _State 변형_은 LangGraph 상태 안의 가상 파일로, _Filesystem 변형_은 실제 디렉터리에 쓰기를 수행합니다. 산출물의 수명이 스레드 내에서 끝나는지, 디스크에 남아야 하는지로 선택합니다.
+Claude 네이티브 `text_editor_20250728` 도구는 `view` / `create` / `str_replace` / `insert` / `delete` / `rename` 6가지 오퍼레이션을 지원합니다. LangChain은 이 도구를 두 변형 미들웨어로 제공합니다 — _State 변형_은 LangGraph 상태 안의 가상 파일로, _Filesystem 변형_은 실제 디렉터리에 씁니다. 산출물이 스레드 내에서만 쓰이는지, 디스크에 남아야 하는지로 선택합니다.
 
 #learning-header()
 #learning-objectives(
@@ -38,7 +38,7 @@ load_dotenv()
 
 == 4.3 State 변형 — 그래프 상태 안 가상 파일
 
-`StateClaudeTextEditorMiddleware`는 파일 내용을 LangGraph 상태의 `text_editor_files` 키에 저장합니다. 디스크에 쓰지 않으므로 _스레드가 끝나면 사라지는_ 임시 작업에 적합합니다.
+`StateClaudeTextEditorMiddleware`는 파일 내용을 LangGraph 상태의 `text_editor_files` 키에 저장합니다. 디스크에 쓰지 않으므로 _스레드가 끝나면 사라지는_ 임시 작업에 어울립니다.
 
 #code-block(`````python
 agent = create_agent(
@@ -129,7 +129,7 @@ agent = create_agent(
 
 == 4.6 일반 파일 도구와의 관계
 
-Deep Agents의 `FilesystemMiddleware`나 커스텀 `@tool`로 짠 `read_file` / `write_file`도 동일한 목적을 달성할 수 있습니다. 차이점은 _Claude가 이 도구를 학습 단계에서 이미 봤다_는 것 — 도구 스키마 토큰이 줄고 오류가 적습니다. Claude 전용 파이프라인이라면 이 미들웨어를 우선 쓰고, 멀티 프로바이더면 일반 파일 도구로 내리는 것이 기본 전략입니다.
+Deep Agents의 `FilesystemMiddleware`나 커스텀 `@tool`로 짠 `read_file` / `write_file`도 같은 목적을 달성합니다. 차이는 _Claude가 이 도구를 학습 단계에서 이미 봤다_는 점 — 도구 스키마 토큰이 줄고 오류가 적습니다. Claude 전용 파이프라인이라면 이 미들웨어를 먼저 쓰고, 멀티 프로바이더라면 일반 파일 도구로 내리는 것이 기본 전략입니다.
 
 == 핵심 정리
 
