@@ -19,7 +19,7 @@ LLM Agent 개발을 위한 **한국어 교육 자료** 프로젝트. 초급(LLM 
 | `03_langgraph/` | LangGraph 그래프 API, 워크플로, 지속성 | 중급 | 01 완료 | 13 |
 | `04_deepagents/` | Deep Agents SDK 하네스, 백엔드, 스킬 | 중급 | 01 완료 | 10 |
 | `05_advanced/` | 프로덕션 패턴, 멀티에이전트, RAG, SQL | 고급 | 02-04 중 1개 이상 | 10 |
-| `06_examples/` | 실전 응용 예제 (RAG, SQL, 데이터분석, ML, 딥리서치) + SKILL.md 통합 | 중급-고급 | 04 완료 | 5 |
+| `07_examples/` | 실전 응용 예제 (RAG, SQL, 데이터분석, ML, 딥리서치) + SKILL.md 통합 | 중급-고급 | 04 완료 | 5 |
 
 ## docs/ 구조
 
@@ -103,9 +103,9 @@ lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
 
 코드 작성 전 관련 스킬 문서를 참조할 것.
 
-### 06_examples 실전 스킬 (SKILL.md)
+### 07_examples 실전 스킬 (SKILL.md)
 
-`06_examples/skills/` 디렉토리에 에이전트별 SKILL.md 파일이 있다:
+`07_examples/skills/` 디렉토리에 에이전트별 SKILL.md 파일이 있다:
 
 | 스킬 | 경로 | 용도 |
 |------|------|------|

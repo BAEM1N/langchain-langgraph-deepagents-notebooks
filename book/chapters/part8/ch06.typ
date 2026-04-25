@@ -1,4 +1,4 @@
-// Source: 07_integration/11_provider_middleware/05_anthropic_file_search.ipynb
+// Source: 08_integration/11_provider_middleware/05_anthropic_file_search.ipynb
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 

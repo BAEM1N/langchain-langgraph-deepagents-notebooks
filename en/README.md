@@ -28,33 +28,33 @@ Required: `OPENAI_API_KEY`. Optional: `TAVILY_API_KEY` · `ANTHROPIC_API_KEY` ·
 | **03** [`03_langgraph/`](../03_langgraph/) | LangGraph v1 (13) | Complex workflows | `StateGraph` · checkpointers · subgraphs · Pregel |
 | **04** [`04_deepagents/`](../04_deepagents/) | Deep Agents SDK (10) | All-in-one systems | `create_deep_agent` · backends · subagents · skills |
 | **05** [`05_advanced/`](../05_advanced/) | Advanced patterns (10) | Multi-agent · deploy | middleware deep-dive · RAG · SQL · voice · prod |
-| **06** [`06_examples/`](../06_examples/) | Applied examples (5) | Real projects | RAG · SQL · data analysis · ML · deep research |
-| **07** [`07_integration/`](../07_integration/) | Ecosystem integrations (13 categories, **69 notebooks**) | External tools · providers | ✅ **All categories complete** (executed 42 / key·service-gated 27) |
-| **08** [`08_langsmith/`](../08_langsmith/) | LangSmith (5) | Observability · eval | trace · dataset · evaluator · prompt hub · monitoring |
+| **06** [`07_examples/`](../07_examples/) | Applied examples (5) | Real projects | RAG · SQL · data analysis · ML · deep research |
+| **07** [`08_integration/`](../08_integration/) | Ecosystem integrations (13 categories, **69 notebooks**) | External tools · providers | ✅ **All categories complete** (executed 42 / key·service-gated 27) |
+| **08** [`06_langsmith/`](../06_langsmith/) | LangSmith (5) | Observability · eval | trace · dataset · evaluator · prompt hub · monitoring |
 
 Per-notebook topics: see each folder's `README.md`.
 
 ---
 
-## `07_integration/` · 13 categories
+## `08_integration/` · 13 categories
 
 LangChain's 11 official integration categories + LangGraph Store + Observability.
 
 | # | Category | Status |
 |---|----------|--------|
-| 01 [chat_models](../07_integration/01_chat_models/) | OpenAI · Anthropic · Google · Ollama · Bedrock · Groq · Mistral · Cohere · routers | ✅ 9/9 |
-| 02 [embeddings](../07_integration/02_embeddings/) | OpenAI · Google · Cohere · Voyage · Ollama · HuggingFace | ✅ 6/6 |
-| 03 [vectorstores](../07_integration/03_vectorstores/) | InMemory/FAISS · Chroma · PGVector · Pinecone · Qdrant · Weaviate · Milvus · ES | ✅ 8/8 |
-| 04 [document_loaders](../07_integration/04_document_loaders/) | PDF · Web · Cloud Storage · Productivity · Structured | ✅ 5/5 |
-| 05 [retrievers](../07_integration/05_retrievers/) | BM25+Ensemble · MultiVector · SelfQuery · Web · Vendor | ✅ 5/5 |
-| 06 [text_splitters](../07_integration/06_text_splitters/) | Character/Recursive · Markdown/HTML/Code · Semantic | ✅ 3/3 |
-| 07 [tools](../07_integration/07_tools/) | Search · code exec · SQL · Playwright · productivity · knowledge | ✅ 6/6 |
-| 08 [checkpointers](../07_integration/08_checkpointers/) | InMemory · SQLite · Postgres · CosmosDB | ✅ 4/4 |
-| 09 [stores](../07_integration/09_stores/) | InMemoryStore · PostgresStore | ✅ 2/2 |
-| 10 [sandboxes](../07_integration/10_sandboxes/) | Modal · Daytona · Runloop | ✅ 3/3 |
-| 11 [provider_middleware](../07_integration/11_provider_middleware/) | Anthropic 5 · Bedrock · OpenAI Moderation | ✅ 7/7 |
-| 12 [observability](../07_integration/12_observability/) | Langfuse · OpenTelemetry | ✅ 2/2 |
-| 13 [providers](../07_integration/13_providers/) | Anthropic · OpenAI · Google · AWS · Microsoft · Groq · HF · NVIDIA · Ollama | ✅ 9/9 |
+| 01 [chat_models](../08_integration/01_chat_models/) | OpenAI · Anthropic · Google · Ollama · Bedrock · Groq · Mistral · Cohere · routers | ✅ 9/9 |
+| 02 [embeddings](../08_integration/02_embeddings/) | OpenAI · Google · Cohere · Voyage · Ollama · HuggingFace | ✅ 6/6 |
+| 03 [vectorstores](../08_integration/03_vectorstores/) | InMemory/FAISS · Chroma · PGVector · Pinecone · Qdrant · Weaviate · Milvus · ES | ✅ 8/8 |
+| 04 [document_loaders](../08_integration/04_document_loaders/) | PDF · Web · Cloud Storage · Productivity · Structured | ✅ 5/5 |
+| 05 [retrievers](../08_integration/05_retrievers/) | BM25+Ensemble · MultiVector · SelfQuery · Web · Vendor | ✅ 5/5 |
+| 06 [text_splitters](../08_integration/06_text_splitters/) | Character/Recursive · Markdown/HTML/Code · Semantic | ✅ 3/3 |
+| 07 [tools](../08_integration/07_tools/) | Search · code exec · SQL · Playwright · productivity · knowledge | ✅ 6/6 |
+| 08 [checkpointers](../08_integration/08_checkpointers/) | InMemory · SQLite · Postgres · CosmosDB | ✅ 4/4 |
+| 09 [stores](../08_integration/09_stores/) | InMemoryStore · PostgresStore | ✅ 2/2 |
+| 10 [sandboxes](../08_integration/10_sandboxes/) | Modal · Daytona · Runloop | ✅ 3/3 |
+| 11 [provider_middleware](../08_integration/11_provider_middleware/) | Anthropic 5 · Bedrock · OpenAI Moderation | ✅ 7/7 |
+| 12 [observability](../08_integration/12_observability/) | Langfuse · OpenTelemetry | ✅ 2/2 |
+| 13 [providers](../08_integration/13_providers/) | Anthropic · OpenAI · Google · AWS · Microsoft · Groq · HF · NVIDIA · Ollama | ✅ 9/9 |
 
 ---
 

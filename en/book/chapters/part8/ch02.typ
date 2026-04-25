@@ -1,4 +1,4 @@
-// Source: 07_integration/11_provider_middleware/01_anthropic_prompt_caching.ipynb
+// Source: 08_integration/11_provider_middleware/01_anthropic_prompt_caching.ipynb
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 

@@ -1,4 +1,4 @@
-// Source: 08_langsmith/02_tracing_agents.ipynb
+// Source: 06_langsmith/02_tracing_agents.ipynb
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 

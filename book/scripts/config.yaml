@@ -99,10 +99,10 @@ parts:
       - {source: "08_voice_agent.ipynb", output: "ch08.typ", title: "음성 에이전트", diagrams: []}
       - {source: "09_production.ipynb", output: "ch09.typ", title: "프로덕션 배포", diagrams: ["production-deploy"]}
 
-  - number: 6
+  - number: 7
     title: "실전 응용"
     subtitle: "Real-World Applications"
-    source_dir: "06_examples"
+    source_dir: "07_examples"
     chapters:
       - {source: "01_rag_agent.ipynb", output: "ch01.typ", title: "RAG 에이전트", diagrams: ["rag-agent-flow"]}
       - {source: "02_sql_agent.ipynb", output: "ch02.typ", title: "SQL 에이전트", diagrams: []}

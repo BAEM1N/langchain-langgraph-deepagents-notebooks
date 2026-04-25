@@ -1,4 +1,4 @@
-// Source: 07_integration/11_provider_middleware/02_claude_bash_tool.ipynb
+// Source: 08_integration/11_provider_middleware/02_claude_bash_tool.ipynb
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
