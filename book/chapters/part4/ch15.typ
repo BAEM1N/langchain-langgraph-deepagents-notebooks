@@ -4,7 +4,7 @@
 
 #chapter(15, "권한 관리", subtitle: "FilesystemPermission · first-match-wins")
 
-Deep Agents의 built-in 파일시스템 도구(`ls`, `read_file`, `glob`, `grep`, `write_file`, `edit_file`)에 선언적 allow/deny 규칙을 적용해 _경로 기반 접근 제어_를 강제합니다. 프롬프트 인젝션 방어, 읽기 전용 에이전트, 특정 디렉터리만 쓰게 하는 워크스페이스 격리를 구성할 때 이 장을 씁니다.
+Deep Agents의 built-in 파일시스템 도구(`ls`, `read_file`, `glob`, `grep`, `write_file`, `edit_file`)에 선언적 allow/deny 규칙을 적용해 _경로 기반 접근 제어_를 강제합니다. 프롬프트 인젝션 방어, 읽기 전용 에이전트, 특정 디렉터리만 허용하는 워크스페이스 격리를 구성할 때 이 장을 씁니다.
 
 #learning-header()
 #learning-objectives(
@@ -23,11 +23,11 @@ Deep Agents의 built-in 파일시스템 도구(`ls`, `read_file`, `glob`, `grep`
 - MCP 도구
 - 샌드박스의 `execute` 셸 명령
 
-즉, 보안 경계를 permission만으로 완성할 수 없습니다. 샌드박스에서 임의 셸 명령이 가능한 구성에서는 _CompositeBackend의 라우팅 제약_과 함께 설계되어야 합니다. 커스텀 도구에 대한 추가 검증·감사는 _backend policy hooks_가 담당합니다.
+보안 경계를 permission만으로 완성할 수 없습니다. 샌드박스에서 임의 셸 명령이 가능한 구성에서는 _CompositeBackend의 라우팅 제약_과 함께 설계해야 합니다. 커스텀 도구의 추가 검증·감사는 _backend policy hooks_가 담당합니다.
 
 == 15.2 평가 규칙: first-match-wins
 
-규칙은 리스트 순서대로 평가되고, `operations`와 `paths`가 현재 호출과 매치되는 _첫 번째 규칙_이 결과를 결정합니다. 어떤 규칙에도 매치되지 않으면 기본값은 *allow*. 이 때문에 _구체적인 deny/allow를 먼저 배치_하고, 일반적인 fallback을 뒤에 둬야 합니다.
+규칙은 리스트 순서대로 평가되고, `operations`와 `paths`가 현재 호출과 매치되는 _첫 번째 규칙_이 결과를 결정합니다. 어떤 규칙에도 매치되지 않으면 기본값은 *allow*입니다. 그러므로 _구체적인 deny/allow를 앞에_ 두고 일반적인 fallback을 뒤에 놓아야 합니다.
 
 == 15.3 규칙 3요소
 
@@ -55,7 +55,7 @@ Deep Agents의 built-in 파일시스템 도구(`ls`, `read_file`, `glob`, `grep`
 
 == 15.4 패턴 1: 읽기 전용 에이전트
 
-모든 쓰기를 전역 차단. 조사·감사·리포트 생성 에이전트에 유용합니다.
+모든 쓰기를 전역 차단합니다. 조사·감사·리포트 생성 에이전트에 알맞습니다.
 
 #code-block(`````python
 from deepagents import create_deep_agent, FilesystemPermission
@@ -75,7 +75,7 @@ agent = create_deep_agent(
 
 == 15.5 패턴 2: 워크스페이스 격리
 
-`/workspace/` 아래만 허용, 나머지 전면 거부. first-match-wins이므로 _allow가 먼저_, deny가 catch-all로 뒤에 옵니다.
+`/workspace/` 아래만 허용하고 나머지는 전면 거부합니다. first-match-wins이므로 _allow를 먼저_, deny는 catch-all로 뒤에 둡니다.
 
 #code-block(`````python
 agent = create_deep_agent(
@@ -98,7 +98,7 @@ agent = create_deep_agent(
 
 == 15.6 패턴 3: 특정 파일만 보호
 
-`/workspace/.env`와 예제 디렉터리는 건드리지 못하게 하되 나머지 `/workspace/`는 자유롭게 허용합니다.
+`/workspace/.env`와 예제 디렉터리는 건드리지 못하게 막고, 나머지 `/workspace/`는 자유롭게 허용합니다.
 
 #code-block(`````python
 agent = create_deep_agent(
@@ -127,7 +127,7 @@ agent = create_deep_agent(
 
 == 15.7 패턴 4: Read-only memory / policies
 
-`/memories/`·`/policies/` 경로에 대한 _쓰기만_ 막습니다. 읽기는 자유. 공유 메모리·조직 정책이 프롬프트 인젝션으로 오염되는 것을 방지하는 기본 방어선입니다.
+`/memories/`·`/policies/` 경로의 _쓰기만_ 막습니다. 읽기는 자유입니다. 공유 메모리와 조직 정책이 프롬프트 인젝션으로 오염되는 것을 막는 기본 방어선입니다.
 
 #code-block(`````python
 from deepagents import create_deep_agent, FilesystemPermission
@@ -156,11 +156,11 @@ agent = create_deep_agent(
 )
 `````)
 
-메모리/정책은 애플리케이션 코드로만 갱신하고 에이전트는 읽기만 하게 합니다.
+메모리와 정책은 애플리케이션 코드로만 갱신하고, 에이전트는 읽기만 합니다.
 
 == 15.8 Subagent 상속
 
-기본 동작: _부모 에이전트의 permissions가 서브에이전트에 그대로 상속_됩니다. 서브에이전트 스펙에 `permissions`를 주면 _부모 규칙을 완전히 대체_합니다(부분 오버라이드 아님). 대체할 때는 catch-all deny까지 직접 포함해야 안전합니다.
+기본 동작은 _부모 에이전트의 permissions가 서브에이전트에 그대로 상속_되는 것입니다. 서브에이전트 스펙에 `permissions`를 주면 _부모 규칙을 완전히 대체_합니다(부분 오버라이드 아님). 대체할 때는 catch-all deny까지 직접 넣어야 안전합니다.
 
 #code-block(`````python
 agent = create_deep_agent(
@@ -191,11 +191,11 @@ agent = create_deep_agent(
 )
 `````)
 
-감사 전용 서브에이전트에 읽기 권한을 축소하고 메인 에이전트는 넓은 권한을 유지하는 식의 분리가 가능합니다.
+감사 전용 서브에이전트는 읽기 권한만 주고 메인 에이전트는 넓은 권한을 유지하는 식으로 분리할 수 있습니다.
 
 == 15.9 CompositeBackend 제약: sandbox-default
 
-`CompositeBackend`의 _default가 sandbox_일 때, 모든 permission path는 _선언된 route prefix 안에 있어야 합니다_. 이 제약은 샌드박스가 `execute` 도구로 임의 셸 명령을 돌릴 수 있기 때문입니다. 경로 기반 규칙은 셸 수준 파일 접근을 막지 못하므로, 라우팅 외부 경로에 permission을 다는 것은 _가짜 안전감_을 주는 구성이 됩니다.
+`CompositeBackend`의 _default가 sandbox_일 때, 모든 permission path는 _선언된 route prefix 안에 있어야 합니다_. 샌드박스가 `execute` 도구로 임의 셸 명령을 돌릴 수 있기 때문입니다. 경로 기반 규칙은 셸 수준 파일 접근을 막지 못하므로, 라우팅 외부 경로에 permission을 다는 것은 _가짜 안전감_입니다.
 
 #code-block(`````python
 from deepagents import create_deep_agent, FilesystemPermission
@@ -218,11 +218,11 @@ agent = create_deep_agent(
 )
 `````)
 
-알려진 route 바깥 경로에 규칙을 걸면 `NotImplementedError`가 발생합니다. 샌드박스 내부 파일시스템 제어가 필요하면 permission이 아니라 _샌드박스 구성 자체_(허용 바이너리, 네트워크 정책, 볼륨 마운트 범위)로 풀어야 합니다.
+알려진 route 바깥 경로에 규칙을 걸면 `NotImplementedError`가 발생합니다. 샌드박스 내부 파일시스템을 제어하려면 permission이 아니라 _샌드박스 구성 자체_(허용 바이너리, 네트워크 정책, 볼륨 마운트 범위)로 풀어야 합니다.
 
 == 15.10 프롬프트 인젝션 방어 관점
 
-공유 메모리·조직 정책·외부에서 주입되는 문서는 전부 인젝션 벡터입니다. 대응 계층은 다음과 같습니다.
+공유 메모리, 조직 정책, 외부에서 주입되는 문서는 모두 인젝션 벡터입니다. 대응 계층은 다음과 같습니다.
 
 + *Read-only 강제*: `/memories/**`, `/policies/**`에 write deny (패턴 4)
 + *Workspace 격리*: 에이전트가 건드릴 수 있는 경로를 `/workspace/**`로 한정
@@ -250,7 +250,7 @@ agent = create_deep_agent(
   [샌드박스 설정 (허용 바이너리·네트워크 정책)],
 )
 
-Permission은 _선언적 간이 규칙_, policy hook은 _로직이 필요한 통제_로 역할을 나눠 씁니다.
+Permission은 _선언적 간이 규칙_, policy hook은 _로직이 필요한 통제_입니다. 역할을 나눠 씁니다.
 
 == 15.12 주의사항
 
