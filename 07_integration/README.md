@@ -16,19 +16,19 @@ LangChain · LangGraph · Deep Agents와 연결되는 **외부 도구·서비스
 
 | # | 카테고리 | 노트북 수 | 상태 |
 |---|----------|----------|------|
-| 01 | [Chat Models](./01_chat_models/) | 0 / 9 | ⬜ |
-| 02 | [Embeddings](./02_embeddings/) | 0 / 6 | ⬜ |
-| 03 | [Vector Stores](./03_vectorstores/) | 0 / 8 | ⬜ |
-| 04 | [Document Loaders](./04_document_loaders/) | 0 / 5 | ⬜ |
-| 05 | [Retrievers](./05_retrievers/) | 0 / 5 | ⬜ |
-| 06 | [Text Splitters](./06_text_splitters/) | 0 / 3 | ⬜ |
-| 07 | [Tools](./07_tools/) | 0 / 6 | ⬜ |
-| 08 | [Checkpointers](./08_checkpointers/) | 0 / 4 | ⬜ |
-| 09 | [Stores](./09_stores/) | 0 / 2 | ⬜ |
-| 10 | [Sandboxes](./10_sandboxes/) | 0 / 3 | ⬜ |
+| 01 | [Chat Models](./01_chat_models/) | 9 / 9 | ✅ |
+| 02 | [Embeddings](./02_embeddings/) | 6 / 6 | ✅ |
+| 03 | [Vector Stores](./03_vectorstores/) | 8 / 8 | ✅ |
+| 04 | [Document Loaders](./04_document_loaders/) | 5 / 5 | ✅ |
+| 05 | [Retrievers](./05_retrievers/) | 5 / 5 | ✅ |
+| 06 | [Text Splitters](./06_text_splitters/) | 3 / 3 | ✅ |
+| 07 | [Tools](./07_tools/) | 6 / 6 | ✅ |
+| 08 | [Checkpointers](./08_checkpointers/) | 4 / 4 | ✅ |
+| 09 | [Stores](./09_stores/) | 2 / 2 | ✅ |
+| 10 | [Sandboxes](./10_sandboxes/) | 3 / 3 | ✅ |
 | 11 | [Provider Middleware](./11_provider_middleware/) | 7 / 7 | ✅ |
-| 12 | [Observability](./12_observability/) | 0 / 2 | ⬜ |
-| 13 | [Providers](./13_providers/) | 0 / 9 | ⬜ |
+| 12 | [Observability](./12_observability/) | 2 / 2 | ✅ |
+| 13 | [Providers](./13_providers/) | 9 / 9 | ✅ |
 
 ## 우선순위 근거
 
