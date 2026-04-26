@@ -1,112 +1,125 @@
 # Agent Engineering Notebooks
 
-> Jupyter notebooks + Typst handbook covering **LLM agents from beginner to production**.
+> Korean-first Jupyter labs and a Typst handbook for learning **LLM agents from fundamentals to production operations**.  
 > 한국어: [../README.md](../README.md) · Handbook PDF: [`book/agent-handbook-en.pdf`](book/agent-handbook-en.pdf) · Release: [`v1.0.0`](https://github.com/BAEM1N/langchain-langgraph-deepagents-notebooks/releases/tag/v1.0.0)
 
 ---
 
-## Getting Started
+## Quick start
 
 ```bash
 git clone https://github.com/BAEM1N/langchain-langgraph-deepagents-notebooks.git
 cd langchain-langgraph-deepagents-notebooks
-uv sync --python 3.12 --extra observability
-cp .env.example .env      # at minimum, set OPENAI_API_KEY
-uv run --python 3.12 jupyter lab
+uv sync
+cp .env.example .env      # set at least OPENAI_API_KEY
+uv run jupyter lab
 ```
 
-Required: `OPENAI_API_KEY`. Optional: `TAVILY_API_KEY` · `ANTHROPIC_API_KEY` · `LANGSMITH_API_KEY` · `LANGFUSE_SECRET_KEY`. See [`.env.example`](../.env.example).
+- **Required key**: `OPENAI_API_KEY`
+- **Optional keys**: `TAVILY_API_KEY`, `ANTHROPIC_API_KEY`, `LANGSMITH_API_KEY`, `LANGFUSE_SECRET_KEY`
+- See [`.env.example`](../.env.example) for the environment template.
 
 ---
 
-## Curriculum — 8 Parts · 94 notebooks
+## Curriculum at a glance — 8 Parts · 134 notebooks
 
-| # | Track | Audience | Core topics |
-|---|-------|----------|------------|
-| **01** [`01_beginner/`](../01_beginner/) | Agent foundations (8) | First LLM agent | messages · prompts · ReAct · framework compare |
-| **02** [`02_langchain/`](../02_langchain/) | LangChain v1 (13) | Production agents | `create_agent` · middleware · MCP · HITL |
-| **03** [`03_langgraph/`](../03_langgraph/) | LangGraph v1 (13) | Complex workflows | `StateGraph` · checkpointers · subgraphs · Pregel |
-| **04** [`04_deepagents/`](../04_deepagents/) | Deep Agents SDK (10) | All-in-one systems | `create_deep_agent` · backends · subagents · skills |
-| **05** [`05_advanced/`](../05_advanced/) | Advanced patterns (10) | Multi-agent · deploy | middleware deep-dive · RAG · SQL · voice · prod |
-| **06** [`07_examples/`](../07_examples/) | Applied examples (5) | Real projects | RAG · SQL · data analysis · ML · deep research |
-| **07** [`08_integration/`](../08_integration/) | Ecosystem integrations (13 categories, **69 notebooks**) | External tools · providers | ✅ **All categories complete** (executed 42 / key·service-gated 27) |
-| **08** [`06_langsmith/`](../06_langsmith/) | LangSmith (5) | Observability · eval | trace · dataset · evaluator · prompt hub · monitoring |
+| # | Track | Audience | Notebooks | Core topics |
+|---|-------|----------|-----------|-------------|
+| **01** | [`01_beginner/`](../01_beginner/) | New LLM agent learners | 8 | messages · prompts · ReAct · framework comparison |
+| **02** | [`02_langchain/`](../02_langchain/) | LangChain v1 agent builders | 13 | `create_agent` · tools · middleware · MCP · HITL |
+| **03** | [`03_langgraph/`](../03_langgraph/) | State graph and workflow learners | 13 | `StateGraph` · checkpointers · subgraphs · Pregel |
+| **04** | [`04_deepagents/`](../04_deepagents/) | All-in-one agent system builders | 11 | `create_deep_agent` · backends · subagents · skills · async subagents |
+| **05** | [`05_advanced/`](../05_advanced/) | Advanced pattern and operations learners | 10 | multi-agent · RAG · SQL · voice · production |
+| **06** | [`07_examples/`](../07_examples/) | Applied project learners | 5 | RAG · SQL · data analysis · ML · deep research |
+| **07** | [`08_integration/`](../08_integration/) | External tool and provider integrators | 69 | 13 LangChain/LangGraph ecosystem integration categories |
+| **08** | [`06_langsmith/`](../06_langsmith/) | Observability, evaluation, and prompt-ops learners | 5 | trace · dataset · evaluator · prompt hub · monitoring |
 
-Per-notebook topics: see each folder's `README.md`.
-
----
-
-## `08_integration/` · 13 categories
-
-LangChain's 11 official integration categories + LangGraph Store + Observability.
-
-| # | Category | Status |
-|---|----------|--------|
-| 01 [chat_models](../08_integration/01_chat_models/) | OpenAI · Anthropic · Google · Ollama · Bedrock · Groq · Mistral · Cohere · routers | ✅ 9/9 |
-| 02 [embeddings](../08_integration/02_embeddings/) | OpenAI · Google · Cohere · Voyage · Ollama · HuggingFace | ✅ 6/6 |
-| 03 [vectorstores](../08_integration/03_vectorstores/) | InMemory/FAISS · Chroma · PGVector · Pinecone · Qdrant · Weaviate · Milvus · ES | ✅ 8/8 |
-| 04 [document_loaders](../08_integration/04_document_loaders/) | PDF · Web · Cloud Storage · Productivity · Structured | ✅ 5/5 |
-| 05 [retrievers](../08_integration/05_retrievers/) | BM25+Ensemble · MultiVector · SelfQuery · Web · Vendor | ✅ 5/5 |
-| 06 [text_splitters](../08_integration/06_text_splitters/) | Character/Recursive · Markdown/HTML/Code · Semantic | ✅ 3/3 |
-| 07 [tools](../08_integration/07_tools/) | Search · code exec · SQL · Playwright · productivity · knowledge | ✅ 6/6 |
-| 08 [checkpointers](../08_integration/08_checkpointers/) | InMemory · SQLite · Postgres · CosmosDB | ✅ 4/4 |
-| 09 [stores](../08_integration/09_stores/) | InMemoryStore · PostgresStore | ✅ 2/2 |
-| 10 [sandboxes](../08_integration/10_sandboxes/) | Modal · Daytona · Runloop | ✅ 3/3 |
-| 11 [provider_middleware](../08_integration/11_provider_middleware/) | Anthropic 5 · Bedrock · OpenAI Moderation | ✅ 7/7 |
-| 12 [observability](../08_integration/12_observability/) | Langfuse · OpenTelemetry | ✅ 2/2 |
-| 13 [providers](../08_integration/13_providers/) | Anthropic · OpenAI · Google · AWS · Microsoft · Groq · HF · NVIDIA · Ollama | ✅ 9/9 |
+For per-notebook details, open the `README.md` inside each folder.
 
 ---
 
-## 📖 Agent Handbook (PDF)
+## `08_integration/` — 13 integration categories
 
-Typesetted in Typst — **8 Parts · 82 chapters**.
+This section combines LangChain's 11 official integration categories with LangGraph Store and Observability.
 
-- `en/book/agent-handbook-en.pdf` — English (12 MB)
-- `book/agent-handbook.pdf` — Korean (18 MB)
+| # | Category | Coverage | Status |
+|---|----------|----------|--------|
+| 01 | [chat_models](../08_integration/01_chat_models/) | OpenAI · Anthropic · Google · Ollama · Bedrock · Groq · Mistral · Cohere · routers | ✅ 9/9 |
+| 02 | [embeddings](../08_integration/02_embeddings/) | OpenAI · Google · Cohere · Voyage · Ollama · HuggingFace | ✅ 6/6 |
+| 03 | [vectorstores](../08_integration/03_vectorstores/) | InMemory/FAISS · Chroma · PGVector · Pinecone · Qdrant · Weaviate · Milvus · Elasticsearch | ✅ 8/8 |
+| 04 | [document_loaders](../08_integration/04_document_loaders/) | PDF · Web · Cloud Storage · Productivity · Structured/Code | ✅ 5/5 |
+| 05 | [retrievers](../08_integration/05_retrievers/) | BM25+Ensemble · MultiVector · SelfQuery · Web · vendor-managed | ✅ 5/5 |
+| 06 | [text_splitters](../08_integration/06_text_splitters/) | Character/Recursive · Markdown/HTML/Code · Semantic | ✅ 3/3 |
+| 07 | [tools](../08_integration/07_tools/) | Search · code execution · SQL · Playwright · productivity · knowledge | ✅ 6/6 |
+| 08 | [checkpointers](../08_integration/08_checkpointers/) | InMemory · SQLite · Postgres · CosmosDB | ✅ 4/4 |
+| 09 | [stores](../08_integration/09_stores/) | InMemoryStore · PostgresStore | ✅ 2/2 |
+| 10 | [sandboxes](../08_integration/10_sandboxes/) | Modal · Daytona · Runloop | ✅ 3/3 |
+| 11 | [provider_middleware](../08_integration/11_provider_middleware/) | Five Anthropic patterns · Bedrock · OpenAI Moderation | ✅ 7/7 |
+| 12 | [observability](../08_integration/12_observability/) | Langfuse · OpenTelemetry | ✅ 2/2 |
+| 13 | [providers](../08_integration/13_providers/) | Anthropic · OpenAI · Google · AWS · Microsoft · Groq · HuggingFace · NVIDIA · Ollama | ✅ 9/9 |
+
+---
+
+## 📖 Agent Handbook
+
+A Typst-typeset handbook with **8 Parts · 82 chapters**.
+
+- English PDF: [`book/agent-handbook-en.pdf`](book/agent-handbook-en.pdf) (12 MB)
+- Korean PDF: [`../book/agent-handbook.pdf`](../book/agent-handbook.pdf) (18 MB)
 
 Local build:
+
 ```bash
-typst compile --root . en/book/main.typ en/book/out/main.pdf  # en
-typst compile --root . book/main.typ    book/out/main.pdf     # ko
+typst compile --root . en/book/main.typ en/book/out/main.pdf   # en
+typst compile --root . book/main.typ    book/out/main.pdf      # ko
 ```
 
-### Part layout
+### Handbook part layout
 
 | Part | Topic | Chapters |
-|------|-------|---------|
+|------|-------|----------|
 | I | Agent foundations | 8 |
 | II | LangChain v1 | 13 |
 | III | LangGraph v1 | 13 |
-| IV | Deep Agents (0.5 async subagents · production · context engineering · streaming · permissions) | 15 |
+| IV | Deep Agents: async subagents · production · context engineering · streaming · permissions | 15 |
 | V | Advanced patterns | 10 |
 | **VI** | **LangSmith** | 5 |
 | VII | Applied examples | 5 |
-| VIII | Integrations (incl. 7 provider-middleware chapters) | 9 |
+| VIII | Integrations: including 7 provider-middleware chapters | 9 |
 
 ---
 
 ## Tech stack
 
-| Package | Min version | Use |
-|---------|-------------|-----|
-| `langchain` | 1.2 | Agents · tools · middleware |
-| `langgraph` | 1.1 | State graph workflows |
-| `deepagents` | 0.5 | All-in-one agent SDK |
-| `langsmith` | 0.7 | Observability · evaluation · prompt hub |
-| `langchain-openai` / `langchain-anthropic` / `langchain-aws` | — | Provider integrations |
+| Package | Minimum version | Use |
+|---------|-----------------|-----|
+| `langchain` | 1.2 | agents · tools · middleware |
+| `langgraph` | 1.0 | state graph workflows |
+| `deepagents` | 0.4.4 | all-in-one agent SDK |
+| `langsmith` | 0.3 | observability · evaluation · prompt hub |
+| `langchain-openai` | 1.1.10 | OpenAI model integration |
+| `langchain-community` | 0.4 | community integrations |
 
-Full dependency tree: [`../pyproject.toml`](../pyproject.toml)
+The full dependency set is managed in [`../pyproject.toml`](../pyproject.toml).
+
+---
+
+## Recommended learning path
+
+1. Start with `01_beginner/` to learn LLM messages, prompts, and basic agent flows.
+2. Go deep into one core layer: `02_langchain/`, `03_langgraph/`, or `04_deepagents/`.
+3. Use `05_advanced/` and `06_langsmith/` for operations, scaling, and evaluation patterns.
+4. Build practical confidence with `07_examples/` and the integration labs in `08_integration/`.
 
 ---
 
 ## See also
 
-- [`book/README.md`](book/README.md) — English handbook worktree & Typst build notes
+- [`book/README.md`](book/README.md) — English handbook worktree and Typst build notes
 - [`../docs/OBSERVABILITY.md`](../docs/OBSERVABILITY.md) — LangSmith · Langfuse setup
 - [`../docs/MODEL_PROVIDERS.md`](../docs/MODEL_PROVIDERS.md) — OpenRouter · Ollama · vLLM · LM Studio
-- [`../docs/SKILLS.md`](../docs/SKILLS.md) — LangChain Skills installation & usage
-- [`../docs/skills/langchain-v1-modern.md`](../docs/skills/langchain-v1-modern.md) — v1 authoring guardrail
+- [`../docs/SKILLS.md`](../docs/SKILLS.md) — LangChain Skills installation and usage
+- [`../docs/skills/langchain-v1-modern.md`](../docs/skills/langchain-v1-modern.md) — LangChain v1 authoring guardrails
 - [`../docs/translation/KO_EN_TRANSLATION_GUIDE.md`](../docs/translation/KO_EN_TRANSLATION_GUIDE.md) — KO ↔ EN translation guide
 - [`../AGENTS.md`](../AGENTS.md) — Coding-agent project context
 
