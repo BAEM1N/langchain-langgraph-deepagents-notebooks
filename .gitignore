@@ -19,12 +19,8 @@ en/05_advanced/Chinook.db
 .codex/skills/*
 !.codex/skills/langchain-v1-modern/
 !.codex/skills/langgraph-docs-official/
-!.codex/skills/humanize-korean/
 !.codex/skills/langchain-v1-modern/SKILL.md
 !.codex/skills/langgraph-docs-official/SKILL.md
-!.codex/skills/humanize-korean/SKILL.md
-!.codex/skills/humanize-korean/references/
-!.codex/skills/humanize-korean/references/*
 
 # Local lecture planning workspace
 lecture/
