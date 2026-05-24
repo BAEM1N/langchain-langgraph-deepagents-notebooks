@@ -30,7 +30,7 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 from langchain.agents import create_agent
@@ -50,8 +50,30 @@ LangSmith Studio는 에이전트의 실행 과정을 _트레이스(trace)_ 단�
 
 Studio를 사용하려면 다음이 필요합니다:
 - `langgraph.json` 설정 파일
-- `langgraph dev` 명령어로 로컬 서버 실행
-- Studio UI에서 에이전트를 인터랙티브하게 테스트
+- `langgraph dev` 명령어로 로컬 서버 실행 (기본 포트 `http://127.0.0.1:2024`)
+- 브라우저에서 hosted Studio UI 접속 — `https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024`
+
+=== Studio Key Features
+
+Studio가 제공하는 4가지 핵심 기능:
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[기능],
+  text(weight: "bold")[설명],
+  [_Hot-reloading_],
+  [프롬프트와 도구 코드를 수정하면 서버 재시작 없이 즉시 반영됩니다],
+  [_Full execution trace inspection_],
+  [모든 노드, 모델 호출, 도구 실행의 입출력을 트리 형태로 검사합니다],
+  [_Thread replay_],
+  [저장된 스레드를 시점별로 다시 실행하며 분기를 생성하고 동작을 비교합니다],
+  [_Exception capture_],
+  [예외가 발생한 순간의 상태와 주변 컨텍스트를 함께 캡처해 디버깅합니다],
+)
 
 #code-block(`````python
 # langgraph.json 설정 예시
@@ -68,8 +90,8 @@ langgraph_config = {
 print("langgraph.json 설정 예시:")
 print(json.dumps(langgraph_config, indent=2))
 print("\n실행 방법:")
-print("  $ langgraph dev")
-print("  → http://localhost:2024 에서 Studio UI 접근")
+print("  $ langgraph dev  # 로컬 dev server: http://127.0.0.1:2024")
+print("  → Studio UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024")
 `````)
 #output-block(`````
 langgraph.json 설정 예시:
@@ -84,13 +106,37 @@ langgraph.json 설정 예시:
 }
 
 실행 방법:
-  $ langgraph dev
-  → http://localhost:2024 에서 Studio UI 접근
+  $ langgraph dev  # 로컬 dev server: http://127.0.0.1:2024
+  → Studio UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 `````)
 
 Studio에서 인터랙티브하게 동작을 확인했다면, 다음 단계는 자동화된 테스트를 작성하여 에이전트의 동작을 _반복 가능한_ 방식으로 검증하는 것입니다.
 
 == 10.3 에이전트 테스트
+
+에이전트 테스트는 _Unit_, _Integration_, _Evals_ 세 계층으로 나누어 접근합니다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[분류],
+  text(weight: "bold")[목적],
+  text(weight: "bold")[대표 도구],
+  [_Unit_],
+  [에이전트 로직을 결정론적으로 검증 (도구 선택, 분기, 종료 조건)],
+  [`GenericFakeChatModel`, `pytest`],
+  [_Integration_],
+  [실제 LLM과 도구를 연결해 워크플로 전체가 동작하는지 확인],
+  [`langgraph dev`, 실서버 환경],
+  [_Evals_],
+  [에이전트 트라젝토리를 deterministic matching 또는 LLM-as-judge 평가자로 점수화],
+  [`agentevals`, LangSmith Evaluations],
+)
+
+=== 10.3.1 Unit — `GenericFakeChatModel`
 
 `GenericFakeChatModel`을 사용하면 실제 API 호출 없이 결정론적으로 에이전트를 테스트할 수 있습니다. 이 가짜 모델은 미리 정의된 응답 시퀀스를 순서대로 반환하므로, LLM의 비결정적 동작을 제거하고 에이전트의 _로직_(도구 선택, 분기, 종료 조건 등)만을 독립적으로 검증할 수 있습니다.
 
@@ -137,9 +183,35 @@ GenericFakeChatModel 테스트:
   → CI/CD 파이프라인에서 API 호출 없이 테스트 가능
 `````)
 
-== 10.4 트라젝토리 기반 테스트
+=== 10.3.2 Evals — 트라젝토리 평가와 `agentevals`
 
-에이전트의 도구 호출 순서를 검증합니다. 트라젝토리 테스트는 에이전트의 최종 출력만 검증하는 것이 아니라, _중간 과정_ — 어떤 도구를 어떤 순서로 호출했는지, 각 도구에 어떤 인자를 전달했는지 — 을 검사합니다. 이 접근법이 중요한 이유는 에이전트가 올바른 최종 답변을 내놓더라도 불필요한 도구 호출이나 위험한 작업을 수행했을 수 있기 때문입니다.
+에이전트의 도구 호출 순서를 검증합니다. 트라젝토리 평가는 에이전트의 최종 출력만 검증하는 것이 아니라, _중간 과정_ — 어떤 도구를 어떤 순서로 호출했는지, 각 도구에 어떤 인자를 전달했는지 — 을 검사합니다. 이 접근법이 중요한 이유는 에이전트가 올바른 최종 답변을 내놓더라도 불필요한 도구 호출이나 위험한 작업을 수행했을 수 있기 때문입니다.
+
+`agentevals` 패키지는 트라젝토리 매칭을 위한 4가지 모드를 제공합니다.
+
+#code-block(`````bash
+pip install agentevals
+`````)
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[모드],
+  text(weight: "bold")[매칭 규칙],
+  [`strict`],
+  [참조 트라젝토리와 도구 호출 종류·순서가 _완전히_ 일치해야 통과],
+  [`unordered`],
+  [같은 도구 집합을 호출하면 _순서_는 무시],
+  [`subset`],
+  [실제 트라젝토리가 참조의 _부분집합_(추가 호출 금지)],
+  [`superset`],
+  [실제 트라젝토리가 참조의 _초집합_(필수 호출만 포함되면 통과)],
+)
+
+LLM-as-judge 평가자를 사용하면 트라젝토리를 자연어 기준으로도 평가할 수 있습니다.
 
 #code-block(`````python
 # 트라젝토리 테스트 예시
@@ -175,7 +247,7 @@ except Exception as e:
 
 == 10.5 Agent Chat UI
 
-에이전트와 대화할 수 있는 웹 UI입니다. LangGraph 서버와 연결하여 브라우저에서 직접 에이전트를 테스트할 수 있습니다. `npx @anthropic-ai/agent-chat-ui` 명령어 하나로 설치 없이 바로 실행할 수 있으며, 로컬에서 실행 중인 LangGraph 서버(`http://localhost:2024`)에 자동으로 연결됩니다.
+에이전트와 대화할 수 있는 웹 UI입니다. LangGraph 서버와 연결하여 브라우저에서 직접 에이전트를 테스트할 수 있습니다. `create-agent-chat-app` 스캐폴드로 새 프로젝트를 생성하거나, 공식 레포지토리(`langchain-ai/agent-chat-ui`)를 직접 clone 해 사용합니다. 로컬에서 실행 중인 LangGraph 서버(`http://127.0.0.1:2024`)에 연결합니다.
 
 주요 기능:
 - 실시간 스트리밍 채팅
@@ -184,43 +256,39 @@ except Exception as e:
 - Human-in-the-loop 승인
 
 #code-block(`````python
-print("Agent Chat UI 설정:")
-print("=" * 50)
-print("""
-# 1. Agent Chat UI 설치
-$ npx @anthropic-ai/agent-chat-ui
+설치 방법 두 가지 중 하나를 선택합니다.
 
-# 2. LangGraph 서버 시작
-$ langgraph dev
+#code-block(`````bash
+# 옵션 A — 스캐폴드 (권장)
+npx create-agent-chat-app --project-name my-chat-ui
 
-# 3. UI에서 http://localhost:2024 연결
-#    → 웹 브라우저에서 에이전트와 대화
-""")
-print("주요 기능:")
-print("  - 실시간 스트리밍 채팅")
-print("  - 도구 호출 시각화")
-print("  - 대화 분기(branching)")
-print("  - Human-in-the-loop 승인")
+# 옵션 B — 공식 레포지토리 clone
+git clone https://github.com/langchain-ai/agent-chat-ui.git
+cd agent-chat-ui && pnpm install && pnpm dev
 `````)
-#output-block(`````
-Agent Chat UI 설정:
-==================================================
 
-# 1. Agent Chat UI 설치
-$ npx @anthropic-ai/agent-chat-ui
-
-# 2. LangGraph 서버 시작
-$ langgraph dev
-
-# 3. UI에서 http://localhost:2024 연결
-#    → 웹 브라우저에서 에이전트와 대화
-
-주요 기능:
-  - 실시간 스트리밍 채팅
-  - 도구 호출 시각화
-  - 대화 분기(branching)
-  - Human-in-the-loop 승인
+#code-block(`````bash
+# LangGraph 서버 시작 (별도 셸)
+langgraph dev   # http://127.0.0.1:2024
 `````)
+
+UI 첫 화면에서 다음 세 값을 입력합니다.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[항목],
+  text(weight: "bold")[값],
+  [_Deployment URL_],
+  [`http://127.0.0.1:2024` (로컬) 또는 배포된 LangGraph 서버 URL],
+  [_Graph ID_],
+  [`langgraph.json`의 `graphs` 키 (예: `agent`)],
+  [_LangSmith API key_],
+  [관리형 배포 인증용. 로컬 dev server에서는 생략 가능],
+)
 
 테스트를 마쳤다면 에이전트를 프로덕션 환경에 배포할 차례입니다. LangGraph는 관리형 플랫폼부터 셀프 호스팅까지 다양한 배포 옵션을 제공합니다.
 
@@ -230,13 +298,26 @@ LangGraph Platform(관리형) 또는 자체 서버로 에이전트를 배포할 
 
 #warning-box[FastAPI로 에이전트를 직접 래핑하는 경우, 스트리밍 응답(`StreamingResponse`), 체크포인팅, 스레드 관리 등을 직접 구현해야 합니다. LangGraph Platform이나 `langgraph-api` Docker 이미지를 사용하면 이러한 기능이 기본으로 제공됩니다.]
 
+=== 10.6.1 LangGraph Platform 배포 워크플로
+
+LangGraph Platform 배포는 GitHub 연동을 통해 진행됩니다. 로컬에서 `langgraph deploy` 한 줄로 배포하는 옛 흐름은 더 이상 권장되지 않습니다.
+
+1. 에이전트 코드를 GitHub 레포지토리에 푸시 (`langgraph.json` 포함)
+2. LangSmith 콘솔 → _Deployments_ 메뉴 → _+ New Deployment_
+3. 레포지토리, 브랜치, `langgraph.json` 경로 지정
+4. 환경 변수(`OPENAI_API_KEY` 등) 입력
+5. _Deploy_ 클릭 → 빌드 로그 확인 → 발급된 Deployment URL 확보
+
+#warning-box[옛 가이드의 `langgraph deploy` CLI 흐름은 _deprecated_입니다. 신규 배포는 LangSmith 콘솔의 GitHub 연동을 통해 진행하세요.]
+
 #code-block(`````python
 print("배포 옵션:")
 print("=" * 50)
 
 print("""
-# 옵션 1: LangGraph Platform (관리형)
-$ langgraph deploy
+# 옵션 1: LangGraph Platform (관리형) — GitHub 연동
+#   → LangSmith Deployments → + New Deployment 흐름 사용
+#   (옛 `langgraph deploy` CLI 패턴은 deprecated)
 
 
 # 옵션 2: 자체 Docker 배포
@@ -267,6 +348,40 @@ async def chat(message: str):
         "response": result["messages"][-1].content
     }
 """)
+`````)
+
+=== 10.6.2 배포된 에이전트 호출 — `langgraph-sdk`
+
+배포된 에이전트는 Python SDK 또는 REST로 호출합니다.
+
+#code-block(`````bash
+pip install langgraph-sdk
+`````)
+
+#code-block(`````python
+from langgraph_sdk import get_sync_client
+
+client = get_sync_client(url="http://127.0.0.1:2024")
+
+for chunk in client.runs.stream(
+    None,  # threadless run
+    "agent",  # graph ID
+    input={"messages": [{"role": "user", "content": "안녕"}]},
+    stream_mode="updates",
+):
+    print(chunk)
+`````)
+
+REST API 직접 호출 예:
+
+#code-block(`````bash
+curl -X POST http://127.0.0.1:2024/runs/stream \
+  -H "Content-Type: application/json" \
+  --data '{
+    "assistant_id": "agent",
+    "input": {"messages": [{"role": "user", "content": "안녕"}]},
+    "stream_mode": "updates"
+  }'
 `````)
 #output-block(`````
 배포 옵션:
@@ -304,14 +419,66 @@ async def chat(message: str):
 
 == 10.7 관측성
 
-에이전트가 프로덕션에 배포되면 실시간 모니터링이 핵심이 됩니다. LangSmith로 에이전트 동작을 추적합니다. 트레이싱을 활성화하려면 환경 변수 `LANGSMITH_TRACING=true`를 설정하기만 하면 됩니다. 별도의 코드 변경 없이 에이전트의 모든 실행 단계가 자동으로 LangSmith에 기록됩니다.
+에이전트가 프로덕션에 배포되면 실시간 모니터링이 핵심이 됩니다. LangSmith로 에이전트 동작을 추적합니다.
+
+=== 10.7.1 환경 변수
+
+옛 `LANGCHAIN_*` 접두 변수는 신규 코드베이스에서 `LANGSMITH_*`로 통합되었습니다.
+
+#code-block(`````bash
+# 권장 (현행)
+export LANGSMITH_TRACING=true
+export LANGSMITH_API_KEY="lsv2_..."
+export LANGSMITH_PROJECT="my-agent"   # 미지정 시 기본값 `default`
+`````)
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[옛 이름 (deprecated)],
+  text(weight: "bold")[새 이름],
+  [`LANGCHAIN_TRACING_V2`],
+  [`LANGSMITH_TRACING`],
+  [`LANGCHAIN_API_KEY`],
+  [`LANGSMITH_API_KEY`],
+  [`LANGCHAIN_PROJECT`],
+  [`LANGSMITH_PROJECT`],
+)
 
 LangSmith에서 확인할 수 있는 정보:
 - 각 에이전트 호출의 전체 실행 흐름
 - 모델 입/출력, 도구 호출, 토큰 사용량
 - 지연 시간, 에러, 비용 추적
 
-#tip-box[LangSmith의 트레이스를 프로젝트별로 분리하려면 `LANGSMITH_PROJECT` 환경 변수를 설정하세요. 예를 들어 개발/스테이징/프로덕션 환경별로 다른 프로젝트 이름을 사용하면 트레이스를 환경별로 구분하여 분석할 수 있습니다.]
+#tip-box[`LANGSMITH_PROJECT`를 환경별로 다르게 지정(개발/스테이징/프로덕션)하면 트레이스를 환경별로 분리해 분석할 수 있습니다. 변수를 지정하지 않으면 `default` 프로젝트에 기록됩니다.]
+
+=== 10.7.2 `tracing_context`로 부분 트레이싱 제어
+
+환경 변수와 별개로, 코드 안에서 특정 블록만 트레이싱을 켜고 끄려면 `tracing_context`를 사용합니다.
+
+#code-block(`````python
+import langsmith as ls
+
+with ls.tracing_context(enabled=True):
+    agent.invoke({"messages": [{"role": "user", "content": "안녕"}]})
+`````)
+
+=== 10.7.3 config로 태그·메타데이터 부여
+
+트레이스 검색·필터링이 쉬워지도록 호출 시점에 태그와 메타데이터를 넣습니다.
+
+#code-block(`````python
+agent.invoke(
+    {"messages": [{"role": "user", "content": "안녕"}]},
+    config={
+        "tags": ["production", "v1.0"],
+        "metadata": {"user_id": "123", "session_id": "456"},
+    },
+)
+`````)
 
 == 10.8 프로덕션 체크리스트
 

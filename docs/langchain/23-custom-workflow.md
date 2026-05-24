@@ -25,7 +25,7 @@ You can invoke a LangChain agent directly inside any LangGraph node:
 from langchain.agents import create_agent
 from langgraph.graph import StateGraph, START, END
 
-agent = create_agent(model="openai:gpt-4.1", tools=[...])
+agent = create_agent(model="openai:gpt-5.4", tools=[...])
 
 def agent_node(state: State) -> dict:
     """A LangGraph node that invokes a LangChain agent."""

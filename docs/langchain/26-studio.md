@@ -14,6 +14,23 @@ Studio provides visibility into:
 - Intermediate states for inspection
 - Token and latency metrics
 
+### Studio Key Features
+
+<CardGroup cols={2}>
+  <Card title="Hot-reloading">
+    Make changes to prompts or tool signatures in your code, and Studio reflects them immediately without restarting the dev server.
+  </Card>
+  <Card title="Full execution trace inspection">
+    Inspect every step the agent executes — prompts sent to models, tool calls, intermediate states, and final outputs.
+  </Card>
+  <Card title="Thread replay">
+    Re-run conversation threads from any step to test modifications iteratively without starting over.
+  </Card>
+  <Card title="Exception capture">
+    When the agent throws, Studio captures the exception alongside the surrounding state for post-mortem debugging.
+  </Card>
+</CardGroup>
+
 ## Setup Requirements
 
 Before starting, you'll need:
@@ -39,7 +56,7 @@ def send_email(to: str, subject: str, body: str):
     return f"Email sent to {to}"
 
 agent = create_agent(
-    "gpt-5.2",
+    "gpt-5.4",
     tools=[send_email],
     system_prompt="You are an email assistant."
 )
@@ -71,6 +88,8 @@ langgraph dev
 ```
 
 Access the UI at: `https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024`
+
+The dev server itself listens at `http://127.0.0.1:2024` for raw API access; the Studio UI is the hosted front-end that points to that base URL.
 
 ⚠️ Safari users: Use `--tunnel` flag for localhost compatibility.
 

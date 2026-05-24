@@ -46,7 +46,12 @@ LangChain v1 is an integrated framework for building LLM-based agents. It is org
   [_Deep Agents_],
   [Prebuilt agents (coding, research, and more)],
   [Fast prototyping],
+  [_LangSmith_],
+  [Tracing and debugging platform for agents built with any framework],
+  [All developers / operators],
 )
+
+#tip-box[LangSmith is not limited to LangChain, LangGraph, or Deep Agents. You can send traces from the OpenAI SDK, LlamaIndex, or your own custom agent and use the same UI to debug and evaluate them, so v1 treats it as the fourth core tool.]
 
 === Major Changes in LangChain v1
 
@@ -83,6 +88,19 @@ The central design idea in LangChain v1 is that _every agent runs as a LangGraph
 - _Streaming_: Real-time responses with the `stream()` method
 - _State management_: Conversation history through a checkpointer
 - _Extensibility_: Adding custom nodes and edges when needed
+
+=== Multi-Provider Support
+
+LangChain v1 exposes more than 100 LLM providers behind the same interface. The model IDs you will see most often in this book are:
+
+- _OpenAI_: `openai:gpt-5.4`, `openai:gpt-4.1`
+- _Anthropic_: `anthropic:claude-sonnet-4-6`, `anthropic:claude-opus-4-6`
+- _Google_: `google:gemini-2.5-flash-lite`, `google:gemini-2.5-pro`
+- _OpenRouter_: `openrouter:meta-llama/llama-3.3-70b-instruct` and 100+ others
+- _AWS Bedrock_: `bedrock:anthropic.claude-sonnet-4-6`
+- _Ollama_: `ollama:llama3.3` (runs locally)
+
+Unless noted otherwise, the examples in this book default to OpenAI `gpt-5.4` or Anthropic `claude-sonnet-4-6`.
 
 
 == 1.2 The ReAct Agent Pattern

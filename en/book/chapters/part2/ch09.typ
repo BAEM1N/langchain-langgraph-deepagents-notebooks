@@ -28,7 +28,7 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 from langchain.agents import create_agent
@@ -100,6 +100,48 @@ RAG is a pattern that strengthens LLM answers by retrieving external knowledge. 
 
 - _Basic 2-step_: retrieve documents, then pass them as context to the LLM for answer generation
 - _Agentic RAG_: the agent calls retrieval tools repeatedly until it has enough information to answer
+
+=== Five RAG building blocks
+
+A LangChain RAG pipeline is built from these five components.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Component],
+  text(weight: "bold")[Role],
+  [_Document Loaders_],
+  [Ingest source documents from PDF, web pages, Notion, etc.],
+  [_Text Splitters_],
+  [Split long documents into meaningful chunks (e.g. `RecursiveCharacterTextSplitter`)],
+  [_Embedding Models_],
+  [Turn text into vectors (e.g. `OpenAIEmbeddings`)],
+  [_Vector Stores_],
+  [Index and search embeddings (FAISS, Chroma, Pinecone, ...)],
+  [_Retrievers_],
+  [Unified retrieval interface — vector / hybrid / MultiQuery share the same API],
+)
+
+=== Rewrite → Retrieve → Agent (three-node pattern)
+
+A variation of agentic RAG that separates _query rewriting_ into its own node. The user input is first rewritten into a retrieval-friendly form, the retriever runs against it, and the agent grounds its answer in the result.
+
+#code-block(`````python
+# Rewrite → Retrieve → Agent
+graph.add_node("rewrite", query_rewriter_node)
+graph.add_node("retrieve", retriever_node)
+graph.add_node("agent", create_agent(model, tools=[]))
+
+graph.add_edge(START, "rewrite")
+graph.add_edge("rewrite", "retrieve")
+graph.add_edge("retrieve", "agent")
+graph.add_edge("agent", END)
+`````)
+
+The research → writer example below illustrates a _content-generation_ workflow, while Rewrite → Retrieve → Agent is a workflow for boosting _retrieval quality_. Both are natural fits for `StateGraph`.
 
 
 == 9.6 A Simple RAG Implementation

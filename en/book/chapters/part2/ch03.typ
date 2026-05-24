@@ -30,7 +30,7 @@ load_dotenv(override=True)
 
 # Initialize the model with OpenAI
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 print("Model initialized:", model.model_name)
@@ -59,7 +59,7 @@ LangChain v1 can initialize models from many providers through the unified `init
   [`langchain-anthropic`],
   [`ANTHROPIC_API_KEY`],
   [Google],
-  [`"google:gemini-2.0-flash"`],
+  [`"google:gemini-2.5-flash-lite"`],
   [`langchain-google-genai`],
   [`GOOGLE_API_KEY`],
   [AWS Bedrock],
@@ -155,7 +155,109 @@ content = [
 `````)
 
 
-== 3.7 Summary
+== 3.7 Standard Output Format — `output_version="v1"`
+
+Starting from LangChain v1, every provider can emit a unified _content blocks_ serialization. Set `init_chat_model("openai:gpt-5.4", output_version="v1")` or the env var `LC_OUTPUT_VERSION="v1"`, and `AIMessage.content_blocks` will give you text, tool calls, reasoning, thinking, and citations in a single schema.
+
+#code-block(`````python
+import os
+from langchain.chat_models import init_chat_model
+
+os.environ["LC_OUTPUT_VERSION"] = "v1"
+
+model = init_chat_model("openai:gpt-5.4", output_version="v1")
+result = model.invoke("Describe LangChain v1 in one sentence.")
+
+for block in result.content_blocks:
+    print(block["type"], "→", block.get("text", block))
+`````)
+
+Streaming uses the same shape. Read partial blocks from `chunk.content_blocks` and map them to your UI.
+
+#code-block(`````python
+for chunk in model.stream("Explain multimodal input."):
+    for block in chunk.content_blocks:
+        if block["type"] == "text":
+            print(block["text"], end="")
+`````)
+
+#tip-box[`output_version="v1"` is the recommended setting for absorbing provider differences. Legacy code that depends on the string `result.content` still works in `v0`, but new projects should use v1.]
+
+
+== 3.8 Tracking Token Usage — `UsageMetadataCallbackHandler`
+
+For multi-step agent runs, aggregate token usage with a callback handler. Pass `UsageMetadataCallbackHandler` through `config={"callbacks": [...]}`, and `input_tokens` / `output_tokens` / `total_tokens` accumulate across every model call.
+
+#code-block(`````python
+from langchain_core.callbacks import UsageMetadataCallbackHandler
+
+cb = UsageMetadataCallbackHandler()
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "What is 15 * 27 + 3?"}]},
+    config={"callbacks": [cb]},
+)
+
+print(cb.usage_metadata)
+# {'gpt-5.4': {'input_tokens': 312, 'output_tokens': 48, 'total_tokens': 360, ...}}
+`````)
+
+
+== 3.9 Runtime Config — Per-Invocation Options
+
+The `config=` argument on `invoke()` / `stream()` carries execution metadata for a single call. You can set the LangSmith trace name, tags, metadata, and concurrency limits for tools and sub-agents all at once.
+
+#code-block(`````python
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "..."}]},
+    config={
+        "run_name": "monthly-report",
+        "tags": ["batch-2025-05", "finance"],
+        "metadata": {"user_id": "u-1234", "tenant": "acme"},
+        "max_concurrency": 5,
+    },
+)
+`````)
+
+#tip-box[`run_name`, `tags`, and `metadata` flow into LangSmith and become filter/search keys in the UI. `max_concurrency` caps the parallel tool and sub-agent calls inside one graph execution.]
+
+
+== 3.10 Connection Resilience — `max_retries` / `timeout`
+
+In production, you have to ride out temporary outages from OpenAI, Anthropic, and other providers. Pass `max_retries` and `timeout` to `init_chat_model()` or `ChatOpenAI()`, and LangChain will retry with exponential backoff.
+
+#code-block(`````python
+from langchain.chat_models import init_chat_model
+
+model = init_chat_model(
+    "openai:gpt-5.4",
+    max_retries=15,   # default is 6 — raise it for resilience
+    timeout=120,      # seconds, for long responses
+)
+`````)
+
+#tip-box[Retries fire on 5xx errors, connection failures, and `429 Too Many Requests`. Client errors like 422 are not retried. Setting the limit too high amplifies cost and latency, so most teams keep it in the 10–20 range.]
+
+
+== 3.11 Prompt Caching — Implicit vs Explicit
+
+When you reuse a long system prompt or RAG context, prompt caching can cut input token costs sharply.
+
+- _Implicit caching_: the provider detects an identical prefix automatically. OpenAI `gpt-5.4` enables this for prefixes of 1024 tokens or more.
+- _Explicit caching_: Anthropic uses `prompt_cache_key` (or a `cache_control` block) to mark cache keys. In LangChain you pass it via `model_kwargs={"prompt_cache_key": "..."}`.
+
+#code-block(`````python
+from langchain_anthropic import ChatAnthropic
+
+model = ChatAnthropic(
+    model="claude-sonnet-4-6",
+    model_kwargs={"prompt_cache_key": "system-v3"},
+)
+`````)
+
+#tip-box[On cache hits, `usage_metadata.input_tokens_details` reports `cache_read` and `cache_creation` separately. Track cache hit rate as an ops metric with `UsageMetadataCallbackHandler`.]
+
+
+== 3.12 Summary
 
 Here is a summary of the main ideas from this notebook.
 

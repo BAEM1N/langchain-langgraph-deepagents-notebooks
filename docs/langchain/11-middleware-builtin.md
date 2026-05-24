@@ -35,11 +35,21 @@ agent = create_agent(
 
 **Key Parameters**:
 - `model`: Chat model for generating summaries
-- `trigger`: Conditions for starting summarization (tokens, messages, or fraction). 리스트로 전달 시 OR 논리
-- `keep`: How much context to preserve after summarization
+- `trigger`: A `ContextSize` (tuple `(str, int | float)`) or list of them. Options: `("tokens", int)`, `("messages", int)`, `("fraction", 0-1)`. 리스트로 전달 시 OR 논리
+- `keep`: A `ContextSize` controlling how much context to preserve after summarization
 - `token_counter`: Custom token counting function
 - `summary_prompt`: Custom prompt template with `{messages}` placeholder
 - `trim_tokens_to_summarize`: Maximum tokens included when generating summary (default 4000)
+
+**`ContextSize` type**:
+
+```python
+ContextSize = tuple[str, int | float]
+# Options:
+#   ("tokens", int)       — absolute token count
+#   ("messages", int)     — message count
+#   ("fraction", float)   — 0–1 fraction of model's context window
+```
 
 **Dynamic trigger via `.profile` (langchain 1.1+)**: `trigger=("fraction", 0.8)`처럼 분수 조건을 쓰면 모델의 `.profile["max_input_tokens"]`를 참조해 자동으로 토큰 임계치를 계산한다. 모델을 바꿔도 설정을 다시 고치지 않아도 된다.
 
@@ -174,6 +184,17 @@ agent = create_agent(
 - Building resilient agents handling model outages
 - Cost optimization by falling back to cheaper alternatives
 - Provider redundancy across multiple LLM services
+
+**Signature**:
+
+```python
+ModelFallbackMiddleware(
+    first_model: str | BaseChatModel,
+    *additional_models: str | BaseChatModel,
+)
+```
+
+The first positional argument is the primary fallback target; any number of additional positional arguments are tried in order.
 
 **Configuration**:
 ```python
@@ -419,6 +440,8 @@ agent = create_agent(
 
 ### LLM Tool Emulator
 
+> Note: the class is named `LLMToolEmulator` (without the `Middleware` suffix used by most other middleware classes).
+
 **Purpose**: Emulate tool execution using an LLM for testing purposes.
 
 **Use Cases**:
@@ -477,7 +500,7 @@ agent = create_agent(
 ```
 
 **ContextEditingMiddleware Parameters**:
-- `edits`: List of context editing strategies
+- `edits`: List of context editing strategies (default: `[ClearToolUsesEdit()]`)
 - `token_count_method`: "approximate" or "model" (default: approximate)
 
 **ClearToolUsesEdit Parameters**:
@@ -573,8 +596,8 @@ agent = create_agent(
 - `max_file_size_mb`: Maximum file size to search (default: 10)
 
 **Tools Provided**:
-- **Glob tool**: Fast file pattern matching (e.g., `**/*.py`, `src/**/*.ts`)
-- **Grep tool**: Content search with regex and file pattern filtering
+- **`glob_search`**: Fast file pattern matching (e.g., `**/*.py`, `src/**/*.ts`)
+- **`grep_search`**: Content search with regex and file pattern filtering
 
 ---
 
@@ -708,6 +731,83 @@ agent = create_agent(
 ## Provider-Specific Middleware
 
 **Anthropic Middleware**: Prompt caching, bash tool, text editor, memory, and file search for Claude models.
+
+### AnthropicPromptCachingMiddleware
+
+**Purpose**: Insert Anthropic prompt-cache checkpoints so long system prompts, tool definitions, and prior turns are billed and processed as cache hits on subsequent requests.
+
+**Configuration**:
+```python
+from langchain_anthropic import ChatAnthropic
+from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
+from langchain.agents import create_agent
+
+agent = create_agent(
+    model=ChatAnthropic(model="claude-sonnet-4-6"),
+    system_prompt="<Your long system prompt here>",
+    middleware=[AnthropicPromptCachingMiddleware(ttl="5m")],
+)
+```
+
+**Parameters**:
+- `type` (str, default `"ephemeral"`): Cache type; only `"ephemeral"` is currently supported.
+- `ttl` (str, default `"5m"`): Time to live for cached content. Valid values: `"5m"` or `"1h"`.
+- `min_messages_to_cache` (int, default `0`): Minimum message count before caching activates.
+- `unsupported_model_behavior` (str, default `"warn"`): Behavior for non-Anthropic models. Options: `"ignore"`, `"warn"`, `"raise"`.
+
+---
+
+### BedrockPromptCachingMiddleware (Amazon Bedrock)
+
+**Purpose**: Apply Anthropic-style prompt caching to Bedrock-hosted Claude models via `langchain-aws`.
+
+**Configuration**:
+```python
+from langchain_aws import ChatBedrockConverse
+from langchain_aws.middleware.prompt_caching import BedrockPromptCachingMiddleware
+from langchain.agents import create_agent
+
+agent = create_agent(
+    model=ChatBedrockConverse(model="us.anthropic.claude-sonnet-4-5-20250929-v1:0"),
+    system_prompt="<Your long system prompt here>",
+    middleware=[BedrockPromptCachingMiddleware(ttl="1h")],
+)
+```
+
+**Parameters**:
+- `type` (str, default `"ephemeral"`): Cache type; `"ephemeral"` for `ChatBedrock`, ignored for `ChatBedrockConverse`.
+- `ttl` (str, default `"5m"`): Time to live. Valid values: `"5m"` or `"1h"`.
+- `min_messages_to_cache` (int, default `0`): Minimum messages before caching activates.
+- `unsupported_model_behavior` (str, default `"warn"`): Options: `"ignore"`, `"warn"`, `"raise"`.
+
+The middleware automatically places cache checkpoints after the system prompt, tool definitions, and recent messages.
+
+---
+
+### PatchToolCallsMiddleware (Deep Agents)
+
+**Purpose**: Repair malformed or invalid tool calls produced by the model before they reach the tool node — a core component of the Deep Agents default middleware stack that improves end-to-end reliability across the `model → tools` boundary.
+
+**Use Cases**:
+- Coercing argument types when the model emits stringly-typed parameters
+- Stripping or remapping unknown tool names
+- Logging or recovering from partial / truncated tool-call arguments
+
+**Configuration**:
+```python
+from langchain.agents import create_agent
+from deepagents.middleware.patch_tool_calls import PatchToolCallsMiddleware
+
+agent = create_agent(
+    model="claude-sonnet-4-6",
+    tools=[...],
+    middleware=[PatchToolCallsMiddleware()],
+)
+```
+
+Included by default when constructing a Deep Agents agent via `create_deep_agent(...)`.
+
+---
 
 ### OpenAI Content Moderation (langchain 1.1+)
 

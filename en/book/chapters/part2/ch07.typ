@@ -28,7 +28,7 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 print("Model ready:", model.model_name)
@@ -72,10 +72,10 @@ def delete_file(path: str) -> str:
     """Deletes a file at the specified path."""
     return f"File deleted: {path}"
 
-# Require approval only for risky tools
+# Require approval only for risky tools (dict form scopes decisions)
 hitl = HumanInTheLoopMiddleware(interrupt_on={
-    "send_email": True,
-    "delete_file": True,
+    "send_email": {"allowed_decisions": ["approve", "edit", "reject", "respond"]},
+    "delete_file": {"allowed_decisions": ["approve", "reject"]},
 })
 
 agent = create_agent(
@@ -95,9 +95,71 @@ print("  -> The run pauses for human approval before executing tools")
 A HITL agent works in two phases:
 
 + *Phase 1 (`invoke`):* the agent proposes a tool call and is automatically *interrupted*
-+ *Phase 2 (`Command(resume=True)`):* after a human approves, execution *resumes* with `Command(resume=True)`
++ *Phase 2 (`Command(resume=...)`):* a decision list is sent and execution *resumes*
 
-To reject a request, use `Command(resume=False)` or provide a different decision.
+==== Four decisions (approve / edit / reject / respond)
+
+`HumanInTheLoopMiddleware` accepts decisions as a dict, one per pending tool call.
+
+#code-block(`````python
+from langgraph.types import Command
+
+# 1) approve — run the tool as proposed
+agent.invoke(Command(resume={"decisions": [{"type": "approve"}]}),
+             config=config, version="v2")
+
+# 2) edit — run the tool with patched arguments
+agent.invoke(
+    Command(resume={"decisions": [
+        {"type": "edit", "args": {"to": "boss@example.com", "subject": "Updated"}}
+    ]}),
+    config=config, version="v2",
+)
+
+# 3) reject — block the call, send a rejection back to the model
+agent.invoke(Command(resume={"decisions": [{"type": "reject"}]}),
+             config=config, version="v2")
+
+# 4) respond — replace the tool call with a human message
+agent.invoke(
+    Command(resume={"decisions": [
+        {"type": "respond", "message": "Send this via Slack instead"}
+    ]}),
+    config=config, version="v2",
+)
+`````)
+
+==== `version="v2"` returns a `GraphOutput`
+
+`agent.invoke(..., version="v2")` returns a `GraphOutput`. When the run is paused, `result.value` is the partial state and `result.interrupts` is a list of `Interrupt` objects.
+
+#code-block(`````python
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "Send the weekly report"}]},
+    config={"configurable": {"thread_id": "t1"}},
+    version="v2",
+)
+
+if result.interrupts:
+    pending = result.interrupts[0].value
+    decision = ask_human(pending)
+    final = agent.invoke(
+        Command(resume={"decisions": [decision]}),
+        config={"configurable": {"thread_id": "t1"}},
+        version="v2",
+    )
+    print(final.value["messages"][-1].content)
+`````)
+
+#tip-box[`version="v2"` and dict-based `decisions` require `deepagents>=0.5.0` or `langgraph>=1.1.5`. On older versions, the single-decision `Command(resume=True/False)` form still works.]
+
+==== Lifecycle — `after_model` hook and `HITLRequest`
+
+Internally `HumanInTheLoopMiddleware` runs in an `after_model` hook that builds a `HITLRequest` containing `action_requests` (the tool calls to review) and `review_configs` (the allowed decisions per call). Custom approval flows can return the same object directly from their own `after_model` hook.
+
+==== Transient vs. persistent patches
+
+Use `request.override(...)` for one-shot changes that only apply to this call (transient). For changes that must outlive the call, return an `ExtendedModelResponse` together with `Command(update=...)` so the state is written to the checkpoint (persistent).
 
 
 == 7.5 `ToolRuntime` — Access Runtime Information from a Tool
@@ -108,6 +170,65 @@ To reject a request, use `Command(resume=False)` or provide a different decision
 - Add a `runtime: ToolRuntime[T]` parameter to the tool function
 - `T` is a context dataclass defined by the developer
 - When you create the agent, set `context_schema=T`, and when invoking the agent, pass `context=T(...)`
+
+==== `runtime.execution_info` — call metadata
+
+Identifies the current call. Useful for tracing, idempotency, or retry counting.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Field],
+  text(weight: "bold")[Description],
+  [`thread_id`],
+  [Conversation thread identifier],
+  [`run_id`],
+  [Identifier for this `invoke`/`stream` call],
+  [`attempt`],
+  [Retry attempt number (1-based)],
+)
+
+#code-block(`````python
+@tool
+def call_external_api(payload: dict, runtime: ToolRuntime[Context]) -> str:
+    info = runtime.execution_info
+    headers = {
+        "X-Trace-Run": info.run_id,
+        "X-Trace-Thread": info.thread_id,
+        "X-Attempt": str(info.attempt),
+    }
+    return http.post(url, json=payload, headers=headers).text
+`````)
+
+==== `runtime.server_info` — deployment metadata
+
+When the agent runs on LangGraph Platform/Server, `server_info` exposes deployment identifiers and the authenticated user. Values may be `None` in a local process.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Field],
+  text(weight: "bold")[Description],
+  [`assistant_id`],
+  [Platform assistant (config bundle) identifier],
+  [`graph_id`],
+  [Graph name from `langgraph.json`],
+  [`user`],
+  [Authenticated user, if available],
+)
+
+#code-block(`````python
+@tool
+def log_who(runtime: ToolRuntime[Context]) -> str:
+    s = runtime.server_info
+    return f"{s.graph_id}/{s.assistant_id} called by {s.user}"
+`````)
 
 
 == 7.6 Context Engineering — Dynamic Control of Prompts and Tools

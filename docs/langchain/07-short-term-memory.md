@@ -8,6 +8,10 @@ Short-term memory enables AI applications to retain information from previous in
 
 The primary challenge involves managing conversation history within LLM context windows, as lengthy conversations can exceed token limits or degrade performance.
 
+**Update semantics:** Short-term memory updates when the agent is invoked or a step (such as a tool call) is completed, and the state is read at the start of each step.
+
+**State updates from tools:** Tools may return a `Command` object to update state directly (see "Within Tools" below).
+
 ## Implementation
 
 ### Basic Setup
@@ -19,7 +23,7 @@ from langchain.agents import create_agent
 from langgraph.checkpoint.memory import InMemorySaver
 
 agent = create_agent(
-    "gpt-5",
+    "gpt-5.4",
     tools=[get_user_info],
     checkpointer=InMemorySaver(),
 )
@@ -41,7 +45,7 @@ DB_URI = "postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable
 with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
     checkpointer.setup()
     agent = create_agent(
-        "gpt-5",
+        "gpt-5.4",
         tools=[get_user_info],
         checkpointer=checkpointer,
     )
@@ -59,7 +63,7 @@ class CustomAgentState(AgentState):
     preferences: dict
 
 agent = create_agent(
-    "gpt-5",
+    "gpt-5.4",
     tools=[get_user_info],
     state_schema=CustomAgentState,
     checkpointer=InMemorySaver(),
@@ -131,6 +135,21 @@ from langchain.tools import tool, ToolRuntime
 def get_user_info(runtime: ToolRuntime) -> str:
     user_id = runtime.state["user_id"]
     return "User is John Smith" if user_id == "user_123" else "Unknown user"
+```
+
+Tools can also return a `Command` to update state directly:
+
+```python
+from langgraph.types import Command
+from langchain.messages import ToolMessage
+
+@tool
+def update_user_info(runtime: ToolRuntime[CustomContext, CustomState]) -> Command:
+    """Look up and update user info."""
+    return Command(update={
+        "user_name": name,
+        "messages": [ToolMessage("Successfully looked up user information", ...)],
+    })
 ```
 
 ### Dynamic Prompts

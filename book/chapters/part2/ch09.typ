@@ -28,7 +28,7 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 from langchain.agents import create_agent
@@ -108,6 +108,48 @@ RAG는 외부 지식을 검색하여 LLM의 응답을 보강하는 패턴입니�
 
 - _기본 2단계_: 쿼리로 문서를 검색한 후, 검색된 문서를 컨텍스트로 LLM에 전달하여 답변을 생성합니다.
 - _에이전틱 RAG_: 에이전트가 검색 도구를 사용하여 필요한 정보를 반복적으로 검색하고, 충분한 정보를 모은 후 답변합니다.
+
+=== RAG 5 빌딩 블록
+
+LangChain 의 RAG 파이프라인은 다음 다섯 컴포넌트로 구성됩니다.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[컴포넌트],
+  text(weight: "bold")[역할],
+  [_Document Loaders_],
+  [PDF, 웹페이지, Notion 등에서 원본 문서를 적재],
+  [_Text Splitters_],
+  [긴 문서를 의미 단위 청크로 분할 (`RecursiveCharacterTextSplitter` 등)],
+  [_Embedding Models_],
+  [텍스트를 벡터로 변환 (`OpenAIEmbeddings` 등)],
+  [_Vector Stores_],
+  [임베딩 인덱싱·검색 (FAISS, Chroma, Pinecone 등)],
+  [_Retrievers_],
+  [검색 인터페이스 통일 — 벡터/하이브리드/MultiQuery 등을 같은 API로],
+)
+
+=== Rewrite → Retrieve → Agent 3-노드 패턴
+
+에이전틱 RAG 의 한 변형으로, _쿼리 재작성_을 별도 노드로 분리합니다. 사용자 입력을 검색 친화적인 형태로 다듬은 뒤 retriever 가 동작하고, 그 결과를 에이전트가 답변에 반영합니다.
+
+#code-block(`````python
+# Rewrite → Retrieve → Agent
+graph.add_node("rewrite", query_rewriter_node)
+graph.add_node("retrieve", retriever_node)
+graph.add_node("agent", create_agent(model, tools=[]))
+
+graph.add_edge(START, "rewrite")
+graph.add_edge("rewrite", "retrieve")
+graph.add_edge("retrieve", "agent")
+graph.add_edge("agent", END)
+`````)
+
+아래 research → writer 예제는 _컨텐츠 생성_ 워크플로를 보여주며, Rewrite → Retrieve → Agent 는 _검색 품질_을 끌어올리는 워크플로입니다. 둘 다 `StateGraph` 의 자연스러운 활용입니다.
 
 == 9.6 간단한 RAG 구현
 

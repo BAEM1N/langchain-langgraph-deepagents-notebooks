@@ -29,7 +29,7 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 print("Environment ready.")
@@ -407,6 +407,6 @@ This notebook covered:
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 _References:_
-- #link("../docs/langchain/08-streaming.md")[Streaming]
+- #link("../docs/langchain/08-streaming.md")[Streaming] — canonical `useStream` reference with the full event protocol
 - #link("../docs/langchain/28-ui.md")[UI (Agent Chat UI & useStream)]
 

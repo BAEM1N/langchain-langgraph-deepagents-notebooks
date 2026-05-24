@@ -5,7 +5,20 @@ The complete documentation index is available at: https://docs.langchain.com/llm
 
 ## What is LangChain?
 
-LangChain serves as "an open source framework with a pre-built agent architecture and integrations for any model or tool." You can connect to multiple LLM providers (OpenAI, Anthropic, Google, and others) in under 10 lines of code.
+LangChain serves as "an open source framework with a prebuilt agent architecture and integrations for any model or tool." You can connect to multiple LLM providers (OpenAI, Anthropic, Google, and others) in under 10 lines of code.
+
+The documentation includes ready-to-run examples for the following providers:
+
+- OpenAI (`gpt-5.4`)
+- Google Gemini (`gemini-2.5-flash-lite`)
+- Claude / Anthropic (`claude-sonnet-4-6`)
+- OpenRouter
+- Fireworks
+- Baseten
+- Ollama
+- Azure OpenAI
+- AWS Bedrock
+- HuggingFace
 
 ## Framework Comparison
 
@@ -39,4 +52,4 @@ agent.invoke(
 
 **LangGraph Foundation** - Leverages durable execution, human-in-the-loop support, and persistence capabilities.
 
-**LangSmith Integration** - Use tracing, debugging, and evaluation tools by setting `LANGSMITH_TRACING=true`.
+**LangSmith Integration** - A tracing and debugging platform for agents built with any framework. Use tracing, debugging, and evaluation tools by setting `LANGSMITH_TRACING=true`.

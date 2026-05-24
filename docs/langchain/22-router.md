@@ -16,8 +16,24 @@ The router pattern suits scenarios with "distinct verticals (separate knowledge 
 ### Single Agent Routing
 Using `Command` directs queries to one appropriate agent based on classification logic.
 
+```python
+from langgraph.types import Command
+
+def route(state) -> Command:
+    active_agent = classify(state["query"])
+    return Command(goto=active_agent)
+```
+
 ### Multiple Agent Routing (Parallel)
 Using `Send` enables fan-out to multiple specialized agents simultaneously, with classifications determining which agents receive which queries.
+
+```python
+from langgraph.types import Command, Send
+
+def route(state):
+    classifications = classify(state["query"])  # [{"agent": "...", "query": "..."}, ...]
+    return [Send(c["agent"], {"query": c["query"]}) for c in classifications]
+```
 
 ## Architecture Modes
 
@@ -31,6 +47,11 @@ Using `Send` enables fan-out to multiple specialized agents simultaneously, with
 
 2. **Full Persistence**: The router maintains state directly, storing message history and selectively including prior context when routing to agents.
 
-## Router vs. Subagents
+## Router vs. Supervisor
 
-The documentation distinguishes these patterns: routers use "dedicated routing step (often a single LLM call or rule-based logic)" for classification, while subagents involve "supervisor agent dynamically decides" which agents to invoke during ongoing conversations.
+The documentation distinguishes these patterns:
+
+- A **router** is "a dedicated routing step (often a single LLM call or rule-based logic) that classifies the input and dispatches to agents." It is preprocessing without built-in conversation awareness.
+- A **supervisor** is "a main agent dynamically deciding which subagents to call as part of an ongoing conversation," maintaining context across turns and orchestrating complex workflows.
+
+Use a router when you have clear input categories and want deterministic or lightweight classification. Use a supervisor (the Subagents pattern) when you need flexible, conversation-aware orchestration where the LLM decides what to do next based on evolving context.

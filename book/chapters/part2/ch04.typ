@@ -14,6 +14,8 @@
 
 == 4.1 환경 설정
 
+#tip-box[이 장의 일부 예제는 _deepagents ≥ 0.5.0_ 또는 _langgraph ≥ 1.1.5_, `ToolRuntime`의 `execution_info` / `server_info` 확장 사용 예제는 _langchain ≥ 1.2_ 가 필요합니다. 버전이 낮으면 `AttributeError`가 발생할 수 있으니 `uv pip list | grep -E "langchain|langgraph|deepagents"` 로 확인하세요.]
+
 API 키를 로드하고 OpenAI 모델을 초기화합니다.
 
 #code-block(`````python
@@ -25,13 +27,13 @@ load_dotenv(override=True)
 
 # OpenAI를 통한 모델 초기화
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 print("모델 초기화 완료:", model.model_name)
 `````)
 #output-block(`````
-모델 초기화 완료: gpt-4.1
+모델 초기화 완료: gpt-5.4
 `````)
 
 == 4.2 \@tool 데코레이터 기본
@@ -140,6 +142,96 @@ def my_tool(runtime: ToolRuntime) -> str:
     # ...
 `````)
 
+==== `runtime.execution_info` — 실행 메타데이터
+
+`ToolRuntime`은 단순 state 접근에 그치지 않고, 현재 실행 단위의 메타데이터를 `execution_info`로 노출합니다. 로깅·트레이싱·재시도 정책에서 자주 사용합니다.
+
+#code-block(`````python
+@tool
+def log_call(payload: str, runtime: ToolRuntime) -> str:
+    """입력을 처리하고 실행 메타데이터를 로깅합니다."""
+    info = runtime.execution_info
+    print(f"thread={info.thread_id} run={info.run_id} attempt={info.node_attempt}")
+    return f"received: {payload}"
+`````)
+
+- `execution_info.thread_id`: 멀티턴 대화를 묶는 세션 ID
+- `execution_info.run_id`: 한 번의 `invoke()` / `stream()` 실행 ID (LangSmith 트레이스와 연동)
+- `execution_info.node_attempt`: 현재 노드의 시도 횟수(재시도 시 증가)
+
+==== `runtime.server_info` — 서버·사용자 정보
+
+LangGraph Platform·LangSmith 서버에서 실행될 때 `runtime.server_info`로 어시스턴트와 호출 사용자를 식별할 수 있습니다.
+
+#code-block(`````python
+@tool
+def user_summary(runtime: ToolRuntime) -> str:
+    """현재 사용자 정보를 반환합니다."""
+    s = runtime.server_info
+    return f"assistant={s.assistant_id} user={s.user.email if s.user else 'anonymous'}"
+`````)
+
+- `server_info.assistant_id`: 배포된 어시스턴트(graph 버전)의 ID
+- `server_info.user`: 인증된 사용자 객체(`user.id`, `user.email`, 권한 정보)
+
+#tip-box[로컬 실행에서는 `server_info`가 비어 있을 수 있습니다. 운영 환경에서만 채워지는 값이므로 `if runtime.server_info.user is not None:` 같은 가드를 두세요.]
+
+==== 도구 호출 에러 핸들링 — `@wrap_tool_call`
+
+도구 단위로 일관된 에러 처리·로깅·재시도 정책을 부여하려면 `@wrap_tool_call` 데코레이터를 사용합니다. `ToolCallRequest`를 받아 실제 도구 실행을 가로채는 미들웨어성 훅입니다.
+
+#code-block(`````python
+from langchain.tools import wrap_tool_call, ToolCallRequest
+from langchain_core.messages import ToolMessage
+
+@wrap_tool_call
+def safe_invoke(request: ToolCallRequest, handler):
+    """모든 도구 호출을 try/except로 감쌉니다."""
+    try:
+        return handler(request)
+    except Exception as exc:  # noqa: BLE001
+        return ToolMessage(
+            content=f"[error] {type(exc).__name__}: {exc}",
+            tool_call_id=request.tool_call.id,
+            status="error",
+        )
+
+agent = create_agent(
+    model=model,
+    tools=[get_weather, search_database],
+    middleware=[safe_invoke],
+)
+`````)
+
+#tip-box[`@wrap_tool_call`은 미들웨어로 등록되므로 _모든_ 도구에 일괄 적용됩니다. 특정 도구만 보호하려면 `request.tool_call.name`으로 분기하세요.]
+
+==== `Command` 업데이트와 `ToolMessage` 동반 반환
+
+도구가 단순한 텍스트 결과 외에 _그래프 상태_나 _다음 노드_까지 갱신하려면 `Command`를 반환합니다. LangGraph는 `Command.update`로 상태를 패치하고, `Command.goto`로 다음 노드를 지정합니다. 이때 반드시 `ToolMessage`를 함께 반환하여 `tool_call_id`를 닫아 줘야 모델이 다음 턴을 진행할 수 있습니다.
+
+#code-block(`````python
+from langgraph.types import Command
+from langchain_core.messages import ToolMessage
+
+@tool
+def transfer_to_specialist(topic: str, runtime: ToolRuntime) -> Command:
+    """전문가 서브에이전트로 컨트롤을 넘기고 상태를 갱신합니다."""
+    return Command(
+        update={
+            "active_specialist": topic,
+            "messages": [
+                ToolMessage(
+                    content=f"{topic} 전문가에게 전달했습니다.",
+                    tool_call_id=runtime.tool_call_id,
+                )
+            ],
+        },
+        goto="specialist_node",
+    )
+`````)
+
+#tip-box[`tool_call_id`를 빠뜨리면 모델이 "도구 호출에 대한 응답이 없음" 오류를 일으킵니다. `runtime.tool_call_id`로 현재 호출 ID를 가져와 그대로 전달하세요.]
+
 == 4.6 구조화된 출력
 
 도구 정의를 마쳤으니, 이제 반대 방향 --- 모델의 _출력_을 제어하는 방법을 살펴봅니다. 자유 형식의 텍스트 대신, 정해진 스키마에 맞는 구조화된 데이터를 받고 싶을 때 `with_structured_output()`을 사용합니다.
@@ -177,6 +269,10 @@ result = structured_model.invoke("...")
 )
 
 `response_format` 파라미터에 전략을 지정하여 에이전트의 최종 응답을 구조화할 수 있습니다. `ToolStrategy`는 내부적으로 응답 스키마를 하나의 "도구"로 변환하여 모델에게 호출하도록 유도하는 방식이고, `ProviderStrategy`는 OpenAI의 `response_format` 같은 프로바이더 네이티브 JSON 모드를 활용하는 방식입니다. `ToolStrategy`가 더 넓은 호환성을 제공하지만, `ProviderStrategy`는 지원 모델에서 더 빠르고 정확한 결과를 보여줍니다.
+
+#tip-box[`ProviderStrategy.strict=True`(스키마 강제 검증) 옵션은 _langchain ≥ 1.2_ 가 필요합니다. 이전 버전에서는 `strict=False` 또는 `ToolStrategy`를 사용하세요.]
+
+#tip-box[`ProviderStrategy`는 현재 OpenAI(`gpt-5.4`·`gpt-4.1`)와 Anthropic(`claude-sonnet-4-6`)에서 안정 동작합니다. Google Gemini는 _비공식 지원_으로, JSON 모드는 동작하나 스키마 강제는 일부 모델에서만 적용됩니다. 호환성이 중요한 경우 `ToolStrategy`를 사용하세요.]
 
 #chapter-summary-header()
 

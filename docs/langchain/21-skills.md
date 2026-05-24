@@ -32,9 +32,25 @@ from langchain.agents import create_agent
 
 @tool
 def load_skill(skill_name: str) -> str:
-    """Load a specialized skill prompt."""
+    """Load a specialized skill prompt.
+    Available skills:
+    - write_sql: SQL query writing expert
+    - review_legal_doc: Legal document reviewer
+    Returns the skill's prompt and context.
+    """
     # Load skill content from file/database
     ...
+
+agent = create_agent(
+    model="gpt-5.4",
+    tools=[load_skill],
+    system_prompt=(
+        "You are a helpful assistant. "
+        "You have access to two skills: "
+        "write_sql and review_legal_doc. "
+        "Use load_skill to access them."
+    ),
+)
 ```
 
 ## Extension Possibilities
@@ -44,3 +60,16 @@ The source identifies three enhancement approaches:
 1. **Dynamic tool registration**: Register new tools as skills load
 2. **Hierarchical skills**: Nested specializations organized in tree structures
 3. **Reference awareness**: Skills reference assets progressively disclosed as needed
+
+### Hierarchical Skills Example
+
+Skills can be organized as a tree, with a parent skill exposing child skills that load only when needed:
+
+```
+data_science (parent skill)
+├── pandas_expert        # DataFrame manipulation, joins, aggregations
+├── visualization        # matplotlib / seaborn / plotly recipes
+└── statistical_analysis # hypothesis testing, regression
+```
+
+Loading `data_science` brings in the supervisor prompt that describes the three sub-skills; each child skill is then loaded on-demand with its own focused prompt, keeping the context window lean while preserving progressive access to domain expertise.

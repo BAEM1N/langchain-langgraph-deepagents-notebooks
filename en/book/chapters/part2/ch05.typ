@@ -27,7 +27,7 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 print("Model ready:", model.model_name)
@@ -63,6 +63,43 @@ Long-term memory stores information that persists _across conversation sessions_
 - `InMemoryStore` is a key-value store for user preferences, settings, and similar data.
 - Tools can access the store through the `ToolRuntime` parameter.
 - The same data is available from every session, regardless of `thread_id`.
+
+==== Per-user namespaces (`context_schema` + `runtime.context`)
+
+In real apps you typically scope the store with the current `user_id`. Declare a `context_schema`, read `runtime.context.user_id` inside the tool, and cast Pydantic/dataclass objects with `dict(...)` before writing so the value is JSON-serializable.
+
+#code-block(`````python
+from dataclasses import dataclass
+from langgraph.store.memory import InMemoryStore
+from langchain.tools import tool, ToolRuntime
+
+@dataclass
+class Context:
+    user_id: str
+
+@tool
+def remember_user(user_info: dict, runtime: ToolRuntime[Context]) -> str:
+    """Persist the current user's profile."""
+    namespace = (runtime.context.user_id, "profile")
+    runtime.store.put(namespace, "info", dict(user_info))
+    return "saved"
+
+store = InMemoryStore()
+agent = create_agent(
+    model=model,
+    tools=[remember_user],
+    store=store,
+    context_schema=Context,
+)
+agent.invoke(
+    {"messages": [{"role": "user", "content": "I'm Minji"}]},
+    context=Context(user_id="user_123"),
+)
+`````)
+
+#tip-box[If you forget to pass `store=...` to `create_agent`, `runtime.store` is `None` and the tool cannot access the store. Always wire the store in alongside any long-term memory tool.]
+
+#tip-box[In production, swap `InMemoryStore` for `PostgresStore` (or `AsyncPostgresStore`) from the `langgraph-checkpoint-postgres` package — same interface, persistent storage, and semantic search.]
 
 Differences between short-term and long-term memory:
 
@@ -123,20 +160,98 @@ LangChain provides streaming so you can _observe agent execution in real time_. 
 
 === A Note on `stream_mode="custom"`
 
-`stream_mode="custom"` is for user-defined events. It is not directly supported by agents created with `create_agent`; instead, you must use the _lower-level LangGraph API_ (`StateGraph`) and emit custom events manually through a `StreamWriter`.
+`stream_mode="custom"` carries user-defined events. With current LangGraph, you can emit them from inside tools or middleware of a `create_agent` agent by calling `get_stream_writer()`.
 
 #code-block(`````python
-# Example at the LangGraph StateGraph level (reference only)
-from langgraph.graph import StateGraph
+from langgraph.config import get_stream_writer
+from langchain.tools import tool
 
-def my_node(state, writer):  # StreamWriter is injected
-    writer("progress", {"step": 1, "status": "processing"})
+@tool
+def long_running_task(query: str) -> str:
+    """Reports progress through the custom stream."""
+    writer = get_stream_writer()
+    writer({"step": 1, "status": "fetching"})
     # ... work ...
-    writer("progress", {"step": 2, "status": "done"})
-    return state
+    writer({"step": 2, "status": "done"})
+    return "ok"
+
+for chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "search"}]},
+    stream_mode="custom",
+):
+    print(chunk)  # whatever the writer emitted
 `````)
 
-If you are using `create_agent`, the recommended pattern for progress indicators is to combine `stream_mode="updates"` with middleware.
+#tip-box[Earlier docs said `stream_mode="custom"` did not work with `create_agent`. Current LangGraph supports it via `get_stream_writer()` — the same mechanism as the `writer` parameter you would receive at the `StateGraph` level.]
+
+=== `version="v2"` Streaming and GraphOutput
+
+`agent.stream(..., version="v2")` delivers structured events, and `agent.invoke(..., version="v2")` returns a `GraphOutput` with `value` (final state) and `interrupts` (pending interrupts).
+
+#code-block(`````python
+for chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "hello"}]},
+    config={"configurable": {"thread_id": "t1"}},
+    version="v2",
+):
+    if chunk["type"] == "updates":
+        print("update:", chunk["data"])
+    elif chunk["type"] == "messages":
+        print("token:", chunk["data"][0].content)
+
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "hi"}]},
+    config={"configurable": {"thread_id": "t1"}},
+    version="v2",
+)
+print(result.value)       # final state dict
+print(result.interrupts)  # [] when no interrupt is pending
+`````)
+
+=== Accumulating with `chunk_position`
+
+When streaming with `stream_mode="messages"`, the final chunk has `chunk_position == "last"`. Accumulate text and tool calls and flush them on the last chunk.
+
+#code-block(`````python
+buffer, tool_calls = [], []
+for chunk, meta in agent.stream(payload, stream_mode="messages"):
+    buffer.append(chunk.content)
+    if chunk.tool_calls:
+        tool_calls.extend(chunk.tool_calls)
+    if meta.get("chunk_position") == "last":
+        print("text:", "".join(buffer))
+        print("tools:", tool_calls)
+`````)
+
+=== Filtering reasoning via `content_blocks`
+
+Models with extended thinking (e.g., Claude Sonnet 4.6) expose typed `content_blocks` so you can route reasoning to a separate UI region.
+
+#code-block(`````python
+for chunk, _ in agent.stream(payload, stream_mode="messages"):
+    for block in getattr(chunk, "content_blocks", []) or []:
+        if block["type"] == "reasoning":
+            ui.show_reasoning(block["reasoning"])
+        elif block["type"] == "text":
+            ui.show_answer(block["text"])
+`````)
+
+=== Multi-mode streams and interrupts
+
+Passing a list to `stream_mode` yields `(mode, payload)` tuples. The `"__interrupt__"` key in an `updates` payload indicates a pending HITL decision.
+
+#code-block(`````python
+for mode, payload in agent.stream(
+    {"messages": [{"role": "user", "content": "send email"}]},
+    config={"configurable": {"thread_id": "t1"}},
+    stream_mode=["messages", "updates"],
+):
+    if mode == "updates" and "__interrupt__" in payload:
+        interrupt = payload["__interrupt__"]
+        # show approval UI, then resume with Command(resume=...)
+`````)
+
+#tip-box[Use `subgraphs=True` to receive events from nested subgraphs. To skip token streaming altogether, set `disable_streaming=True` on the call (or `streaming=False` on the model).]
 
 
 == 5.7 Summary

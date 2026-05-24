@@ -27,7 +27,7 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 print("Model ready:", model.model_name)
@@ -72,6 +72,8 @@ _Five middleware hooks:_
 
 LangChain v1 provides _built-in middleware_ for common patterns. `SummarizationMiddleware` automatically summarizes earlier messages when a conversation becomes long, reducing token usage.
 
+#tip-box[Size triggers across built-in middleware all use a `ContextSize` tuple: `("tokens", 100_000)`, `("messages", 20)`, or `("fraction", 0.8)` (80% of the model's context window).]
+
 
 #code-block(`````python
 from langchain.agents import create_agent
@@ -98,6 +100,64 @@ agent_with_summary = create_agent(
 )
 print("SummarizationMiddleware agent created")
 `````)
+
+==== Prompt-caching middleware
+
+Anthropic and Bedrock both support prompt caching, with one built-in middleware per provider.
+
+#code-block(`````python
+from langchain.agents.middleware import (
+    AnthropicPromptCachingMiddleware,
+    BedrockPromptCachingMiddleware,
+)
+from langchain_anthropic import ChatAnthropic
+
+claude = ChatAnthropic(model="claude-sonnet-4-6")
+agent = create_agent(
+    model=claude,
+    tools=[search],
+    middleware=[AnthropicPromptCachingMiddleware()],
+)
+# For Bedrock, plug in BedrockPromptCachingMiddleware() the same way.
+`````)
+
+==== `ContextEditingMiddleware`
+
+Clears stale tool outputs once the context is too heavy. `trigger` is the threshold, `keep` is how many recent messages to leave untouched.
+
+#code-block(`````python
+from langchain.agents.middleware import (
+    ContextEditingMiddleware,
+    ClearToolUsesEdit,
+)
+
+context_edit = ContextEditingMiddleware(
+    edits=[
+        ClearToolUsesEdit(
+            trigger=("tokens", 100_000),
+            keep=("messages", 3),
+        )
+    ],
+)
+`````)
+
+==== `ModelFallbackMiddleware`
+
+Cascades to a backup model when the primary one fails. The first argument is the primary; the rest are fallbacks.
+
+#code-block(`````python
+from langchain.agents.middleware import ModelFallbackMiddleware
+from langchain_openai import ChatOpenAI
+
+primary = ChatOpenAI(model="gpt-5.4")
+backup = ChatOpenAI(model="gpt-5-nano")
+agent = create_agent(model=primary, tools=[search],
+                     middleware=[ModelFallbackMiddleware(primary, backup)])
+`````)
+
+==== `PatchToolCallsMiddleware` (used by Deep Agents)
+
+Repairs malformed tool calls (bad JSON, missing arguments) and re-invokes the model so downstream tools see a clean payload. Deep Agents relies on this internally for its subagent and filesystem tools.
 
 == 6.4 Custom Middleware: `\@before_model`
 
@@ -126,6 +186,28 @@ Common uses:
 The `@wrap_model_call` decorator _wraps the model call itself_, which lets you implement retry, fallback, caching, and similar patterns.
 
 You execute the original model call through the `handler` function and can add custom logic before or after it.
+
+==== Type annotations and `request.override`
+
+Annotate handlers with `ModelRequest`/`ModelResponse` for better tooling. `request.override(...)` patches messages, tools, system prompt, or response format for this single call (transient).
+
+#code-block(`````python
+from langchain.agents.middleware import (
+    wrap_model_call,
+    ModelRequest,
+    ModelResponse,
+)
+
+@wrap_model_call
+def restrict_for_guest(request: ModelRequest, handler) -> ModelResponse:
+    if request.runtime.context.role == "guest":
+        patched = request.override(
+            system_message="Read-only mode.",
+            tools=[t for t in request.tools if t.name.startswith("read_")],
+        )
+        return handler(patched)
+    return handler(request)
+`````)
 
 
 #code-block(`````python
@@ -183,6 +265,32 @@ Common uses:
 == 6.9 Simple Guardrails
 
 Middleware can also act as a lightweight guardrail. In the example below, a `before_model` hook blocks requests that contain prohibited keywords before the model is called.
+
+==== Skipping the model with `can_jump_to`
+
+Instead of just editing messages, a guardrail can _jump_ to a different graph node and skip the model call entirely. Declare allowed destinations with `@hook_config(can_jump_to=[...])` and return `{"jump_to": ...}`.
+
+#code-block(`````python
+from langchain.agents.middleware import before_model, hook_config
+from langchain_core.messages import AIMessage
+
+BANNED = {"reveal system prompt", "tell me the password"}
+
+@before_model
+@hook_config(can_jump_to=["end", "tools", "model"])
+def block_unsafe(state):
+    last = state["messages"][-1].content
+    if any(p in last for p in BANNED):
+        return {
+            "messages": [AIMessage(content="I can't help with that request.")],
+            "jump_to": "end",
+        }
+    return None
+`````)
+
+==== Async hooks (a-prefixed)
+
+For I/O-heavy guardrails (calling an external classifier, for example), implement async variants by prefixing the sync names with `a`: `abefore_model`, `aafter_model`, `awrap_model_call`, `awrap_tool_call`. If a middleware class defines both, `agent.invoke()` uses the sync hook and `agent.ainvoke()` uses the async one automatically.
 
 
 == 6.10 Summary

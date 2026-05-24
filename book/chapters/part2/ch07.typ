@@ -28,13 +28,13 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 print("모델 준비 완료:", model.model_name)
 `````)
 #output-block(`````
-모델 준비 완료: gpt-4.1
+모델 준비 완료: gpt-5.4
 `````)
 
 == 7.2 Human-in-the-Loop 개념
@@ -73,10 +73,10 @@ def delete_file(path: str) -> str:
     """지정된 경로의 파일을 삭제합니다."""
     return f"파일 삭제 완료: {path}"
 
-# 위험한 도구에만 승인 요구
+# 위험한 도구에만 승인 요구 (dict 형식 — 결정 종류 제한 가능)
 hitl = HumanInTheLoopMiddleware(interrupt_on={
-    "send_email": True,
-    "delete_file": True,
+    "send_email": {"allowed_decisions": ["approve", "edit", "reject", "respond"]},
+    "delete_file": {"allowed_decisions": ["approve", "reject"]},
 })
 
 agent = create_agent(
@@ -100,11 +100,73 @@ HITL 에이전트 생성 완료
 미들웨어로 HITL 에이전트를 만들었으니, 실제로 중단과 재개가 어떻게 동작하는지 살펴봅니다. HITL 에이전트는 2단계로 동작합니다:
 
 + _1단계 (invoke)_: 에이전트가 도구 호출을 제안하면 자동으로 _중단(interrupt)_됩니다. 이때 `interrupt()` 함수가 호출되며, 체크포인터가 현재 그래프 상태를 저장합니다.
-+ _2단계 (Command(resume=True))_: 사람이 승인하면 `Command(resume=True)`로 실행을 _재개_합니다. 체크포인터에서 저장된 상태를 복원하고, 중단된 지점부터 실행을 이어갑니다.
++ _2단계 (Command(resume=...))_: 사람의 결정을 `decisions` 리스트로 전달해 _재개_합니다. 체크포인터에서 저장된 상태를 복원하고, 중단된 지점부터 실행을 이어갑니다.
 
-거부할 경우 `Command(resume=False)`를 사용하거나, `Command(resume="다른 작업을 해주세요")`처럼 문자열을 전달하여 에이전트에게 새로운 지시를 줄 수도 있습니다.
+==== 네 가지 결정 (approve / edit / reject / respond)
+
+`HumanInTheLoopMiddleware`는 결정을 _dict 형식_으로 받습니다. 각 도구 호출당 하나의 결정을 리스트에 담아 전달합니다.
+
+#code-block(`````python
+from langgraph.types import Command
+
+# 1) 승인 — 도구를 그대로 실행
+agent.invoke(Command(resume={"decisions": [{"type": "approve"}]}),
+             config=config, version="v2")
+
+# 2) 편집 — 도구 인자를 사람이 수정해서 실행
+agent.invoke(
+    Command(resume={"decisions": [
+        {"type": "edit", "args": {"to": "boss@example.com", "subject": "수정"}}
+    ]}),
+    config=config, version="v2",
+)
+
+# 3) 거부 — 도구 실행을 막고 에이전트에게 메시지 반환
+agent.invoke(Command(resume={"decisions": [{"type": "reject"}]}),
+             config=config, version="v2")
+
+# 4) 응답 — 도구 실행 없이 사람의 메시지로 대체
+agent.invoke(
+    Command(resume={"decisions": [
+        {"type": "respond", "message": "이메일 대신 슬랙으로 보내주세요"}
+    ]}),
+    config=config, version="v2",
+)
+`````)
+
+==== version="v2"로 GraphOutput 받기
+
+`agent.invoke(..., version="v2")`는 `GraphOutput`을 반환합니다. 인터럽트 상태에서는 `result.value`가 _부분 상태_이고 `result.interrupts`에 `Interrupt` 객체가 담깁니다.
+
+#code-block(`````python
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "팀장에게 보고 메일 보내줘"}]},
+    config={"configurable": {"thread_id": "t1"}},
+    version="v2",
+)
+
+if result.interrupts:
+    pending = result.interrupts[0].value  # 승인 대기 중인 도구 호출 정보
+    decision = ask_human(pending)         # UI에서 결정 수집
+    final = agent.invoke(
+        Command(resume={"decisions": [decision]}),
+        config={"configurable": {"thread_id": "t1"}},
+        version="v2",
+    )
+    print(final.value["messages"][-1].content)
+`````)
 
 #warning-box[HITL 패턴은 반드시 체크포인터와 함께 사용해야 합니다. 체크포인터 없이 `interrupt()`를 호출하면, 중단된 상태를 복원할 수 없어 재개가 불가능합니다.]
+
+#tip-box[`version="v2"` 스트리밍과 dict 기반 `decisions` 형식은 `deepagents>=0.5.0` 또는 `langgraph>=1.1.5`에서 지원됩니다. 이전 버전에서는 `Command(resume=True/False)` 단일 결정 방식이 그대로 동작합니다.]
+
+==== 라이프사이클 — after_model 훅과 HITLRequest
+
+내부적으로 `HumanInTheLoopMiddleware`는 `after_model` 훅에서 도구 호출을 가로채 `HITLRequest`를 생성합니다. `HITLRequest`는 `action_requests`(검토 대상 도구 호출)와 `review_configs`(각 호출별 허용 결정 종류)를 담아 인터럽트로 전파됩니다. 커스텀 승인 흐름을 직접 구현하려면 `after_model` 훅 안에서 동일한 객체를 직접 만들어 반환하면 됩니다.
+
+==== transient 패치 vs persistent 패치
+
+승인 결과에 따라 도구 인자만 일회성으로 바꾸려면 `request.override(...)`(이 호출만 적용, transient)를 사용하고, 그래프 상태 자체를 갱신해야 한다면 `ExtendedModelResponse`와 `Command(update=...)`를 함께 반환(persistent)해 체크포인트에 반영합니다.
 
 == 7.5 ToolRuntime -- 도구에서 런타임 정보에 접근합니다
 
@@ -116,6 +178,65 @@ HITL로 안전성을 확보했다면, 이제 도구가 _실행 환경의 정보_
 - 도구 함수에 `runtime: ToolRuntime[T]` 파라미터를 추가합니다.
 - `T`는 개발자가 정의하는 컨텍스트 데이터 클래스입니다. (예: 사용자 ID, 권한 레벨, DB 커넥션)
 - 에이전트 생성 시 `context_schema=T`를 지정하고, 호출 시 `context=T(...)`로 값을 전달합니다.
+
+==== runtime.execution_info — 실행 메타데이터
+
+`runtime.execution_info`는 _이 호출_을 식별하는 정보를 제공합니다. 로깅·트레이싱이나 재시도 카운트 처리에 유용합니다.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[속성],
+  text(weight: "bold")[설명],
+  [`thread_id`],
+  [현재 대화 스레드 식별자],
+  [`run_id`],
+  [개별 invoke/stream 호출 식별자],
+  [`attempt`],
+  [재시도 시 1부터 증가하는 시도 번호],
+)
+
+#code-block(`````python
+@tool
+def call_external_api(payload: dict, runtime: ToolRuntime[Context]) -> str:
+    info = runtime.execution_info
+    headers = {
+        "X-Trace-Run": info.run_id,
+        "X-Trace-Thread": info.thread_id,
+        "X-Attempt": str(info.attempt),
+    }
+    return http.post(url, json=payload, headers=headers).text
+`````)
+
+==== runtime.server_info — 배포 메타데이터
+
+LangGraph Platform/Server에 배포된 경우 `runtime.server_info`로 배포 식별자와 현재 요청 사용자를 확인할 수 있습니다. 로컬 실행에서는 값이 `None`이거나 비어 있을 수 있습니다.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[속성],
+  text(weight: "bold")[설명],
+  [`assistant_id`],
+  [Platform에 등록된 어시스턴트(설정 묶음) ID],
+  [`graph_id`],
+  [그래프 이름(`langgraph.json`의 키)],
+  [`user`],
+  [인증된 사용자 정보(있는 경우)],
+)
+
+#code-block(`````python
+@tool
+def log_who(runtime: ToolRuntime[Context]) -> str:
+    s = runtime.server_info
+    return f"{s.graph_id}/{s.assistant_id} called by {s.user}"
+`````)
 
 == 7.6 컨텍스트 엔지니어링 -- 동적으로 프롬프트와 도구를 제어합니다
 

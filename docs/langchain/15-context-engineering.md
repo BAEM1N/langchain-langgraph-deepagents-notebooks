@@ -55,6 +55,20 @@ Dynamic system prompts adapt to conversation state. Examples include:
 - Incorporating user preferences from persistent storage
 - Including compliance rules from runtime configuration
 
+Use the `@dynamic_prompt` decorator to produce a state-aware system prompt on each model call:
+
+```python
+from langchain.agents.middleware import dynamic_prompt, ModelRequest
+
+@dynamic_prompt
+def state_aware_prompt(request: ModelRequest) -> str:
+    message_count = len(request.messages)
+    base = "You are a helpful assistant."
+    if message_count > 10:
+        base += "\nBe extra concise."
+    return base
+```
+
 ### Messages Management
 
 Message context can be modified transiently (affecting single calls) or persistently (updating state permanently). Common patterns include:
@@ -62,7 +76,54 @@ Message context can be modified transiently (affecting single calls) or persiste
 - Including user writing style examples
 - Adding compliance requirements
 
-**Key Distinction**: The examples above use `wrap_model_call` to make **transient** updates - modifying what messages are sent to the model for a single call without changing what's saved in state.
+**Key Distinction**: The examples above use `@wrap_model_call` to make **transient** updates — modifying what messages are sent to the model for a single call without changing what's saved in state.
+
+### Transient vs. Persistent
+
+| Type | Behavior |
+|------|----------|
+| **Transient** | What the LLM sees for a single call. You can modify messages, tools, or prompts via `request.override(...)` without changing what's saved in state. |
+| **Persistent** | What gets saved in state across turns. Life-cycle hooks and tool writes modify this permanently. To make `wrap_model_call` updates persistent, return an `ExtendedModelResponse` with a `Command`. |
+
+```python
+from typing import Callable
+from langchain.agents.middleware import (
+    wrap_model_call, ModelRequest, ModelResponse, ExtendedModelResponse,
+)
+from langgraph.types import Command
+
+# Transient: override only for this single model call
+@wrap_model_call
+def inject_file_context(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ModelResponse:
+    uploaded_files = request.state.get("uploaded_files", [])
+    messages = [...]  # build augmented messages
+    return handler(request.override(messages=messages))
+
+# Persistent: emit a Command to update state alongside the call
+@wrap_model_call(state_schema=UsageTrackingState)
+def track_usage(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ExtendedModelResponse:
+    response = handler(request)
+    return ExtendedModelResponse(
+        model_response=response,
+        command=Command(update={"last_model_call_tokens": 150}),
+    )
+```
+
+### `request.override(...)` patterns
+
+```python
+request = request.override(messages=messages)
+request = request.override(tools=tools)
+request = request.override(model=model)
+request = request.override(system_message=new_system_message)
+request = request.override(response_format=SimpleResponse)
+```
 
 ### Tools Definition and Selection
 
@@ -121,7 +182,17 @@ Built-in `SummarizationMiddleware` automatically:
 2. Replaces them with summaries in state
 3. Preserves recent messages for immediate context
 
-Configuration example includes triggering on token count (4000) and keeping recent messages (20).
+The canonical `trigger` / `keep` signature is a `ContextSize` tuple — `tuple[str, int | float]` with options `("tokens", int)`, `("messages", int)`, or `("fraction", 0-1)`. Some documentation pages show a dict form (`{"tokens": 4000}`) as a simplified notation — both are accepted, but the tuple form is the formal signature.
+
+```python
+from langchain.agents.middleware import SummarizationMiddleware
+
+SummarizationMiddleware(
+    model="gpt-5.4-mini",
+    trigger=("tokens", 4000),
+    keep=("messages", 20),
+)
+```
 
 ## Best Practices
 

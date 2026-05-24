@@ -43,14 +43,61 @@ Key choices include:
 
 **Synchronous**: Main agent waits for completion before continuing -- use when results inform next actions.
 
-**Asynchronous**: Main agent continues while subagent works backgrounded -- use for independent tasks with a job ID/status/result pattern.
+**Asynchronous**: Main agent continues while subagent works backgrounded. Implement as a three-tool workflow:
+
+1. **Start job** — launches the task and returns a job ID.
+2. **Check status** — reports progress (`pending` / `running` / `completed` / `failed`).
+3. **Get result** — retrieves the completed output once the job is done.
+
+This keeps the supervisor responsive while subagents work independently.
+
+## State Management
+
+Subagents support two checkpointing modes:
+
+- **Inherited (default)**: Each invocation runs in a fresh state, sharing the parent's checkpointer transparently. Supports interrupts and is safe for parallel execution.
+- **Persistent (`checkpointer=True`)**: The subagent maintains its own conversation history across multiple calls. Use when a subagent needs to remember prior turns independently of the supervisor.
+
+```python
+subagent = create_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    tools=[...],
+    checkpointer=True,   # opt in to subagent-local history
+)
+```
+
+Note: `get_state` on subgraphs will not return nested agent state due to static discovery; inspect state from node functions during interrupts instead.
 
 ## Tool Patterns
 
 **Tool per agent**: Fine-grained control with separate wrapped subagents.
 
-**Single dispatch tool**: One parameterized tool invoking registered subagents by name -- better for distributed teams and scalability.
+**Single dispatch tool**: One parameterized tool invoking registered subagents by name -- better for distributed teams and scalability. Three approaches expose the available subagents to the dispatcher:
+
+| Approach | Scope | Trade-off |
+|---|---|---|
+| **System prompt enumeration** | Under 10 agents, static registry | Simple; requires manual prompt updates |
+| **Enum / `Literal` constraint** | Under 10 agents, type-safe | Schema-level validation without prompt bloat |
+| **Tool-based discovery** | Large / dynamic registries | Progressive disclosure; more wiring complexity |
 
 ## Context Engineering
 
-Control information flow through subagent specifications (names/descriptions), customized inputs (pulling from agent state), and formatted outputs (using Commands for additional state).
+Control information flow through subagent specifications (names/descriptions), customized inputs (pulling from agent state), and formatted outputs.
+
+### Injecting state with `ToolRuntime`
+
+Use `ToolRuntime` to pull message history or other state keys into the subagent's input:
+
+```python
+from langchain.tools import tool, ToolRuntime
+
+@tool
+def call_subagent(query: str, runtime: ToolRuntime[None, CustomState]):
+    # runtime.state exposes the parent agent's state
+    messages = runtime.state["messages"]
+    ...
+```
+
+### Returning `Command` for output formatting
+
+Subagent tools can return a `Command` object to update parent state alongside the tool message — useful for surfacing intermediate artifacts or merging results back into shared state.

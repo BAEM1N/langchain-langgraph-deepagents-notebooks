@@ -47,7 +47,12 @@ LangChain v1은 LLM 기반 에이전트를 구축하기 위한 통합 프레임�
   [_Deep Agents_],
   [사전 구축된 에이전트 (코딩, 리서치 등)],
   [빠른 프로토타이핑],
+  [_LangSmith_],
+  [어떤 프레임워크로 만든 에이전트든 추적·디버깅·평가하는 관측 플랫폼],
+  [모든 개발자 / 운영자],
 )
+
+#tip-box[LangSmith는 LangChain·LangGraph·Deep Agents에 한정되지 않습니다. OpenAI SDK·LlamaIndex·자체 구현 에이전트까지 트레이스를 전송하면 동일한 UI로 디버깅·평가할 수 있어, v1부터는 네 번째 핵심 도구로 다룹니다.]
 
 === LangChain v1에서 변경된 주요 사항
 
@@ -84,6 +89,19 @@ LangChain v1의 핵심 설계 철학은 _모든 에이전트가 LangGraph 그래
 - _스트리밍_: `stream()` 메서드로 실시간 응답
 - _상태 관리_: 체크포인터를 통한 대화 히스토리 유지
 - _확장성_: 커스텀 노드와 엣지 추가 가능
+
+=== 멀티프로바이더 지원
+
+LangChain v1은 100여 개의 LLM 프로바이더를 동일한 인터페이스로 다룹니다. 본 책에서 자주 등장하는 모델 ID 예시는 다음과 같습니다:
+
+- _OpenAI_: `openai:gpt-5.4`, `openai:gpt-4.1`
+- _Anthropic_: `anthropic:claude-sonnet-4-6`, `anthropic:claude-opus-4-6`
+- _Google_: `google:gemini-2.5-flash-lite`, `google:gemini-2.5-pro`
+- _OpenRouter_: `openrouter:meta-llama/llama-3.3-70b-instruct` 등 100+ 모델
+- _AWS Bedrock_: `bedrock:anthropic.claude-sonnet-4-6`
+- _Ollama_: `ollama:llama3.3` (로컬 실행)
+
+본 책의 예제는 별도 명시가 없는 한 OpenAI `gpt-5.4` 또는 Anthropic `claude-sonnet-4-6`을 기본 모델로 사용합니다.
 
 == 1.2 ReAct 에이전트 패턴
 

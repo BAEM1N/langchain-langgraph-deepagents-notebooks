@@ -22,13 +22,13 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 print("모델 준비 완료:", model.model_name)
 `````)
 #output-block(`````
-모델 준비 완료: gpt-4.1
+모델 준비 완료: gpt-5.4
 `````)
 
 == 5.2 단기 메모리: InMemorySaver
@@ -75,6 +75,44 @@ print("모델 준비 완료:", model.model_name)
 - `store.get(namespace, key)`: 특정 키의 값을 조회합니다.
 
 에이전트 생성 시 `store=InMemoryStore()`를 전달하면, `ToolRuntime`을 통해 도구에서 스토어에 접근할 수 있습니다.
+
+==== 사용자별 네임스페이스 (context_schema + runtime.context)
+
+실전에서는 `user_id`로 네임스페이스를 분리해 멀티 테넌트를 지원합니다. `context_schema`로 컨텍스트 클래스를 선언하고, 도구 안에서 `runtime.context.user_id`로 안전하게 접근합니다. Pydantic/dataclass 인스턴스는 그대로 저장하지 말고 `dict(user_info)`처럼 _dict로 캐스팅_한 뒤 `store.put`에 전달하는 것이 직렬화 호환성에 유리합니다.
+
+#code-block(`````python
+from dataclasses import dataclass
+from langgraph.store.memory import InMemoryStore
+from langchain.tools import tool, ToolRuntime
+
+@dataclass
+class Context:
+    user_id: str
+
+@tool
+def remember_user(user_info: dict, runtime: ToolRuntime[Context]) -> str:
+    """현재 사용자의 프로필을 저장합니다."""
+    namespace = (runtime.context.user_id, "profile")
+    runtime.store.put(namespace, "info", dict(user_info))  # dict 캐스팅
+    return "saved"
+
+store = InMemoryStore()
+agent = create_agent(
+    model=model,
+    tools=[remember_user],
+    store=store,
+    context_schema=Context,
+)
+
+agent.invoke(
+    {"messages": [{"role": "user", "content": "내 이름은 민지야"}]},
+    context=Context(user_id="user_123"),
+)
+`````)
+
+#tip-box[`store`를 에이전트에 전달하지 않으면 `runtime.store`가 `None`이 되어 도구에서 접근할 수 없습니다. 장기 메모리 도구를 추가했다면 `create_agent(..., store=...)` 인자를 빠뜨리지 않았는지 반드시 확인하세요.]
+
+#tip-box[프로덕션에서는 `langgraph-checkpoint-postgres` 패키지의 `PostgresStore`(또는 `AsyncPostgresStore`)를 사용해 영구 저장과 시맨틱 검색을 함께 처리합니다. `InMemoryStore`와 동일한 인터페이스를 제공하므로 코드 변경 없이 교체할 수 있습니다.]
 
 단기 메모리와 장기 메모리의 차이:
 
@@ -134,22 +172,104 @@ print("모델 준비 완료:", model.model_name)
 
 === stream_mode="custom" 참고
 
-#warning-box[`stream_mode="custom"`은 `create_agent`로 생성된 에이전트에서 직접 사용할 수 없습니다. LangGraph의 `StateGraph` API에서만 지원됩니다.]
-
-`stream_mode="custom"`은 사용자 정의 이벤트를 스트리밍하는 모드입니다. 이 모드는 `create_agent`로 생성된 에이전트에서 직접 사용할 수 없으며, _LangGraph의 저수준 API_(`StateGraph`)에서 `StreamWriter`를 통해 커스텀 이벤트를 수동으로 발행해야 합니다.
+`stream_mode="custom"`은 사용자 정의 이벤트를 스트리밍하는 모드입니다. LangGraph의 `get_stream_writer()`를 사용하면 `create_agent`로 만든 에이전트의 _도구나 미들웨어 안에서도_ 커스텀 이벤트를 발행할 수 있습니다.
 
 #code-block(`````python
-# LangGraph StateGraph 수준에서의 사용 예시 (참고용)
-from langgraph.graph import StateGraph
+from langgraph.config import get_stream_writer
+from langchain.tools import tool
 
-def my_node(state, writer):  # StreamWriter가 주입됨
-    writer("progress", {"step": 1, "status": "processing"})
+@tool
+def long_running_task(query: str) -> str:
+    """진행 상황을 스트림에 보고하는 작업."""
+    writer = get_stream_writer()
+    writer({"step": 1, "status": "fetching"})
     # ... 처리 로직 ...
-    writer("progress", {"step": 2, "status": "done"})
-    return state
+    writer({"step": 2, "status": "done"})
+    return "ok"
+
+for chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "검색해줘"}]},
+    stream_mode="custom",
+):
+    print(chunk)  # writer()로 발행한 dict가 그대로 전달됨
 `````)
 
-`create_agent`를 사용하는 경우, 커스텀 진행률 표시가 필요하다면 `stream_mode="updates"`와 미들웨어를 조합하는 방식을 권장합니다.
+#tip-box[과거 일부 자료에서는 `stream_mode="custom"`이 `create_agent`에서 동작하지 않는다고 안내했지만, 현재 LangGraph는 `get_stream_writer()`를 통한 도구/미들웨어 내부 발행을 지원합니다. `StateGraph`의 `writer` 매개변수 주입 방식과 결과는 동일합니다.]
+
+=== version="v2" 스트리밍과 GraphOutput
+
+`agent.stream(..., version="v2")`를 지정하면 결과 청크가 _구조화된 이벤트_로 도착하고, `agent.invoke(..., version="v2")`는 `GraphOutput`을 반환합니다. `GraphOutput`은 `value`(최종 상태)와 `interrupts`(중단 정보) 두 속성을 제공해 HITL 흐름에서 활용도가 높습니다.
+
+#code-block(`````python
+# 스트림: type 필드로 이벤트 구분
+for chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "search hello"}]},
+    config={"configurable": {"thread_id": "t1"}},
+    version="v2",
+):
+    if chunk["type"] == "updates":
+        print("update:", chunk["data"])
+    elif chunk["type"] == "messages":
+        print("token:", chunk["data"][0].content)
+
+# invoke: GraphOutput 반환
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "hi"}]},
+    config={"configurable": {"thread_id": "t1"}},
+    version="v2",
+)
+print(result.value)       # 최종 상태 dict
+print(result.interrupts)  # 중단된 경우 Interrupt 리스트, 아니면 []
+`````)
+
+=== 토큰 누적 패턴 (chunk_position)
+
+`stream_mode="messages"`로 토큰을 받을 때, 마지막 청크는 `chunk_position == "last"`로 표시됩니다. 이 시점에 누적된 도구 호출이나 `content_blocks`를 한 번에 처리하면 깔끔합니다.
+
+#code-block(`````python
+buffer = []
+tool_calls = []
+for chunk, meta in agent.stream(
+    {"messages": [{"role": "user", "content": "검색해줘"}]},
+    stream_mode="messages",
+):
+    buffer.append(chunk.content)
+    if chunk.tool_calls:
+        tool_calls.extend(chunk.tool_calls)
+    if meta.get("chunk_position") == "last":
+        print("최종 본문:", "".join(buffer))
+        print("도구 호출:", tool_calls)
+`````)
+
+=== content_blocks 기반 reasoning 필터링
+
+확장 사고(extended thinking)를 지원하는 모델(예: Claude Sonnet 4.6)에서는 `content_blocks`의 `type`을 검사해 추론 블록만 UI에서 따로 다룰 수 있습니다.
+
+#code-block(`````python
+for chunk, _ in agent.stream(payload, stream_mode="messages"):
+    for block in getattr(chunk, "content_blocks", []) or []:
+        if block["type"] == "reasoning":
+            ui.show_reasoning(block["reasoning"])
+        elif block["type"] == "text":
+            ui.show_answer(block["text"])
+`````)
+
+=== 다중 stream_mode와 인터럽트 캡처
+
+`stream_mode`에 리스트를 전달하면 각 청크가 `(mode, payload)` 튜플로 도착합니다. HITL이 결합된 흐름에서는 `"__interrupt__"` 이벤트를 별도로 받아 사람의 결정을 기다릴 수 있습니다.
+
+#code-block(`````python
+for mode, payload in agent.stream(
+    {"messages": [{"role": "user", "content": "이메일 보내줘"}]},
+    config={"configurable": {"thread_id": "t1"}},
+    stream_mode=["messages", "updates"],
+):
+    if mode == "updates" and "__interrupt__" in payload:
+        interrupt = payload["__interrupt__"]
+        # 사용자 승인 UI 띄우고 Command(resume=...)로 재개
+`````)
+
+#tip-box[서브그래프 이벤트도 함께 받고 싶다면 `subgraphs=True`를 지정하세요. 반대로 토큰 스트리밍이 필요 없을 때는 `disable_streaming=True`(또는 모델 생성 시 `streaming=False`)로 비용을 줄일 수 있습니다.]
 
 #chapter-summary-header()
 

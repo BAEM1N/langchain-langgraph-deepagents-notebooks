@@ -20,6 +20,8 @@ Learn how to build custom tools with the `@tool` decorator in LangChain v1 and h
 
 == 4.1 Environment Setup
 
+#tip-box[Some examples in this chapter require _deepagents ≥ 0.5.0_ or _langgraph ≥ 1.1.5_, and the `ToolRuntime` `execution_info` / `server_info` extensions require _langchain ≥ 1.2_. Older versions raise `AttributeError`, so confirm with `uv pip list | grep -E "langchain|langgraph|deepagents"`.]
+
 Load API keys and initialize an OpenAI model.
 
 
@@ -32,7 +34,7 @@ load_dotenv(override=True)
 
 # Initialize the model with OpenAI
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 print("Model initialized:", model.model_name)
@@ -127,6 +129,96 @@ def my_tool(runtime: ToolRuntime) -> str:
     # ...
 `````)
 
+==== `runtime.execution_info` — Execution Metadata
+
+`ToolRuntime` exposes more than state access. The `execution_info` field carries metadata about the current execution unit and is heavily used for logging, tracing, and retry policies.
+
+#code-block(`````python
+@tool
+def log_call(payload: str, runtime: ToolRuntime) -> str:
+    """Process input and log execution metadata."""
+    info = runtime.execution_info
+    print(f"thread={info.thread_id} run={info.run_id} attempt={info.node_attempt}")
+    return f"received: {payload}"
+`````)
+
+- `execution_info.thread_id`: session ID that groups a multi-turn conversation
+- `execution_info.run_id`: ID of one `invoke()` / `stream()` run (linked to the LangSmith trace)
+- `execution_info.node_attempt`: attempt count for the current node (increments on retries)
+
+==== `runtime.server_info` — Server and User Info
+
+When executed on LangGraph Platform or a LangSmith server, `runtime.server_info` identifies the deployed assistant and the calling user.
+
+#code-block(`````python
+@tool
+def user_summary(runtime: ToolRuntime) -> str:
+    """Return information about the current user."""
+    s = runtime.server_info
+    return f"assistant={s.assistant_id} user={s.user.email if s.user else 'anonymous'}"
+`````)
+
+- `server_info.assistant_id`: ID of the deployed assistant (graph version)
+- `server_info.user`: authenticated user object (`user.id`, `user.email`, permissions)
+
+#tip-box[`server_info` may be empty in local runs — it is populated only in deployed environments. Guard with `if runtime.server_info.user is not None:`.]
+
+==== Tool Error Handling — `@wrap_tool_call`
+
+To attach uniform error handling, logging, or retry policy to tool calls, use the `@wrap_tool_call` decorator. It receives a `ToolCallRequest` and acts as a middleware hook that intercepts tool execution.
+
+#code-block(`````python
+from langchain.tools import wrap_tool_call, ToolCallRequest
+from langchain_core.messages import ToolMessage
+
+@wrap_tool_call
+def safe_invoke(request: ToolCallRequest, handler):
+    """Wrap every tool call in try/except."""
+    try:
+        return handler(request)
+    except Exception as exc:  # noqa: BLE001
+        return ToolMessage(
+            content=f"[error] {type(exc).__name__}: {exc}",
+            tool_call_id=request.tool_call.id,
+            status="error",
+        )
+
+agent = create_agent(
+    model=model,
+    tools=[get_weather, search_database],
+    middleware=[safe_invoke],
+)
+`````)
+
+#tip-box[`@wrap_tool_call` registers as middleware, so it applies to _every_ tool. Branch on `request.tool_call.name` if you need to guard only specific tools.]
+
+==== `Command` Updates and Companion `ToolMessage`
+
+When a tool needs to update _graph state_ or pick the _next node_ instead of returning plain text, return a `Command`. LangGraph applies `Command.update` to patch state and uses `Command.goto` to choose the next node. You must also return a `ToolMessage` that closes the `tool_call_id`, otherwise the model cannot proceed to the next turn.
+
+#code-block(`````python
+from langgraph.types import Command
+from langchain_core.messages import ToolMessage
+
+@tool
+def transfer_to_specialist(topic: str, runtime: ToolRuntime) -> Command:
+    """Hand control to a specialist sub-agent and update state."""
+    return Command(
+        update={
+            "active_specialist": topic,
+            "messages": [
+                ToolMessage(
+                    content=f"Routed to the {topic} specialist.",
+                    tool_call_id=runtime.tool_call_id,
+                )
+            ],
+        },
+        goto="specialist_node",
+    )
+`````)
+
+#tip-box[Omitting `tool_call_id` causes the model to error with "no response for tool call." Pull the current call ID from `runtime.tool_call_id` and pass it through verbatim.]
+
 
 == 4.6 Structured Output
 
@@ -162,6 +254,10 @@ There are two main strategies for structured output inside an agent:
 )
 
 Use the `response_format` parameter to structure the agent's final response.
+
+#tip-box[`ProviderStrategy.strict=True` (schema enforcement) requires _langchain ≥ 1.2_. On older releases, use `strict=False` or `ToolStrategy`.]
+
+#tip-box[`ProviderStrategy` is currently stable on OpenAI (`gpt-5.4`, `gpt-4.1`) and Anthropic (`claude-sonnet-4-6`). Google Gemini is _unofficially supported_: JSON mode works, but strict schema enforcement applies only to some models. Choose `ToolStrategy` when broad compatibility matters.]
 
 
 == 4.8 Summary

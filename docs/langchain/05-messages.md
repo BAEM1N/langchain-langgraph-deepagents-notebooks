@@ -46,6 +46,23 @@ LangChain standardizes multimodal inputs across providers:
 
 Content blocks can include provider-native structures or LangChain standard blocks for type-safe processing.
 
+## Output Version (`v1`)
+
+To opt into LangChain's standardized content block serialization stored directly on `message.content`, set the `output_version` parameter on a chat model or the `LC_OUTPUT_VERSION` environment variable to `"v1"`:
+
+```python
+import os
+os.environ["LC_OUTPUT_VERSION"] = "v1"
+```
+
+```python
+from langchain.chat_models import init_chat_model
+
+model = init_chat_model("gpt-5-nano", output_version="v1")
+```
+
+Both approaches convert provider-native content into LangChain's standard content block representation. This makes messages consumable by external applications that need access to typed `TextContentBlock`, `ReasoningContentBlock`, `ImageContentBlock`, `AudioContentBlock`, `VideoContentBlock`, `FileContentBlock`, and related types without provider-specific parsing.
+
 ## Standard Content Blocks
 
 Messages implement a `content_blocks` property that parses content into standardized representations:

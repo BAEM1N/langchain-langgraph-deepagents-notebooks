@@ -30,16 +30,52 @@ In Deployment details, copy your API URL to the clipboard.
 ### Step 5: API Testing
 
 **Python approach:**
-```python
+
+Install the SDK:
+```shell
 pip install langgraph-sdk
-from langgraph_sdk import get_sync_client
+```
+
+Then stream a run:
+```python
+from langgraph_sdk import get_sync_client  # or get_client for async
+
 client = get_sync_client(url="your-deployment-url", api_key="your-langsmith-api-key")
+
+for chunk in client.runs.stream(
+    None,     # Threadless run
+    "agent",  # Name of agent. Defined in langgraph.json.
+    input={
+        "messages": [{
+            "role": "human",
+            "content": "What is LangGraph?",
+        }],
+    },
+    stream_mode="updates",
+):
+    print(f"Receiving new event of type: {chunk.event}...")
+    print(chunk.data)
+    print("\n\n")
 ```
 
 **REST API approach:**
 ```bash
-curl --request POST --url <DEPLOYMENT_URL>/runs/stream \
-  --header "X-Api-Key: <LANGSMITH API KEY>"
+curl -s --request POST \
+    --url <DEPLOYMENT_URL>/runs/stream \
+    --header 'Content-Type: application/json' \
+    --header "X-Api-Key: <LANGSMITH API KEY>" \
+    --data "{
+        \"assistant_id\": \"agent\",
+        \"input\": {
+            \"messages\": [
+                {
+                    \"role\": \"human\",
+                    \"content\": \"What is LangGraph?\"
+                }
+            ]
+        },
+        \"stream_mode\": \"updates\"
+    }"
 ```
 
 ## Additional Resources

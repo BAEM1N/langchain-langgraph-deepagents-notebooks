@@ -41,7 +41,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import PIIMiddleware
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[customer_service_tool, email_tool],
     middleware=[
         PIIMiddleware("email", strategy="redact", apply_to_input=True),
@@ -79,7 +79,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, send_email_tool, delete_database_tool],
     middleware=[
         HumanInTheLoopMiddleware(
@@ -150,7 +150,7 @@ class ContentFilterMiddleware(AgentMiddleware):
         return None
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, calculator_tool],
     middleware=[ContentFilterMiddleware(banned_keywords=["hack", "exploit", "malware"])],
 )
@@ -190,7 +190,7 @@ def content_filter(state: AgentState, runtime: Runtime) -> dict[str, Any] | None
     return None
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, calculator_tool],
     middleware=[content_filter],
 )
@@ -214,7 +214,7 @@ class SafetyGuardrailMiddleware(AgentMiddleware):
 
     def __init__(self):
         super().__init__()
-        self.safety_model = init_chat_model("gpt-4.1-mini")
+        self.safety_model = init_chat_model("gpt-5.4-mini")
 
     @hook_config(can_jump_to=["end"])
     def after_agent(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
@@ -238,7 +238,7 @@ class SafetyGuardrailMiddleware(AgentMiddleware):
         return None
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, calculator_tool],
     middleware=[SafetyGuardrailMiddleware()],
 )
@@ -253,7 +253,7 @@ from langchain.messages import AIMessage
 from langchain.chat_models import init_chat_model
 from typing import Any
 
-safety_model = init_chat_model("gpt-4.1-mini")
+safety_model = init_chat_model("gpt-5.4-mini")
 
 @after_agent(can_jump_to=["end"])
 def safety_guardrail(state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
@@ -278,7 +278,7 @@ def safety_guardrail(state: AgentState, runtime: Runtime) -> dict[str, Any] | No
     return None
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, calculator_tool],
     middleware=[safety_guardrail],
 )
@@ -293,7 +293,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import PIIMiddleware, HumanInTheLoopMiddleware
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, send_email_tool],
     middleware=[
         # Layer 1: Deterministic input filter

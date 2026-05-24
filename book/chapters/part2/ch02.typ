@@ -22,7 +22,19 @@ LangChain v1의 `create_agent()`로 에이전트를 생성하고 실행합니다
 
 == 2.1 환경 설정
 
-본격적인 에이전트 구축에 앞서, 모델 객체를 준비합니다. `create_agent()`의 `model` 매개변수는 `ChatModel` 인스턴스뿐 아니라 `"openai:gpt-4.1"` 같은 _프로바이더:모델명_ 문자열도 받을 수 있습니다. 여기서는 명시적으로 `ChatOpenAI` 인스턴스를 생성하여 사용합니다.
+이번 장의 예제를 실행하려면 LangChain v1과 Deep Agents 패키지를 먼저 설치합니다. 다음 명령 중 환경에 맞는 하나를 선택하세요:
+
+#code-block(`````bash
+# uv 사용 시
+uv add langchain deepagents
+
+# pip 사용 시
+pip install -U langchain deepagents
+`````)
+
+#tip-box[`langchain`을 설치하면 `langchain-core`, `langgraph`, `langchain-openai`(OpenAI 통합)가 함께 설치됩니다. Anthropic·Google 등 다른 프로바이더는 `langchain-anthropic`, `langchain-google-genai`를 별도로 추가하세요.]
+
+본격적인 에이전트 구축에 앞서, 모델 객체를 준비합니다. `create_agent()`의 `model` 매개변수는 `ChatModel` 인스턴스뿐 아니라 `"openai:gpt-5.4"` 같은 _프로바이더:모델명_ 문자열도 받을 수 있습니다. 여기서는 명시적으로 `ChatOpenAI` 인스턴스를 생성하여 사용합니다.
 
 OpenAI를 통해 모델을 설정합니다. `ChatOpenAI`는 OpenAI 호환 API를 지원하므로, `base_url`을 변경하여 OpenAI를 사용할 수 있습니다.
 
@@ -35,12 +47,12 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 print("\u2713 모델 설정 완료:", model.model_name)
 `````)
 #output-block(`````
-✓ 모델 설정 완료: gpt-4.1
+✓ 모델 설정 완료: gpt-5.4
 `````)
 
 == 2.2 간단한 도구 만들기
@@ -88,6 +100,10 @@ for t in [add, multiply]:
 생성된 에이전트는 내부적으로 LangGraph 그래프로 구현되며, `invoke()`, `stream()` 등의 메서드를 제공합니다.
 
 #tip-box[LangChain v1에서는 `create_react_agent()` 대신 `create_agent()`를 사용합니다.]
+
+#tip-box[에이전트에 `name="research_assistant"` 처럼 _snake_case_ 이름을 주면 LangSmith 트레이스·서브에이전트 라우팅·로그에서 식별이 쉬워집니다. 공백·하이픈·대문자는 피하고, 의미 있는 짧은 이름을 권장합니다.]
+
+#tip-box[`state_schema`를 직접 정의할 때는 반드시 `langgraph.graph.MessagesState` 또는 `langchain.agents.AgentState`를 상속한 *TypedDict* 서브클래스여야 합니다. 일반 `dataclass` 나 Pydantic `BaseModel`은 허용되지 않습니다.]
 
 #code-block(`````python
 from langchain.agents import create_agent
@@ -172,6 +188,34 @@ for msg in result["messages"]:
 Tavily는 AI 에이전트를 위해 설계된 검색 API입니다. 검색 결과를 LLM이 소비하기 좋은 형태로 반환하므로, RAG 파이프라인이나 에이전트의 검색 도구로 널리 사용됩니다.
 
 `TAVILY_API_KEY`가 설정된 경우에만 이 셀이 실행됩니다.
+
+== 2.8 런타임 컨텍스트 (`context_schema`)
+
+`thread_id`가 _대화 세션_을 구분한다면, `context`는 _요청 단위 메타데이터_(사용자 ID, 권한, 테넌트 등)를 도구·미들웨어에 주입하는 통로입니다. `create_agent()`에 `context_schema=`를 등록한 뒤, `invoke()` 호출 시 `context=`로 값을 넘기면 도구의 `ToolRuntime.context`로 접근할 수 있습니다.
+
+#code-block(`````python
+from dataclasses import dataclass
+from langchain.agents import create_agent
+
+@dataclass
+class Context:
+    user_id: str
+    tenant: str = "default"
+
+agent = create_agent(
+    model=model,
+    tools=[add, multiply],
+    system_prompt="...",
+    context_schema=Context,
+)
+
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "..."}]},
+    context=Context(user_id="u-1234", tenant="acme"),
+)
+`````)
+
+#tip-box[`context_schema`는 4장의 `ToolRuntime`, 7장의 HITL과 짝을 이룹니다. 여기서는 "주입 통로가 있다"는 점만 기억하고, 구체적 활용은 4장과 7장에서 다룹니다.]
 
 #chapter-summary-header()
 

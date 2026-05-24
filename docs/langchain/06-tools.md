@@ -100,13 +100,27 @@ def get_last_user_message(runtime: ToolRuntime) -> str:
 
 ### Updating State
 
+When a tool updates graph state with `Command`, return a paired `ToolMessage` (carrying `runtime.tool_call_id`) so the agent loop can resolve the original tool call:
+
 ```python
+from langchain.messages import ToolMessage
+from langchain.tools import ToolRuntime, tool
 from langgraph.types import Command
 
 @tool
-def set_user_name(new_name: str) -> Command:
-    """Set the user's name in the conversation state."""
-    return Command(update={"user_name": new_name})
+def set_language(language: str, runtime: ToolRuntime) -> Command:
+    """Set the preferred response language."""
+    return Command(
+        update={
+            "preferred_language": language,
+            "messages": [
+                ToolMessage(
+                    content=f"Language set to {language}.",
+                    tool_call_id=runtime.tool_call_id,
+                )
+            ],
+        }
+    )
 ```
 
 ### Context Usage
@@ -153,6 +167,91 @@ def get_weather(city: str, runtime: ToolRuntime) -> str:
     writer(f"Looking up data for city: {city}")
     writer(f"Acquired data for city: {city}")
     return f"It's always sunny in {city}!"
+```
+
+### Execution Info
+
+`runtime.execution_info` exposes the current thread, run, and retry attempt. Useful for correlating tool work with checkpointed state and tracing IDs.
+
+```python
+@tool
+def log_execution_context(runtime: ToolRuntime) -> str:
+    """Log execution identity information."""
+    info = runtime.execution_info
+    print(f"Thread: {info.thread_id}, Run: {info.run_id}")
+    print(f"Attempt: {info.node_attempt}")
+    return "done"
+```
+
+**Requirements:** `deepagents>=0.5.0` or `langgraph>=1.1.5`.
+
+### Server Info
+
+When the agent runs on LangGraph Server, `runtime.server_info` carries assistant, graph, and authenticated-user metadata (otherwise it is `None`):
+
+```python
+@tool
+def get_assistant_scoped_data(runtime: ToolRuntime) -> str:
+    """Fetch data scoped to the current assistant."""
+    server = runtime.server_info
+    if server is not None:
+        print(f"Assistant: {server.assistant_id}, Graph: {server.graph_id}")
+        if server.user is not None:
+            print(f"User: {server.user.identity}")
+    return "done"
+```
+
+**Requirements:** `deepagents>=0.5.0` or `langgraph>=1.1.5`.
+
+## Return Values
+
+Tools can return three kinds of values, each suited to different downstream behavior:
+
+**String** — plain text result for model interpretation:
+
+```python
+@tool
+def get_weather(city: str) -> str:
+    """Get weather for a city."""
+    return f"It is currently sunny in {city}."
+```
+
+**Object (dict)** — structured data the model can reason over:
+
+```python
+@tool
+def get_weather_data(city: str) -> dict:
+    """Get structured weather data for a city."""
+    return {"city": city, "temperature_c": 22, "conditions": "sunny"}
+```
+
+**`Command`** — updates graph state with optional model visibility (see Updating State above for the pattern that also returns a `ToolMessage`).
+
+## Error Handling with `@wrap_tool_call`
+
+For agent-level error handling, the `@wrap_tool_call` middleware decorator wraps every tool invocation and converts exceptions into model-visible `ToolMessage`s:
+
+```python
+from collections.abc import Callable
+from langchain.agents.middleware import wrap_tool_call
+from langchain.messages import ToolMessage
+from langchain.tools.tool_node import ToolCallRequest
+
+@wrap_tool_call
+def handle_tool_errors(
+    request: ToolCallRequest,
+    handler: Callable[[ToolCallRequest], ToolMessage],
+) -> ToolMessage:
+    """Convert tool exceptions into ToolMessages the model can handle."""
+    try:
+        return handler(request)
+    except Exception as e:
+        return ToolMessage(
+            content=f"Tool error: Please check your input and try again. ({e})",
+            tool_call_id=request.tool_call["id"],
+        )
+
+# Attach via create_agent(middleware=[handle_tool_errors])
 ```
 
 ## ToolNode

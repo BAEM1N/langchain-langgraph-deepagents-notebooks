@@ -29,7 +29,7 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 from langchain.agents import create_agent
@@ -120,6 +120,8 @@ _PIIMiddleware_는 이메일, 신용카드 번호, IP 주소 등 개인식별정
   [감지 시 예외 발생],
 )
 
+#note-box[_적용 범위 파라미터_ — `PIIMiddleware` 는 `apply_to_input` (사용자 메시지), `apply_to_output` (모델 응답), `apply_to_tool_results` 세 지점에 독립적으로 적용 가능합니다. `apply_to_tool_results` 의 기본값은 *`False`* — 도구 반환값(예: 데이터베이스 조회 결과)에는 자동 적용되지 않으므로, 도구 출력에 PII 가 들어올 수 있다면 명시적으로 `apply_to_tool_results=True` 를 켜야 합니다.]
+
 #code-block(`````python
 # PII 감지 미들웨어 설정 예시
 print("PII 감지 미들웨어 설정:")
@@ -129,7 +131,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import PIIMiddleware
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[customer_service_tool, email_tool],
     middleware=[
         # 이메일 주소를 [REDACTED_EMAIL]로 대체
@@ -161,7 +163,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import PIIMiddleware
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[customer_service_tool, email_tool],
     middleware=[
         # 이메일 주소를 [REDACTED_EMAIL]로 대체
@@ -205,7 +207,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, send_email_tool, delete_db_tool],
     middleware=[
         HumanInTheLoopMiddleware(
@@ -247,7 +249,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, send_email_tool, delete_db_tool],
     middleware=[
         HumanInTheLoopMiddleware(
@@ -361,7 +363,7 @@ class ContentFilterMiddleware(AgentMiddleware):
 
 `after_agent` 훅은 에이전트 _실행 완료 후_ 최종 출력을 검증합니다. 모델 기반 안전성 검사, 품질 검증 등에 사용합니다. 출력 가드레일에서 응답 내용을 직접 수정하거나, `jump_to="end"`로 안전한 대체 응답을 반환할 수 있습니다.
 
-#tip-box[출력 가드레일에서 모델 기반 검사를 수행할 때는, 에이전트 본체보다 경량 모델(예: `gpt-4.1-mini`)을 사용하는 것이 비용과 지연 시간 면에서 유리합니다. 안전성 분류는 복잡한 추론이 필요하지 않으므로, 작은 모델로도 충분히 정확한 판별이 가능합니다.]
+#tip-box[출력 가드레일에서 모델 기반 검사를 수행할 때는, 에이전트 본체보다 경량 모델(예: `gpt-5.4-mini`)을 사용하는 것이 비용과 지연 시간 면에서 유리합니다. 안전성 분류는 복잡한 추론이 필요하지 않으므로, 작은 모델로도 충분히 정확한 판별이 가능합니다.]
 
 #code-block(`````python
 # 커스텀 출력 가드레일 — SafetyGuardrailMiddleware 클래스
@@ -381,7 +383,7 @@ class SafetyGuardrailMiddleware(AgentMiddleware):
 
     def __init__(self):
         super().__init__()
-        self.safety_model = init_chat_model("gpt-4.1-mini")
+        self.safety_model = init_chat_model("gpt-5.4-mini")
 
     @hook_config(can_jump_to=["end"])
     def after_agent(
@@ -409,7 +411,7 @@ class SafetyGuardrailMiddleware(AgentMiddleware):
             )
         return None
 """)
-print("핵심: 별도의 경량 모델(gpt-4.1-mini)로 안전성을 평가합니다.")
+print("핵심: 별도의 경량 모델(gpt-5.4-mini)로 안전성을 평가합니다.")
 print("UNSAFE 판정 시 응답 내용을 안전한 메시지로 교체합니다.")
 `````)
 #output-block(`````
@@ -429,7 +431,7 @@ class SafetyGuardrailMiddleware(AgentMiddleware):
 
     def __init__(self):
         super().__init__()
-        self.safety_model = init_chat_model("gpt-4.1-mini")
+        self.safety_model = init_chat_model("gpt-5.4-mini")
 
     @hook_config(can_jump_to=["end"])
     def after_agent(
@@ -496,7 +498,7 @@ def safety_check(
 
 # 에이전트에 적용
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool],
     middleware=[content_filter, safety_check],
 )
@@ -555,7 +557,7 @@ from langchain.agents.middleware import (
 )
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, send_email_tool],
     middleware=[
         # Layer 1: 결정론적 입력 필터
@@ -595,7 +597,7 @@ from langchain.agents.middleware import (
 )
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, send_email_tool],
     middleware=[
         # Layer 1: 결정론적 입력 필터

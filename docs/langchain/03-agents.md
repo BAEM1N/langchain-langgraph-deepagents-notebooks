@@ -16,14 +16,14 @@ Agents follow a loop pattern: input flows to the model, which decides on actions
 
 ```python
 from langchain.agents import create_agent
-agent = create_agent("openai:gpt-5", tools=tools)
+agent = create_agent("openai:gpt-5.4", tools=tools)
 ```
 
 For granular control, instantiate model objects directly:
 
 ```python
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-5", temperature=0.1, max_tokens=1000)
+model = ChatOpenAI(model="gpt-5.4", temperature=0.1, max_tokens=1000)
 agent = create_agent(model, tools=tools)
 ```
 
@@ -88,7 +88,7 @@ agent = create_agent(
 
 ### Agent Name
 
-Set optional identifiers for multi-agent systems:
+Set optional identifiers for multi-agent systems. Names should use **snake_case** (alphanumeric characters, underscores, and hyphens only) for compatibility across LLM providers:
 
 ```python
 agent = create_agent(model, tools, name="research_assistant")
@@ -102,6 +102,65 @@ Pass messages to invoke agents:
 result = agent.invoke(
     {"messages": [{"role": "user", "content": "What's the weather in San Francisco?"}]}
 )
+```
+
+For persistent conversations and typed runtime context, pass `config={"configurable": {"thread_id": ...}}` together with `context=` (paired with `context_schema=` on `create_agent`):
+
+```python
+from dataclasses import dataclass
+from langchain_core.utils.uuid import uuid7
+from langgraph.checkpoint.memory import InMemorySaver
+
+@dataclass
+class Context:
+    user_id: str
+
+agent = create_agent(
+    model="openai:gpt-5.4",
+    tools=[],
+    checkpointer=InMemorySaver(),
+    context_schema=Context,
+)
+
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "What's the weather?"}]},
+    config={"configurable": {"thread_id": str(uuid7())}},
+    context=Context(user_id="user-123"),
+)
+```
+
+### Custom State Schema
+
+Custom state schemas passed via `state_schema=` **must be `TypedDict` subclasses** (typically extending `AgentState`):
+
+```python
+from langchain.agents import AgentState
+
+class CustomState(AgentState):
+    user_preferences: dict
+
+agent = create_agent(model, tools=tools, state_schema=CustomState)
+```
+
+### Tool Error Handling
+
+Use the `@wrap_tool_call` middleware decorator to convert tool exceptions into model-visible `ToolMessage`s:
+
+```python
+from langchain.agents.middleware import wrap_tool_call
+from langchain.messages import ToolMessage
+
+@wrap_tool_call
+def handle_tool_errors(request, handler):
+    try:
+        return handler(request)
+    except Exception as e:
+        return ToolMessage(
+            content=f"Tool error: {e}",
+            tool_call_id=request.tool_call["id"],
+        )
+
+agent = create_agent(model, tools=tools, middleware=[handle_tool_errors])
 ```
 
 ## Advanced Features

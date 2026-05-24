@@ -20,7 +20,7 @@ The `init_chat_model` function provides the simplest way to get started:
 ```python
 from langchain.chat_models import init_chat_model
 
-model = init_chat_model("gpt-5.2")
+model = init_chat_model("gpt-5.4")
 response = model.invoke("Why do parrots talk?")
 ```
 
@@ -120,7 +120,7 @@ for chunk in model.stream("Complex question"):
 ```python
 from langchain.chat_models import init_chat_model
 
-model = init_chat_model("openai:gpt-5")
+model = init_chat_model("openai:gpt-5.4")
 model.profile
 # {
 #   "max_input_tokens": 400000,
@@ -146,7 +146,21 @@ model = init_chat_model("my-private-model", profile=custom_profile)
 
 ### Prompt Caching
 
-Providers offer caching to reduce costs and latency on repeated token processing.
+Providers offer caching to reduce costs and latency on repeated token processing. Two modes coexist:
+
+**Implicit caching** — Providers (OpenAI chat completions, Google Gemini) automatically apply cost savings when requests hit cache. No configuration required; savings appear in usage metadata.
+
+**Explicit caching** — Manual control over cache points:
+
+```python
+# OpenAI with a cache key
+model = ChatOpenAI(model="gpt-5.4", prompt_cache_key="my_cache")
+
+# Anthropic via middleware
+from langchain_anthropic import AnthropicPromptCachingMiddleware
+```
+
+Caching typically engages only above a provider-specific minimum token threshold.
 
 ### Rate Limiting
 
@@ -156,12 +170,64 @@ Control request rates to manage API limits:
 from langchain_core.rate_limiters import InMemoryRateLimiter
 
 rate_limiter = InMemoryRateLimiter(requests_per_second=0.1)
-model = init_chat_model("gpt-5", rate_limiter=rate_limiter)
+model = init_chat_model("gpt-5.4", rate_limiter=rate_limiter)
 ```
 
 ### Token Usage Tracking
 
-Monitor token consumption across models using callbacks or context managers.
+Monitor token consumption across models using callbacks or context managers. `UsageMetadataCallbackHandler` (from `langchain_core.callbacks`) is the standard callback for aggregating token usage across one or more model invocations:
+
+```python
+from langchain_core.callbacks import UsageMetadataCallbackHandler
+
+callback = UsageMetadataCallbackHandler()
+result = model.invoke("Hello", config={"callbacks": [callback]})
+print(callback.usage_metadata)
+# {
+#   'gpt-5.4': {
+#     'input_tokens': ...,
+#     'output_tokens': ...,
+#     'total_tokens': ...,
+#     'input_token_details': {...},
+#     'output_token_details': {...},
+#   }
+# }
+```
+
+### Runtime Config Arguments
+
+Pass `config={...}` at invocation time to influence tracing, batching, and logging:
+
+```python
+response = model.invoke(
+    "Tell me a joke",
+    config={
+        "run_name": "joke-of-the-day",      # identifies this invocation in traces
+        "tags": ["demo", "joke"],            # filterable labels
+        "metadata": {"user_id": "u-1"},     # arbitrary key/value context
+        "max_concurrency": 5,                 # parallel-call ceiling for batch ops
+        "callbacks": [callback],
+    },
+)
+```
+
+### Connection Resilience
+
+LangChain chat models automatically retry transient failures with exponential backoff and jitter:
+
+- Default `max_retries=6`
+- Retries cover network errors, rate limits (HTTP 429), and server errors (HTTP 5xx)
+- Authentication (401) and not-found (404) responses are not retried
+
+For long-running agent tasks on unstable networks, raise `max_retries` to roughly 10–15 and pair with a checkpointer:
+
+```python
+model = init_chat_model(
+    "claude-sonnet-4-6",
+    max_retries=12,
+    timeout=120,
+)
+```
 
 ### Configurable Models
 

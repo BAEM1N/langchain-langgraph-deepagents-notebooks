@@ -29,7 +29,7 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 from langchain.agents import create_agent
@@ -103,6 +103,8 @@ User input → [input guardrail] → agent execution → [output guardrail] → 
   [Raise an exception when detected],
 )
 
+#note-box[_Scope parameters_ — `PIIMiddleware` exposes three independent toggles: `apply_to_input` (user messages), `apply_to_output` (model responses), and `apply_to_tool_results`. `apply_to_tool_results` defaults to *`False`* — tool return values (for example, database query results) are _not_ scrubbed automatically, so set `apply_to_tool_results=True` explicitly when tool outputs may contain PII.]
+
 
 #code-block(`````python
 # Example PII-detection middleware setup
@@ -113,7 +115,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import PIIMiddleware
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[customer_service_tool, email_tool],
     middleware=[
         # Replace email addresses with [REDACTED_EMAIL]
@@ -154,7 +156,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, send_email_tool, delete_db_tool],
     middleware=[
         HumanInTheLoopMiddleware(
@@ -260,7 +262,7 @@ class SafetyGuardrailMiddleware(AgentMiddleware):
 
     def __init__(self):
         super().__init__()
-        self.safety_model = init_chat_model("gpt-4.1-mini")
+        self.safety_model = init_chat_model("gpt-5.4-mini")
 
     @hook_config(can_jump_to=["end"])
     def after_agent(
@@ -288,7 +290,7 @@ class SafetyGuardrailMiddleware(AgentMiddleware):
             )
         return None
 """)
-print("Key point: evaluate safety with a smaller helper model (gpt-4.1-mini).")
+print("Key point: evaluate safety with a smaller helper model (gpt-5.4-mini).")
 print("If the result is UNSAFE, replace the response with a safe fallback message.")
 `````)
 
@@ -341,7 +343,7 @@ def safety_check(
 
 # Apply to the agent
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool],
     middleware=[content_filter, safety_check],
 )
@@ -366,7 +368,7 @@ from langchain.agents.middleware import (
 )
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, send_email_tool],
     middleware=[
         # Layer 1: deterministic input filter

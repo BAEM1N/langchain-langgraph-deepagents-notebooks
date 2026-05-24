@@ -17,12 +17,14 @@ The `response_format` parameter controls structured data return:
 
 When a schema type is provided directly, LangChain automatically selects:
 
-- `ProviderStrategy` for models supporting native structured output (OpenAI, Anthropic, xAI)
+- `ProviderStrategy` for models supporting native structured output (OpenAI, Anthropic Claude, xAI Grok)
 - `ToolStrategy` for all other models
+
+For `langchain>=1.1`, native-support detection is read dynamically from each model's profile data; a manual fallback is available when profile data is unavailable.
 
 ## Provider Strategy
 
-Native structured output through model provider APIs offers the most reliability. Supported by OpenAI, xAI, Gemini, and Anthropic.
+Native structured output through model provider APIs offers the most reliability. Supported by OpenAI, Anthropic (Claude), and xAI (Grok). (Gemini support is reported by some community providers but is not part of the officially documented set.)
 
 ### Configuration
 
@@ -34,7 +36,7 @@ class ProviderStrategy(Generic[SchemaT]):
 
 **Schema** (required): Accepts Pydantic models, dataclasses, TypedDict, or JSON Schema dictionaries.
 
-**Strict** (optional): Enables strict schema adherence for providers like OpenAI and xAI.
+**Strict** (optional): Enables strict schema adherence for providers like OpenAI and xAI. The `strict` parameter requires `langchain>=1.2`.
 
 ### Examples
 

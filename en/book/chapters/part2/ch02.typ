@@ -23,6 +23,18 @@ By the end of this notebook, you will be able to:
 
 == 2.1 Environment Setup
 
+Install LangChain v1 and Deep Agents before running any examples. Pick the command that matches your environment:
+
+#code-block(`````bash
+# With uv
+uv add langchain deepagents
+
+# With pip
+pip install -U langchain deepagents
+`````)
+
+#tip-box[Installing `langchain` also pulls in `langchain-core`, `langgraph`, and `langchain-openai` (OpenAI integration). For other providers add `langchain-anthropic`, `langchain-google-genai`, and so on as needed.]
+
 Set up the model through OpenAI. `ChatOpenAI` supports OpenAI-compatible APIs, so you can also switch providers by changing `base_url` when needed.
 
 
@@ -35,7 +47,7 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 print("✓ Model configured:", model.model_name)
 
@@ -77,6 +89,10 @@ Combine the model and tools with `create_agent()`.
 The created agent is internally implemented as a LangGraph graph, so it provides methods such as `invoke()` and `stream()`.
 
 #tip-box[In LangChain v1, use `create_agent()` instead of `create_react_agent()`.]
+
+#tip-box[Give the agent a _snake_case_ name like `name="research_assistant"`. It shows up in LangSmith traces, sub-agent routing, and logs, which makes the agent easier to identify. Avoid spaces, hyphens, and uppercase characters.]
+
+#tip-box[When you define a custom `state_schema`, it must be a *TypedDict* subclass of `langgraph.graph.MessagesState` or `langchain.agents.AgentState`. Plain `dataclass` or Pydantic `BaseModel` classes are not accepted.]
 
 
 #code-block(`````python
@@ -139,7 +155,36 @@ Tavily is a search API designed for AI agents.
 This cell only runs if `TAVILY_API_KEY` is configured.
 
 
-== 2.8 Summary
+== 2.8 Runtime Context (`context_schema`)
+
+While `thread_id` separates _conversation sessions_, `context` is the channel that injects _per-request metadata_ (user ID, permissions, tenant) into tools and middleware. Register `context_schema=` on `create_agent()` and pass `context=` to `invoke()`; tools can then read it through `ToolRuntime.context`.
+
+#code-block(`````python
+from dataclasses import dataclass
+from langchain.agents import create_agent
+
+@dataclass
+class Context:
+    user_id: str
+    tenant: str = "default"
+
+agent = create_agent(
+    model=model,
+    tools=[add, multiply],
+    system_prompt="...",
+    context_schema=Context,
+)
+
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "..."}]},
+    context=Context(user_id="u-1234", tenant="acme"),
+)
+`````)
+
+#tip-box[`context_schema` pairs with `ToolRuntime` in Chapter 4 and with HITL in Chapter 7. For now, just remember that the injection channel exists; the detailed usage comes later.]
+
+
+== 2.9 Summary
 
 Here is a recap of what you covered in this notebook:
 

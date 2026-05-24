@@ -13,7 +13,7 @@ Learn how to connect external tools and context to an agent through MCP (Model C
 This notebook covers:
 - Understanding the MCP concept and architecture (server / client / host)
 - Connecting to MCP servers with the `langchain-mcp-adapters` package
-- Integrating MCP tools with an agent through `ChatOpenAI.bind_tools(mcp_tools)`
+- Integrating MCP tools with an agent through `create_agent(model=..., tools=await client.get_tools())`
 - Understanding the difference between stdio and SSE transports
 - Connecting to multiple MCP servers at once
 
@@ -29,7 +29,7 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 print("Environment ready.")
@@ -121,7 +121,49 @@ print("\nUsage pattern: client = MultiServerMCPClient(http_config) -> await clie
 
 == 11.6 Loading MCP Tools and Integrating Them with an Agent
 
-This is the common pattern for binding tools fetched from an MCP server into a LangChain agent.
+This is the common pattern for binding tools fetched from an MCP server into a LangChain agent. The core entry point is `client.get_tools()`. It discovers the tools exposed by the MCP server and converts each tool's name, description, and parameter schema into LangChain `Tool` objects. The converted tools can be passed directly to `create_agent(tools=mcp_tools)`.
+
+=== Key function signatures
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Function],
+  text(weight: "bold")[Description],
+  [`client.get_tools()`],
+  [Return LangChain `Tool` objects from every registered server],
+  [`client.get_resources(server_name)`],
+  [Return LangChain `Blob` resources from a specific server],
+  [`client.get_prompt(server_name, prompt_name, arguments={...})`],
+  [Fetch a prompt template registered on the server],
+  [`load_mcp_tools(session)`],
+  [Convert tools from an open session into LangChain `Tool` objects (stateful pattern)],
+  [`load_mcp_resources(session, uris=[...])`],
+  [Load specific URIs as resources from an open session],
+)
+
+#code-block(`````python
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain.agents import create_agent
+
+async with MultiServerMCPClient(mcp_config) as client:
+    mcp_tools = await client.get_tools()
+    agent = create_agent(model="gpt-5.4", tools=mcp_tools)
+`````)
+
+=== Stateful sessions
+
+The default `client.get_tools()` flow is _stateless_ — a new session opens and closes for every tool call. To share a session across multiple calls, open one explicitly.
+
+#code-block(`````python
+async with client.session("math_server") as session:
+    tools = await load_mcp_tools(session)
+    result1 = await tools[0].ainvoke({"a": 1, "b": 2})
+    result2 = await tools[1].ainvoke({"a": 3, "b": 4})
+`````)
 
 
 == 11.7 Connecting to Multiple MCP Servers
@@ -138,7 +180,94 @@ print("\nUsage pattern: client = MultiServerMCPClient(multi_server_config) -> aw
 print("Note: it is stateless by default — each tool call creates and then cleans up a new session")
 `````)
 
-== 11.8 Tool Interceptors
+== 11.8 MCP Authentication
+
+Remote MCP servers use one of two authentication tracks.
+
+=== Track A — Static headers
+
+The simplest approach: pass the token through a header. Good for CI/CD with pre-issued keys.
+
+#code-block(`````python
+http_config = {
+    "weather_server": {
+        "transport": "streamable_http",
+        "url": "https://weather-mcp.example.com/mcp",
+        "headers": {"Authorization": "Bearer YOUR_API_KEY"},
+    }
+}
+`````)
+
+=== Track B — `httpx.Auth` interface
+
+For dynamic auth such as token refresh or request signing, pass an `httpx.Auth` implementation.
+
+#code-block(`````python
+import httpx
+
+class BearerAuth(httpx.Auth):
+    def __init__(self, token: str):
+        self.token = token
+
+    def auth_flow(self, request):
+        request.headers["Authorization"] = f"Bearer {self.token}"
+        yield request
+
+http_config = {
+    "weather_server": {
+        "transport": "streamable_http",
+        "url": "https://weather-mcp.example.com/mcp",
+        "auth": BearerAuth(token="..."),
+    }
+}
+`````)
+
+=== Track C — MCP SDK OAuth2
+
+The MCP Python SDK ships an `mcp.client.auth.oauth2` module for the standard OAuth2 flow (authorization code, refresh tokens).
+
+#code-block(`````python
+from mcp.client.auth.oauth2 import OAuth2ClientCredentials
+
+auth = OAuth2ClientCredentials(
+    token_url="https://auth.example.com/token",
+    client_id="my-client",
+    client_secret="...",
+    scope="mcp.tools",
+)
+
+http_config = {
+    "secure_server": {
+        "transport": "streamable_http",
+        "url": "https://secure-mcp.example.com/mcp",
+        "auth": auth,
+    }
+}
+`````)
+
+== 11.9 Elicitation — Server-requested user input
+
+Elicitation lets an MCP server request _additional input_ from the client (host) during a tool call. The host shows the user a form and returns the response as an `ElicitResult`.
+
+#code-block(`````python
+from mcp import ElicitResult, Callbacks
+
+async def on_elicitation(request):
+    user_input = await show_form(request.schema)
+    return ElicitResult(
+        action="accept",   # "accept" | "decline" | "cancel"
+        content={"city": user_input["city"], "unit": "celsius"},
+    )
+
+callbacks = Callbacks(on_elicitation=on_elicitation)
+
+async with MultiServerMCPClient(config, callbacks=callbacks) as client:
+    tools = await client.get_tools()
+`````)
+
+#tip-box[Use `"accept"` when the user provides values, `"decline"` when the user refuses, and `"cancel"` to signal that the entire tool call should be aborted.]
+
+== 11.10 Tool Interceptors
 
 A _Tool Interceptor_ is middleware that intercepts MCP tool calls. It can access runtime context, modify requests and responses, and implement retry logic.
 
@@ -164,13 +293,31 @@ A _Tool Interceptor_ is middleware that intercepts MCP tool calls. It can access
   [Trace tool calls],
 )
 
+=== Returning a `Command` from an interceptor
 
-== 11.9 Writing a Custom MCP Server
+An interceptor can do more than rewrite a request — it can return a LangGraph `Command` to update state and choose the next node.
+
+#code-block(`````python
+from langgraph.types import Command
+
+async def logging_interceptor(request, context):
+    """Log the tool call while appending to a state trace."""
+    print(f"[interceptor] tool={request.tool_name}")
+    return Command(
+        update={"tool_calls_log": [request.tool_name]},
+        goto="tools",
+    )
+`````)
+
+This pattern is useful when an interceptor enforces a guardrail and routes risky calls to a `human_review` node instead of executing them.
+
+
+== 11.11 Writing a Custom MCP Server
 
 With the _FastMCP_ library, you can build an MCP server quickly using decorators.
 
 
-== 11.10 Summary
+== 11.12 Summary
 
 This notebook covered:
 

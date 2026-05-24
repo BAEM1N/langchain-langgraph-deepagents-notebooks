@@ -30,7 +30,7 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 from langchain.agents import create_agent
@@ -45,10 +45,30 @@ Develop and debug agents locally.
 
 To use Studio, you need:
 - a `langgraph.json` config file
-- a local server started with `langgraph dev`
-- interactive testing through the Studio UI
+- a local dev server started with `langgraph dev` (default `http://127.0.0.1:2024`)
+- the hosted Studio UI at `https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024`
 
 Studio is a powerful tool for visualizing agent execution flow and debugging each step.
+
+=== Studio Key Features
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Feature],
+  text(weight: "bold")[Description],
+  [_Hot-reloading_],
+  [Edit prompts and tool code and see the change applied without restarting the server],
+  [_Full execution trace inspection_],
+  [Inspect every node, model call, and tool invocation in a single trace tree],
+  [_Thread replay_],
+  [Re-run saved threads from any checkpoint to compare branches and behaviors],
+  [_Exception capture_],
+  [Capture the state and surrounding context at the moment an exception is raised],
+)
 
 
 #code-block(`````python
@@ -66,11 +86,35 @@ langgraph_config = {
 print("Example langgraph.json configuration:")
 print(json.dumps(langgraph_config, indent=2))
 print("\nHow to run:")
-print("  $ langgraph dev")
-print("  → Open the Studio UI at http://localhost:2024")
+print("  $ langgraph dev  # local dev server: http://127.0.0.1:2024")
+print("  → Studio UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024")
 `````)
 
 == 10.3 Agent Testing
+
+Agent testing has three layers: _Unit_, _Integration_, and _Evals_.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Layer],
+  text(weight: "bold")[Goal],
+  text(weight: "bold")[Tools],
+  [_Unit_],
+  [Validate agent logic deterministically (tool choice, branching, exit conditions)],
+  [`GenericFakeChatModel`, `pytest`],
+  [_Integration_],
+  [Run the full workflow against real LLMs and tools to confirm end-to-end behavior],
+  [`langgraph dev`, real server environments],
+  [_Evals_],
+  [Evaluate agent trajectories with deterministic matching or LLM-as-judge evaluators],
+  [`agentevals`, LangSmith Evaluations],
+)
+
+=== 10.3.1 Unit — `GenericFakeChatModel`
 
 With `GenericFakeChatModel`, you can test an agent deterministically without making real API calls.
 
@@ -111,9 +155,35 @@ print("  → Tests agent behavior with deterministic responses")
 print("  → Can be tested in CI/CD without live API calls")
 `````)
 
-== 10.4 Trajectory-Based Testing
+=== 10.3.2 Evals — Trajectory matching with `agentevals`
 
 Validate the order in which the agent calls tools. A trajectory test checks whether the agent uses tools in the expected order and whether the final response matches your expectation.
+
+The `agentevals` package offers four trajectory-match modes.
+
+#code-block(`````bash
+pip install agentevals
+`````)
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Mode],
+  text(weight: "bold")[Matching rule],
+  [`strict`],
+  [Tool calls must match the reference exactly in kind and order],
+  [`unordered`],
+  [Same set of tool calls; order is ignored],
+  [`subset`],
+  [The observed trajectory is a subset of the reference (no extra calls allowed)],
+  [`superset`],
+  [The observed trajectory is a superset of the reference (must contain the required calls)],
+)
+
+LLM-as-judge evaluators allow grading trajectories against natural-language criteria as well.
 
 
 #code-block(`````python
@@ -145,7 +215,7 @@ except Exception as e:
 
 == 10.5 Agent Chat UI
 
-This is a web UI for talking to your agent. It connects to a LangGraph server so you can test the agent directly in the browser.
+This is a web UI for talking to your agent. It connects to a LangGraph server so you can test the agent directly in the browser. Either scaffold a new project with `create-agent-chat-app` or clone the official repository (`langchain-ai/agent-chat-ui`). Point the UI at your local LangGraph server (`http://127.0.0.1:2024`).
 
 Key features:
 - Real-time streaming chat
@@ -153,30 +223,55 @@ Key features:
 - Conversation branching
 - Human-in-the-loop approval
 
+Pick one of the two install paths:
 
-#code-block(`````python
-print("Agent Chat UI setup:")
-print("=" * 50)
-print("""
-# 1. Install Agent Chat UI
-`$ npx @anthropic-ai/agent-chat-ui`
+#code-block(`````bash
+# Option A — scaffold (recommended)
+npx create-agent-chat-app --project-name my-chat-ui
 
-# 2. Start the LangGraph server
-`$ langgraph dev`
-
-# 3. Connect the UI to http://localhost:2024
-#    -> Talk to the agent in a web browser
-""")
-print("Key features:")
-print("  - Real-time streaming chat")
-print("  - Tool-call visualization")
-print("  - Conversation branching")
-print("  - Human-in-the-loop approval")
+# Option B — clone the official repository
+git clone https://github.com/langchain-ai/agent-chat-ui.git
+cd agent-chat-ui && pnpm install && pnpm dev
 `````)
+
+#code-block(`````bash
+# Start the LangGraph server in another shell
+langgraph dev   # http://127.0.0.1:2024
+`````)
+
+The UI asks for three values on first launch.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Field],
+  text(weight: "bold")[Value],
+  [_Deployment URL_],
+  [`http://127.0.0.1:2024` for local; the deployment URL for managed agents],
+  [_Graph ID_],
+  [The `graphs` key from `langgraph.json` (for example, `agent`)],
+  [_LangSmith API key_],
+  [Required for managed deployments; can be skipped for the local dev server],
+)
 
 == 10.6 Deployment
 
 You can deploy an agent through LangGraph Platform (managed) or your own server. Choose the option that best fits your production environment.
+
+=== 10.6.1 LangGraph Platform deploy workflow
+
+LangGraph Platform deployments now go through GitHub integration. The old single-command `langgraph deploy` flow is no longer recommended.
+
+1. Push the agent code (including `langgraph.json`) to a GitHub repository.
+2. Open the LangSmith console → _Deployments_ → _+ New Deployment_.
+3. Select the repository, branch, and `langgraph.json` path.
+4. Enter environment variables (`OPENAI_API_KEY`, etc.).
+5. Click _Deploy_, watch the build log, and pick up the issued Deployment URL.
+
+#warning-box[The `langgraph deploy` CLI flow from older guides is _deprecated_. Use the GitHub-based flow in the LangSmith console for new deployments.]
 
 
 #code-block(`````python
@@ -184,8 +279,9 @@ print("Deployment options:")
 print("=" * 50)
 
 print("""
-# Option 1: LangGraph Platform (managed)
-`$ langgraph deploy`
+# Option 1: LangGraph Platform (managed) — GitHub integration
+#   → Use LangSmith Deployments → + New Deployment
+#   (legacy `langgraph deploy` CLI pattern is deprecated)
 
 
 # Option 2: self-hosted Docker deployment
@@ -218,14 +314,100 @@ async def chat(message: str):
 """)
 `````)
 
+=== 10.6.2 Calling a deployed agent — `langgraph-sdk`
+
+Use the Python SDK or REST to call a deployed agent.
+
+#code-block(`````bash
+pip install langgraph-sdk
+`````)
+
+#code-block(`````python
+from langgraph_sdk import get_sync_client
+
+client = get_sync_client(url="http://127.0.0.1:2024")
+
+for chunk in client.runs.stream(
+    None,  # threadless run
+    "agent",  # graph ID
+    input={"messages": [{"role": "user", "content": "hi"}]},
+    stream_mode="updates",
+):
+    print(chunk)
+`````)
+
+Or call the REST API directly:
+
+#code-block(`````bash
+curl -X POST http://127.0.0.1:2024/runs/stream \
+  -H "Content-Type: application/json" \
+  --data '{
+    "assistant_id": "agent",
+    "input": {"messages": [{"role": "user", "content": "hi"}]},
+    "stream_mode": "updates"
+  }'
+`````)
+
 == 10.7 Observability
 
 Use LangSmith to trace agent behavior. When tracing is enabled, every step of agent execution is recorded and can be analyzed.
+
+=== 10.7.1 Environment variables
+
+The legacy `LANGCHAIN_*` prefix has been replaced by `LANGSMITH_*` in newer code bases.
+
+#code-block(`````bash
+# Current (recommended)
+export LANGSMITH_TRACING=true
+export LANGSMITH_API_KEY="lsv2_..."
+export LANGSMITH_PROJECT="my-agent"   # defaults to `default` if unset
+`````)
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Legacy (deprecated)],
+  text(weight: "bold")[Current],
+  [`LANGCHAIN_TRACING_V2`],
+  [`LANGSMITH_TRACING`],
+  [`LANGCHAIN_API_KEY`],
+  [`LANGSMITH_API_KEY`],
+  [`LANGCHAIN_PROJECT`],
+  [`LANGSMITH_PROJECT`],
+)
 
 LangSmith lets you inspect:
 - The complete execution flow of each agent call
 - Model input/output, tool calls, and token usage
 - Latency, errors, and cost tracking
+
+=== 10.7.2 Selective tracing with `tracing_context`
+
+Use `tracing_context` to enable or disable tracing for a specific block in code.
+
+#code-block(`````python
+import langsmith as ls
+
+with ls.tracing_context(enabled=True):
+    agent.invoke({"messages": [{"role": "user", "content": "hi"}]})
+`````)
+
+=== 10.7.3 Tags and metadata via `config`
+
+Attach tags and metadata at call time to make trace search and filtering easier.
+
+#code-block(`````python
+agent.invoke(
+    {"messages": [{"role": "user", "content": "hi"}]},
+    config={
+        "tags": ["production", "v1.0"],
+        "metadata": {"user_id": "123", "session_id": "456"},
+    },
+)
+`````)
 
 
 == 10.8 Production Checklist

@@ -29,7 +29,7 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-4.1",
+    model="gpt-5.4",
 )
 
 print("환경 준비 완료.")
@@ -508,7 +508,7 @@ function AgentMessage({ message, stream }) {
 스트리밍을 통해 에이전트의 실행 과정을 사용자에게 투명하게 전달하는 방법을 배웠습니다. 그러나 에이전트가 사용자에게 직접 노출되는 만큼, 안전하지 않은 입력이나 부적절한 출력에 대한 방어가 필수적입니다. 다음 장에서는 에이전트의 입출력 경계에 _가드레일_을 설치하여 PII 유출, 프롬프트 인젝션, 위험한 도구 실행 등을 방지하는 방법을 학습합니다.
 
 #references-box[
-- #link("../docs/langchain/08-streaming.md")[Streaming]
+- #link("../docs/langchain/08-streaming.md")[Streaming] — `useStream` 정식 레퍼런스와 이벤트 프로토콜 상세
 - #link("../docs/langchain/28-ui.md")[UI (Agent Chat UI & useStream)]
 ]
 #chapter-end()
