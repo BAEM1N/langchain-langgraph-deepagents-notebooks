@@ -71,7 +71,7 @@ The router uses the LLM with structured output to classify the query.
 ```python
 from langchain_openai import ChatOpenAI
 
-llm = ChatOpenAI(model="gpt-4o")
+llm = ChatOpenAI(model="gpt-5.4")
 classifier = llm.with_structured_output(QueryClassification)
 
 def route_query(state):
@@ -259,7 +259,7 @@ def reduce_results(state):
         f"{formatted}"
     )
 
-    llm = ChatOpenAI(model="gpt-4o")
+    llm = ChatOpenAI(model="gpt-5.4")
     response = llm.invoke(synthesis_prompt)
 
     return {

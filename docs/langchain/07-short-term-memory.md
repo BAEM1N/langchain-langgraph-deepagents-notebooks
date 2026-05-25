@@ -109,11 +109,11 @@ Replace older messages with condensed summaries:
 from langchain.agents.middleware import SummarizationMiddleware
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[],
     middleware=[
         SummarizationMiddleware(
-            model="gpt-4.1-mini",
+            model="gpt-5.4-mini",
             trigger=("tokens", 4000),
             keep=("messages", 20)
         )

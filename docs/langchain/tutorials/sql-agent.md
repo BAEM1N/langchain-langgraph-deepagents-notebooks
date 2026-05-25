@@ -54,7 +54,7 @@ print(db.get_table_info())
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_openai import ChatOpenAI
 
-llm = ChatOpenAI(model="gpt-4o")
+llm = ChatOpenAI(model="gpt-5.4")
 toolkit = SQLDatabaseToolkit(db=db, llm=llm)
 tools = toolkit.get_tools()
 ```
@@ -243,7 +243,7 @@ from langchain.middleware import HumanInTheLoopMiddleware
 db = SQLDatabase.from_uri("sqlite:///company.db")
 
 # Toolkit
-llm = ChatOpenAI(model="gpt-4o")
+llm = ChatOpenAI(model="gpt-5.4")
 toolkit = SQLDatabaseToolkit(db=db, llm=llm)
 tools = toolkit.get_tools()
 

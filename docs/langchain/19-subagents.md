@@ -21,14 +21,14 @@ Implement subagents when managing multiple distinct domains (calendar, email, CR
 from langchain.tools import tool
 from langchain.agents import create_agent
 
-subagent = create_agent(model="anthropic:claude-sonnet-4-20250514", tools=[...])
+subagent = create_agent(model="anthropic:claude-sonnet-4-6", tools=[...])
 
 @tool("research", description="Research a topic and return findings")
 def call_research_agent(query: str):
     result = subagent.invoke({"messages": [{"role": "user", "content": query}]})
     return result["messages"][-1].content
 
-main_agent = create_agent(model="anthropic:claude-sonnet-4-20250514", tools=[call_research_agent])
+main_agent = create_agent(model="anthropic:claude-sonnet-4-6", tools=[call_research_agent])
 ```
 
 ## Design Decisions
@@ -60,7 +60,7 @@ Subagents support two checkpointing modes:
 
 ```python
 subagent = create_agent(
-    model="anthropic:claude-sonnet-4-20250514",
+    model="anthropic:claude-sonnet-4-6",
     tools=[...],
     checkpointer=True,   # opt in to subagent-local history
 )

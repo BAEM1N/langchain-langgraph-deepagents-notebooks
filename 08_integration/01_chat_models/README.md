@@ -19,7 +19,7 @@ OpenAI / Anthropic 외에도 LangChain은 25+ chat 모델 공급자와 1:1 통�
 
 ## 학습 포인트
 
-- **`init_chat_model()` 헬퍼**: `init_chat_model("openai:gpt-4.1")` 형태의 provider prefix 문자열로 모델 교체
+- **`init_chat_model()` 헬퍼**: `init_chat_model("openai:gpt-5.4")` 형태의 provider prefix 문자열로 모델 교체
 - **`.profile` 속성 (1.1+)**: `max_input_tokens`, `tool_calling`, `reasoning_output` 등 공급자별 실제 능력치
 - **Responses API (OpenAI)**: `use_responses_api=True, store=False, include=["reasoning.encrypted_content"]` 데이터 보존 옵션
 - **Tool calling 호환성**: 공급자별 지원 범위 차이 (예: Ollama는 일부 모델만)

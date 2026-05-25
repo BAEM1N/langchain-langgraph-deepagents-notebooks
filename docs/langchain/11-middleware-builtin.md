@@ -21,11 +21,11 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import SummarizationMiddleware
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[your_weather_tool, your_calculator_tool],
     middleware=[
         SummarizationMiddleware(
-            model="gpt-4.1-mini",
+            model="gpt-5.4-mini",
             trigger=("tokens", 4000),
             keep=("messages", 20),
         ),
@@ -55,7 +55,7 @@ ContextSize = tuple[str, int | float]
 
 ```python
 SummarizationMiddleware(
-    model="gpt-4.1-mini",
+    model="gpt-5.4-mini",
     trigger=("fraction", 0.8),   # max_input_tokens의 80%에서 트리거
     keep=("messages", 20),
 )
@@ -83,7 +83,7 @@ from langchain.agents.middleware import HumanInTheLoopMiddleware
 from langgraph.checkpoint.memory import InMemorySaver
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[your_read_email_tool, your_send_email_tool],
     checkpointer=InMemorySaver(),
     middleware=[
@@ -117,7 +117,7 @@ from langchain.agents.middleware import ModelCallLimitMiddleware
 from langgraph.checkpoint.memory import InMemorySaver
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     checkpointer=InMemorySaver(),
     tools=[],
     middleware=[
@@ -153,7 +153,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import ToolCallLimitMiddleware
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, database_tool],
     middleware=[
         # Global limit
@@ -202,11 +202,11 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import ModelFallbackMiddleware
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[],
     middleware=[
         ModelFallbackMiddleware(
-            "gpt-4.1-mini",
+            "gpt-5.4-mini",
             "claude-3-5-sonnet-20241022",
         ),
     ],
@@ -234,7 +234,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import PIIMiddleware
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[],
     middleware=[
         PIIMiddleware("email", strategy="redact", apply_to_input=True),
@@ -314,7 +314,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import TodoListMiddleware
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[read_file, write_file, run_tests],
     middleware=[TodoListMiddleware()],
 )
@@ -341,11 +341,11 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import LLMToolSelectorMiddleware
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[tool1, tool2, tool3, tool4, tool5, ...],
     middleware=[
         LLMToolSelectorMiddleware(
-            model="gpt-4.1-mini",
+            model="gpt-5.4-mini",
             max_tools=3,
             always_include=["search"],
         ),
@@ -376,7 +376,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import ToolRetryMiddleware
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, database_tool],
     middleware=[
         ToolRetryMiddleware(
@@ -415,7 +415,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import ModelRetryMiddleware
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, database_tool],
     middleware=[
         ModelRetryMiddleware(
@@ -455,7 +455,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import LLMToolEmulator
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[get_weather, search_database, send_email],
     middleware=[
         LLMToolEmulator(),  # Emulate all tools
@@ -484,7 +484,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import ContextEditingMiddleware, ClearToolUsesEdit
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[],
     middleware=[
         ContextEditingMiddleware(
@@ -535,7 +535,7 @@ from langchain.agents.middleware import (
 )
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool],
     middleware=[
         ShellToolMiddleware(
@@ -579,7 +579,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import FilesystemFileSearchMiddleware
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[],
     middleware=[
         FilesystemFileSearchMiddleware(
@@ -688,7 +688,7 @@ agent = create_agent(
                     "description": "This subagent can get weather in cities.",
                     "system_prompt": "Use the get_weather tool to get weather.",
                     "tools": [get_weather],
-                    "model": "gpt-4.1",
+                    "model": "gpt-5.4",
                     "middleware": [],
                 }
             ],
@@ -824,7 +824,7 @@ from langchain.agents import create_agent
 from langchain_openai.middleware import OpenAIModerationMiddleware
 
 agent = create_agent(
-    model="openai:gpt-4.1",
+    model="openai:gpt-5.4",
     tools=[search_tool],
     middleware=[
         OpenAIModerationMiddleware(

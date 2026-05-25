@@ -47,7 +47,7 @@ async_subagents = [
 ]
 
 agent = create_deep_agent(
-    model="google_genai:gemini-3.1-pro-preview",
+    model="google_genai:gemini-3.5-flash",
     subagents=async_subagents,
 )
 ```

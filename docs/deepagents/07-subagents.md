@@ -137,7 +137,7 @@ agent = create_deep_agent(
             "description": "General-purpose agent for research and multi-step tasks",
             "system_prompt": "You are a general-purpose assistant.",
             "tools": [internet_search],
-            "model": "openai:gpt-4o",
+            "model": "openai:gpt-5.4",
         },
     ],
 )

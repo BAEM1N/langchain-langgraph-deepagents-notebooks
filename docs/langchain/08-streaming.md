@@ -267,7 +267,7 @@ def get_weather(city: str) -> str:
     return f"{city}: 맑음"
 
 agent = create_agent(
-    model="openai:gpt-4.1",
+    model="openai:gpt-5.4",
     tools=[get_weather],
 )
 

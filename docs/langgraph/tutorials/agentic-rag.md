@@ -114,7 +114,7 @@ This is the entry node. It either generates a retrieval query (by calling the re
 ```python
 from langchain_openai import ChatOpenAI
 
-llm = ChatOpenAI(model="gpt-4o")
+llm = ChatOpenAI(model="gpt-5.4")
 llm_with_tools = llm.bind_tools([retrieve])
 
 def generate_query_or_respond(state: AgentState):

@@ -62,10 +62,9 @@ docs/
 ### Observability 패턴
 
 ```python
-# LangSmith (선택)
+# LangSmith (선택) — LANGSMITH_TRACING=true 면 자동 트레이싱
 if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
-    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
-    os.environ.setdefault("LANGCHAIN_PROJECT", "agent-notebooks")
+    os.environ.setdefault("LANGSMITH_PROJECT", "agent-notebooks")
 
 # Langfuse (선택)
 langfuse_handler = None
