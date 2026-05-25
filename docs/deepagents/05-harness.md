@@ -10,11 +10,11 @@ Agents access a `write_todos` tool for maintaining structured task lists with st
 
 ### Virtual Filesystem Access
 A configurable filesystem backend supports standard operations:
-- **ls**: Directory listing with metadata
-- **read_file**: Content retrieval with line numbers; supports images (PNG, JPG, GIF, WEBP)
+- **ls**: Directory listing with metadata (size, modified time)
+- **read_file**: Content retrieval with line numbers and offset/limit for large files; returns multimodal content for images (PNG, JPG, GIF, WebP, HEIC), video (MP4, MOV, AVI), audio (WAV, MP3, AAC, FLAC), and documents (PDF, PPT)
 - **write_file**: File creation
-- **edit_file**: String replacement operations
-- **glob**: Pattern-based file discovery
+- **edit_file**: Exact string replacement with optional global replace mode
+- **glob**: Pattern-based file discovery (e.g., `**/*.py`)
 - **grep**: Content searching with multiple output modes
 - **execute**: Shell command execution (sandbox backends only)
 
@@ -31,11 +31,13 @@ The harness allows the main agent to create ephemeral "subagents" for isolated m
 
 **Runtime Context Compression**: Two primary techniques:
 
-1. **Offloading**: Content exceeding 20,000 tokens (configurable) gets stored to disk with pointer references in active memory
+1. **Offloading**: Large tool results exceeding a configurable threshold are stored to disk with pointer references in active memory
 2. **Summarization**: When context approaches the model's window limit, conversation history gets compressed into a structured summary while preserving original messages in filesystem storage
 
 ### Code Execution
-Sandbox backends expose an `execute` tool enabling isolated command execution. This provides security, clean environments, and reproducibility without affecting host systems.
+Two execution paths are supported:
+- **Sandbox backends** expose an `execute` tool for isolated shell command execution — security, clean environments, and reproducibility without affecting host systems.
+- **Interpreters** offer lightweight JavaScript evaluation through a QuickJS runtime with no shell or network access, useful for deterministic tool composition and data transformation.
 
 ### Human-in-the-Loop
 Optional interruption configuration pauses execution at specified tool calls for human approval or input modification.

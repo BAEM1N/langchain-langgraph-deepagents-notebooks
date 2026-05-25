@@ -171,7 +171,7 @@ This handbook uses two main block styles:
 #code-block(```python
 # Python code block — mint left border
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 result = model.invoke("Hello, Agent!")
 ```)
 

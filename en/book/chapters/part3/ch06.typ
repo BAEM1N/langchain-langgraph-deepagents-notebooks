@@ -23,18 +23,64 @@ Store state with checkpointer and implement long-term memory with store.
 from dotenv import load_dotenv
 load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4-mini")
 `````)
 
 == 6.2 checkpointer — Automatically saves state for each execution step
 
-LangGraph provides three checkpointer:
+LangGraph offers multiple checkpointer implementations. The seven commonly used options are summarized below.
 
-- *`InMemorySaver`*: For development use (stored in memory, deleted when process ends)
-- *`SqliteSaver`*: Local development (save to file, persist across restarts)
-- *`PostgresSaver`*: Production (stored in DB, expandable)
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Checkpointer],
+  text(weight: "bold")[Package],
+  text(weight: "bold")[Use],
+  [`InMemorySaver`],
+  [`langgraph-checkpoint` (built-in)],
+  [Development/testing. State lost on process exit],
+  [`SqliteSaver`],
+  [`langgraph-checkpoint-sqlite`],
+  [Local development. Single-file persistence, async variant],
+  [`PostgresSaver`],
+  [`langgraph-checkpoint-postgres`],
+  [Production default. `AsyncPostgresSaver` for async graphs],
+  [`MongoDBSaver`],
+  [`langgraph-checkpoint-mongodb`],
+  [Document DB. JSON-friendly storage backend],
+  [`RedisSaver`],
+  [`langgraph-checkpoint-redis`],
+  [In-memory persistence. Low latency, async variant],
+  [`OracleSaver`],
+  [`langgraph-checkpoint-oracle`],
+  [Enterprise Oracle DB. Vector search included],
+  [`CosmosDBSaver`],
+  [`langchain-azure-cosmosdb`],
+  [Azure Cosmos DB. Microsoft Entra ID authentication],
+)
 
 If you pass checkpointer to `compile()`, state will be automatically saved after each node in the graph is executed.
+
+DB-backed checkpointers are initialized with the context-manager + `setup()` pattern. Use async variants (e.g. `AsyncPostgresSaver`) for async graphs.
+
+#code-block(`````python
+from langgraph.checkpoint.postgres import PostgresSaver
+
+DB_URI = "postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable"
+with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
+    checkpointer.setup()  # first time only — create schema
+    graph = builder.compile(checkpointer=checkpointer)
+
+# Async graphs
+from langgraph.checkpoint.postgres import AsyncPostgresSaver
+
+checkpointer = AsyncPostgresSaver.from_conn_string(DB_URI)
+await checkpointer.setup()
+graph = builder.compile(checkpointer=checkpointer)
+`````)
 
 == 6.3 get_state() — Retrieve currently stored state lookup
 
@@ -111,6 +157,82 @@ This pattern allows you to store and retrieve user information within a node, ma
 - `compile(store=store)`: connect store to the graph.
 - Add `store` parameter to node function: LangGraph automatically injects store instance
 - Separate namespace for each user with `config["configurable"]["user_id"]`
+
+=== Context and Runtime — accessing user_id and store from nodes
+
+To partition long-term memory _per user_, the node function needs the current user's ID. LangGraph solves this with a `@dataclass` `Context` registered via `StateGraph(..., context_schema=Context)`, plus a `runtime: Runtime[Context]` parameter on the node. Pass `context=Context(user_id=...)` to `graph.invoke(...)`, then access `runtime.context.user_id` and `runtime.store` inside the node.
+
+#code-block(`````python
+import uuid
+from dataclasses import dataclass
+from langgraph.runtime import Runtime
+from langgraph.graph import StateGraph, MessagesState, START
+
+@dataclass
+class Context:
+    user_id: str
+
+async def call_model(state: MessagesState, runtime: Runtime[Context]):
+    user_id = runtime.context.user_id
+    namespace = (user_id, "memories")  # recommended pattern
+
+    memories = await runtime.store.asearch(
+        namespace, query=state["messages"][-1].content, limit=3
+    )
+    await runtime.store.aput(
+        namespace, str(uuid.uuid4()), {"data": "User prefers dark mode"}
+    )
+    return {"messages": [await model.ainvoke(state["messages"])]}
+
+builder = StateGraph(MessagesState, context_schema=Context)
+builder.add_node(call_model)
+builder.add_edge(START, "call_model")
+graph = builder.compile(checkpointer=checkpointer, store=store)
+
+graph.invoke(
+    {"messages": [{"role": "user", "content": "hi"}]},
+    {"configurable": {"thread_id": "1"}},
+    context=Context(user_id="alice"),
+)
+`````)
+
+#tip-box[Any tuple shape works as a namespace, but the official docs recommend `(user_id, "memories")`. First-level partitioning by user, second-level by memory kind (`"memories"`, `"preferences"`, etc.) makes category-scoped `search()` straightforward.]
+
+Production stores follow the same context-manager pattern as checkpointers:
+
+#code-block(`````python
+from langgraph.store.postgres import PostgresStore
+
+with PostgresStore.from_conn_string(DB_URI) as store:
+    store.setup()
+    graph = builder.compile(checkpointer=checkpointer, store=store)
+
+# Redis / Oracle follow the same pattern
+from langgraph.store.redis import RedisStore
+from langgraph.store.oracle import OracleStore  # vector search built-in
+`````)
+
+=== Semantic search with `index`
+
+Enable embedding-based search by passing `index={"embed": ..., "dims": ..., "fields": [...]}`:
+
+#code-block(`````python
+from langchain.embeddings import init_embeddings
+from langgraph.store.memory import InMemoryStore
+
+store = InMemoryStore(
+    index={
+        "embed": init_embeddings("openai:text-embedding-3-small"),
+        "dims": 1536,
+        "fields": ["food_preference", "$"],
+    }
+)
+
+store.put(("alice", "memories"), "1", {"food_preference": "I love pizza"})
+items = store.search(("alice", "memories"), query="I'm hungry", limit=1)
+`````)
+
+Use `index=False` on `put()` to skip embedding for a specific item; pass a list of keys to limit which fields get embedded.
 
 == 6.7.6 Managing conversation length — trim_messages and RemoveMessage
 

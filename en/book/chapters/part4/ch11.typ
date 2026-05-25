@@ -71,7 +71,7 @@ async_subagents = [
 ]
 
 agent = create_deep_agent(
-    model="google_genai:gemini-3.1-pro-preview",
+    model="google_genai:gemini-3.5-flash",
     subagents=async_subagents,
 )
 `````)
@@ -197,7 +197,49 @@ langgraph dev --n-jobs-per-worker 10
 
 A supervisor running three concurrent subagents needs at least *4 slots* (1 supervisor + 3 subagents). 10–20 gives comfortable headroom.
 
-== 11.9 Sync vs Async selection criteria
+== 11.9 Observing lifecycle through the unified v2 stream
+
+Pending/Running/Complete signals for async subagents do not need a separate v3 projection. Use the single `agent.stream(...)` path with `subgraphs=True` + `version="v2"` to unify main and subagent events. Changes to the `async_tasks` channel flow through the `updates` mode `data`.
+
+#code-block(`````python
+async for chunk in agent.astream(
+    {"messages": [{"role": "user", "content": "Run research on 3 competitors in parallel"}]},
+    stream_mode=["updates", "messages", "custom"],
+    subgraphs=True,
+    version="v2",
+):
+    t = chunk["type"]
+    if t == "updates":
+        # async_tasks channel changes, check_async_task / list_async_tasks results
+        for node, data in chunk["data"].items():
+            print(f"step={node}")
+    elif t == "messages":
+        # Supervisor tokens + tool_call_chunks
+        ...
+    elif t == "custom":
+        # In-tool progress via get_stream_writer
+        ...
+`````)
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Signal],
+  text(weight: "bold")[Detection point],
+  [Pending],
+  [Supervisor emits a `start_async_task` tool_call],
+  [Running],
+  [`updates` chunk where `async_tasks[task_id].status` becomes `running`],
+  [Complete],
+  [`updates` chunk where `status` settles to `success` / `error` / `cancelled`],
+)
+
+Map the three signals to UI card states and the lifecycle flows without separate polling. See Chapter 14 (Streaming) for the full stream dispatch.
+
+== 11.10 Sync vs Async selection criteria
 
 #table(
   columns: 3,
@@ -238,7 +280,7 @@ A supervisor running three concurrent subagents needs at least *4 slots* (1 supe
 - User might redirect or cancel mid-flight → *Async*
 - You cannot run LangSmith Deployments or an Agent Protocol server → *Sync only*
 
-== 11.10 Caveats
+== 11.11 Caveats
 
 - *Agent Protocol dependency*: Declaring `AsyncSubAgent` in a runtime without Agent Protocol support fails at initialization
 - *Preserve the `async_tasks` channel*: Custom state reducers or middleware that reshape state must not overwrite it

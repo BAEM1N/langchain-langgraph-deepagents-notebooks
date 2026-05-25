@@ -11,16 +11,28 @@ This guide enables developers to build their first deep agent with planning, fil
 ```bash
 pip install deepagents tavily-python
 # or
+uv init
 uv add deepagents tavily-python
+uv sync
 ```
 
 ## Configuration Steps
 
 ### API Keys Setup
-Environment variables must be configured:
+Set the provider-specific API key alongside the Tavily key. Examples:
 ```bash
+# Anthropic
 export ANTHROPIC_API_KEY="your-key"
 export TAVILY_API_KEY="your-key"
+
+# OpenAI
+export OPENAI_API_KEY="your-key"
+
+# Google Gemini
+export GOOGLE_API_KEY="your-key"
+
+# OpenRouter
+export OPENROUTER_API_KEY="your-key"
 ```
 
 ### Search Tool Creation
@@ -33,11 +45,21 @@ Using `create_deep_agent()`, developers pass custom tools and system prompts tha
 from deepagents import create_deep_agent
 
 agent = create_deep_agent(
-    model="claude-sonnet-4-6",
+    model="anthropic:claude-sonnet-4-6",
     tools=[internet_search],
     system_prompt="You are an expert researcher.",
 )
 ```
+
+Model IDs follow the `provider:model-name` format. Common values:
+
+- `anthropic:claude-sonnet-4-6`
+- `openai:gpt-5.4`
+- `google_genai:gemini-3.5-flash`
+- `openrouter:anthropic/claude-sonnet-4-6`
+- `fireworks:accounts/fireworks/models/qwen3p5-397b-a17b`
+- `baseten:zai-org/GLM-5`
+- `ollama:devstral-2`
 
 ## Functional Capabilities
 The agent automatically:

@@ -28,7 +28,7 @@ LangGraph는 ReAct 에이전트를 쉽게 구축할 수 있도록 두 가지 주
 from dotenv import load_dotenv
 load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == 5.2 도구 정의 — \@tool 데코레이터와 bind_tools()

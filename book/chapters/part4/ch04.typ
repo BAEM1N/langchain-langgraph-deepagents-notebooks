@@ -18,12 +18,11 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
-assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY가 설정되지 않았습니다!"
+assert os.environ.get("ANTHROPIC_API_KEY"), "ANTHROPIC_API_KEY가 설정되지 않았습니다!"
 print("환경 설정 완료")
 
-from langchain_openai import ChatOpenAI
-
-model = ChatOpenAI(model="gpt-4.1")
+# 권장 기본 — Anthropic Claude Sonnet 4.6
+model = "anthropic:claude-sonnet-4-6"
 `````)
 #output-block(`````
 환경 설정 완료
@@ -75,6 +74,10 @@ Deep Agents의 빌트인 파일 도구(`ls`, `read_file`, `write_file`, `edit_fi
   [디스크 + 셸],
   [영구],
   [개발 환경 (보안 주의)],
+  [`ContextHubBackend`],
+  [Context Hub (원격)],
+  [영구 (lazy fetch)],
+  [팀 공유 컨텍스트, 원격 파일 동기화],
 )
 
 #code-block(`````python
@@ -122,8 +125,18 @@ print("모든 백엔드 클래스를 성공적으로 임포트했습니다!")
 - `virtual_mode=True` — 경로 제한 활성화 (`..`, `~` 등 차단)
 - `max_file_size_mb` — 읽을 수 있는 최대 파일 크기
 
+=== `virtual_mode=True`가 차단하는 경로
+
+`virtual_mode=True`는 다음 _세 가지 패턴_을 차단합니다:
+
+- 상대 이스케이프 — `..` 세그먼트가 포함된 경로 (`../etc/passwd`, `foo/../../bar`)
+- 홈 디렉토리 확장 — `~` 또는 `~user`로 시작하는 경로
+- `root_dir` 밖의 절대 경로 — `/etc/hosts`처럼 루트를 벗어나는 절대 경로
+
+이 세 경로가 입력되면 백엔드는 즉시 `error` 필드가 채워진 결과를 반환하고, 실제 디스크 호출은 발생하지 않습니다.
+
 === 보안 주의사항
-#warning-box[`FilesystemBackend`는 에이전트에게 실제 파일 시스템 접근 권한을 부여합니다. `virtual_mode=True`를 설정하면 `..`, `~` 등의 경로 이스케이프를 차단하여 `root_dir` 범위 밖으로의 접근을 방지합니다. 프로덕션 환경에서는 반드시 `virtual_mode=True`를 사용하거나, 10장에서 다루는 샌드박스 백엔드를 고려하세요.]
+#warning-box[`FilesystemBackend`는 에이전트에게 실제 파일 시스템 접근 권한을 부여합니다. `virtual_mode=True`를 설정하면 위의 세 패턴(`..`, `~`, 외부 절대경로)을 차단하여 `root_dir` 범위 밖으로의 접근을 막습니다. 프로덕션 환경에서는 반드시 `virtual_mode=True`를 사용하거나, 10장에서 다루는 샌드박스 백엔드를 고려하세요.]
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 4. StoreBackend -- 크로스 스레드 영속 저장소
@@ -236,37 +249,49 @@ agent = create_deep_agent(
 
 5가지 내장 백엔드를 살펴보았습니다. 하지만 실무에서는 S3 버킷, 데이터베이스, 원격 API 등 내장 백엔드로 커버할 수 없는 저장소를 사용해야 하는 경우가 있습니다.
 
-내장 백엔드가 요구사항에 맞지 않는 경우, `BackendProtocol`을 구현하여 나만의 백엔드를 만들 수 있습니다. `BackendProtocol`은 Python의 프로토콜(structural subtyping) 패턴을 사용하므로, 상속 없이 필요한 메서드만 구현하면 됩니다. 총 6개의 필수 메서드(`ls_info`, `read`, `write`, `edit`, `grep_raw`, `glob_info`)를 정의하면 에이전트의 모든 파일 도구가 자동으로 커스텀 백엔드를 통해 동작합니다.
+내장 백엔드가 요구사항에 맞지 않는 경우, `BackendProtocol`을 구현하여 나만의 백엔드를 만들 수 있습니다. `BackendProtocol`은 Python의 프로토콜(structural subtyping) 패턴을 사용하므로, 상속 없이 필요한 메서드만 구현하면 됩니다. 총 6개의 필수 메서드(`ls`, `read`, `write`, `edit`, `grep`, `glob`)를 정의하면 에이전트의 모든 파일 도구가 자동으로 커스텀 백엔드를 통해 동작합니다.
 
 아래 예제는 읽기 전용 딕셔너리 기반 백엔드를 구현합니다. 실제 프로덕션에서는 이 패턴을 확장하여 S3, GCS, 데이터베이스 등 다양한 저장소를 파일시스템처럼 추상화할 수 있습니다.
 
-=== 필수 메서드
+#warning-box[현재 deepagents 버전(`>=0.5.0`)부터 프로토콜 메서드명이 변경되었습니다. _구버전_은 `ls_info` / `grep_raw` / `glob_info`였지만, _현재_는 `ls` / `grep` / `glob`입니다. 반환 타입도 dict가 아닌 `LsResult`, `ReadResult`, `GrepResult`, `WriteResult`, `EditResult`, `list[FileInfo]` 등 명시적 dataclass/TypedDict 형식을 사용합니다.]
+
+=== 필수 메서드와 반환 타입
 
 #table(
-  columns: 2,
+  columns: 3,
   align: left,
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[메서드],
+  text(weight: "bold")[반환 타입],
   text(weight: "bold")[설명],
-  [`ls_info(path)`],
+  [`ls(path)`],
+  [`LsResult` (`list[FileInfo]` 포함)],
   [디렉토리 내용 목록],
   [`read(file_path, offset, limit)`],
+  [`ReadResult`],
   [파일 읽기 (줄 번호 포함)],
   [`write(file_path, content)`],
+  [`WriteResult`],
   [새 파일 생성],
   [`edit(file_path, old_string, new_string)`],
-  [텍스트 교체],
-  [`grep_raw(pattern, path, glob)`],
+  [`EditResult`],
+  [텍스트 교체 (`occurrences` 포함)],
+  [`grep(pattern, path, glob)`],
+  [`GrepResult`],
   [패턴 기반 파일 내용 검색],
-  [`glob_info(pattern, path)`],
+  [`glob(pattern, path)`],
+  [`list[FileInfo]`],
   [글로브 패턴으로 파일 검색],
 )
 
 #code-block(`````python
 # 간단한 커스텀 백엔드 예시: 읽기 전용 딕셔너리 기반
-from deepagents.backends.protocol import FileInfo, GrepMatch, WriteResult, EditResult
+from deepagents.backends.protocol import (
+    FileInfo, GrepResult, GrepMatch,
+    LsResult, ReadResult, WriteResult, EditResult,
+)
 
 
 class ReadOnlyDictBackend:
@@ -275,18 +300,20 @@ class ReadOnlyDictBackend:
     def __init__(self, files: dict[str, str]):
         self._files = files
 
-    def ls_info(self, path: str = "/") -> list[FileInfo]:
-        return [
+    def ls(self, path: str = "/") -> LsResult:
+        entries: list[FileInfo] = [
             {"path": p, "is_dir": False, "size": len(c), "modified_at": None}
             for p, c in self._files.items()
             if p.startswith(path)
         ]
+        return LsResult(entries=entries, error=None)
 
-    def read(self, file_path: str, offset: int = 0, limit: int = 2000) -> str:
+    def read(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
         content = self._files.get(file_path, "")
         lines = content.splitlines()
         selected = lines[offset:offset + limit]
-        return "\n".join(f"{i + offset + 1}\t{line}" for i, line in enumerate(selected))
+        rendered = "\n".join(f"{i + offset + 1}\t{line}" for i, line in enumerate(selected))
+        return ReadResult(content=rendered, error=None)
 
     def write(self, file_path: str, content: str) -> WriteResult:
         return WriteResult(error="읽기 전용 백엔드입니다.", path=None, files_update=None)
@@ -294,16 +321,16 @@ class ReadOnlyDictBackend:
     def edit(self, file_path: str, old_string: str, new_string: str, replace_all: bool = False) -> EditResult:
         return EditResult(error="읽기 전용 백엔드입니다.", path=None, files_update=None, occurrences=None)
 
-    def grep_raw(self, pattern: str, path: str | None = None, glob: str | None = None) -> list[GrepMatch]:
+    def grep(self, pattern: str, path: str | None = None, glob: str | None = None) -> GrepResult:
         import re
-        results = []
+        matches: list[GrepMatch] = []
         for fpath, content in self._files.items():
             for i, line in enumerate(content.splitlines(), 1):
                 if re.search(pattern, line):
-                    results.append({"path": fpath, "line": i, "text": line})
-        return results
+                    matches.append({"path": fpath, "line": i, "text": line})
+        return GrepResult(matches=matches, error=None)
 
-    def glob_info(self, pattern: str, path: str = "/") -> list[FileInfo]:
+    def glob(self, pattern: str, path: str = "/") -> list[FileInfo]:
         import fnmatch
         return [
             {"path": p, "is_dir": False, "size": len(c), "modified_at": None}
@@ -319,12 +346,12 @@ custom_backend = ReadOnlyDictBackend({
 })
 
 # 커스텀 백엔드 동작 확인
-print("파일 목록:", custom_backend.ls_info("/"))
+print("파일 목록:", custom_backend.ls("/").entries)
 print()
 print("파일 내용:")
-print(custom_backend.read("/docs/guide.md"))
+print(custom_backend.read("/docs/guide.md").content)
 print()
-print("검색 결과:", custom_backend.grep_raw("설치"))
+print("검색 결과:", custom_backend.grep("설치").matches)
 `````)
 #output-block(`````
 파일 목록: [{'path': '/docs/guide.md', 'is_dir': False, 'size': 52, 'modified_at': None}, {'path': '/docs/faq.md', 'is_dir': False, 'size': 56, 'modified_at': None}]
@@ -338,9 +365,67 @@ print("검색 결과:", custom_backend.grep_raw("설치"))
 검색 결과: [{'path': '/docs/guide.md', 'line': 3, 'text': '## 설치 방법'}]
 `````)
 
-아래 코드를 실행한 뒤, `ls_info`가 파일 목록을 반환하고 `read`가 줄 번호와 함께 내용을 출력하며 `grep_raw`가 패턴 검색 결과를 반환하는 것을 확인하세요. 이 세 가지가 동작하면 해당 백엔드는 `FilesystemMiddleware`의 모든 도구와 호환됩니다.
+아래 코드를 실행한 뒤, `ls`가 파일 목록을 반환하고 `read`가 줄 번호와 함께 내용을 출력하며 `grep`이 패턴 검색 결과를 반환하는 것을 확인하세요. 이 세 가지가 동작하면 해당 백엔드는 `FilesystemMiddleware`의 모든 도구와 호환됩니다.
 
 #tip-box[커스텀 백엔드를 구현할 때 가장 중요한 것은 `read` 메서드의 반환 형식입니다. 줄 번호와 탭으로 구분된 `"1\t내용"` 형태를 반환해야 에이전트가 `edit_file` 도구로 정확한 위치를 지정할 수 있습니다.]
+
+#line(length: 100%, stroke: 0.5pt + luma(200))
+== 8. ContextHubBackend — 원격 파일 동기화
+
+`ContextHubBackend`는 LangChain Context Hub에서 _lazy fetch_ + _write-through_ 방식으로 파일을 동기화합니다(`deepagents>=0.5.2`). 팀이 공유하는 컨텍스트(공통 프롬프트, 회사 정책, 도메인 문서 등)를 모든 에이전트가 동일하게 참조해야 할 때 사용합니다.
+
+=== 동작 원리
+- _Lazy fetch_ — 에이전트가 `read_file`을 호출하는 _순간_ 원격에서 파일을 가져오고 로컬 캐시에 저장합니다. 사용하지 않는 파일은 다운로드하지 않습니다.
+- _Write-through_ — `write_file` / `edit_file`이 호출되면 _로컬 + 원격_을 동시에 갱신합니다. 다음 에이전트 실행 시 다른 워커도 변경 사항을 즉시 볼 수 있습니다.
+
+=== 인스턴스화
+
+`namespace`는 _런타임_에 결정해야 하는 경우가 많기 때문에, 백엔드 자체를 미리 인스턴스화한 뒤 `namespace=lambda rt: ...` 형태의 콜러블을 함께 전달합니다.
+
+#code-block(`````python
+# deepagents>=0.5.2
+from deepagents.backends import ContextHubBackend
+
+# 사전 인스턴스 + 런타임 네임스페이스 콜러블
+context_hub = ContextHubBackend(
+    project="my-team",
+    namespace=lambda rt: f"users/{rt.context['user_id']}",  # 런타임 시점에 결정
+)
+
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-6",
+    backend=context_hub,
+)
+`````)
+
+#tip-box[`namespace` 콜러블 시그니처는 `(runtime) -> str`입니다. 단일 namespace 문자열로도 전달 가능하지만, 다중 테넌트 환경에서는 람다 형식이 필수입니다.]
+
+#line(length: 100%, stroke: 0.5pt + luma(200))
+== 9. 권한 시스템 — `permissions` + `GuardedBackend`
+
+`virtual_mode`보다 _세밀한_ 접근 제어가 필요할 때는 `permissions` 파라미터로 _경로 단위 ACL_을 적용합니다. 내부적으로 `GuardedBackend`가 원본 백엔드를 감싸 모든 파일 호출을 정책 훅으로 통과시킵니다.
+
+#code-block(`````python
+from deepagents import create_deep_agent
+from deepagents.permissions import Permissions
+
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-6",
+    backend=FilesystemBackend(root_dir="./workspace", virtual_mode=True),
+    permissions=Permissions(
+        allow_read=["/docs/**", "/data/*.csv"],   # 읽기 허용
+        allow_write=["/outputs/**"],              # 쓰기 허용
+        deny_read=["/data/secrets/**"],           # 읽기 차단 (allow보다 우선)
+        deny_write=["**/*.lock"],                 # 쓰기 차단
+    ),
+)
+`````)
+
+=== 정책 훅 (`policy`)
+
+복잡한 규칙은 `policy=lambda call: ...` 콜러블로 표현합니다. 호출 객체에는 `tool_name`, `path`, `args` 등이 포함되어 있어, 시간대·사용자 권한·외부 시스템 응답을 모두 반영할 수 있습니다.
+
+#tip-box[`allow_*` 규칙과 `deny_*` 규칙이 모두 매치되면 _`deny`가 우선_합니다. 가장 안전한 패턴은 `allow_read=["/docs/**"]`처럼 _명시적 화이트리스트_부터 시작하는 것입니다.]
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 백엔드 선택 가이드
@@ -376,6 +461,12 @@ print("검색 결과:", custom_backend.grep_raw("설치"))
   [`LocalShellBackend`],
   [디스크 + 셸 실행],
   [`root_dir` (보안 주의)],
+  [`ContextHubBackend`],
+  [원격 lazy fetch + write-through],
+  [사전 인스턴스 + `namespace=lambda rt: ...`],
+  [`GuardedBackend` (permissions)],
+  [경로 단위 ACL 래퍼],
+  [`allow_*` / `deny_*` / `policy`],
 )
 
 백엔드는 에이전트의 "기억 장치"입니다. `BackendProtocol`이라는 통일된 인터페이스 덕분에, 에이전트 코드를 변경하지 않고 `create_deep_agent()`의 `backend` 파라미터 한 줄만 수정하여 저장소 전략을 완전히 전환할 수 있습니다. 프로토타이핑 단계에서는 `StateBackend`로 빠르게 시작하고, 프로덕션에서는 `CompositeBackend`로 에페메럴과 영속 저장소를 조합하는 것이 가장 일반적인 패턴입니다. 다음 장에서는 에이전트의 컨텍스트 블로트 문제를 해결하는 _서브에이전트_ 패턴을 다룹니다.

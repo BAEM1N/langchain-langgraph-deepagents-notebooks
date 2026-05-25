@@ -87,65 +87,129 @@ graph = builder.compile()
 
 Control whether subgraphs retain memory across invocations using the `checkpointer` parameter:
 
-### Stateless Subgraphs (Default)
+공식 문서는 세 가지 모드를 다음과 같이 분류합니다.
 
-Each invocation starts fresh. Two options:
+| Mode | `checkpointer=` | Behavior |
+|------|-----------------|----------|
+| Per-invocation (default) | `None` | Each call starts fresh and inherits the parent's checkpointer for interrupts within a single invocation |
+| Per-thread (stateful) | `True` | State accumulates across calls on the same thread |
+| Stateless | `False` | No checkpointing — runs like a plain function call, no interrupt support |
 
-**With Interrupts (Recommended):**
-- Supports pause/resume via `interrupt()`
-- Enables durable execution
-- Default behavior: omit `checkpointer` or set to `None`
-- Ideal for multi-agent systems with tool-wrapped subagents
+### Per-Invocation (Default)
 
-**Without Interrupts:**
-- Minimal overhead, function-call semantics
-- Compile with `checkpointer=False`
-- No recovery on process crash during execution
+Each invocation starts fresh while still inheriting the parent's checkpointer for interrupts and durable execution within that single run. Omit `checkpointer` or set to `None`. Ideal for multi-agent systems with tool-wrapped subagents.
 
-### Stateful Subgraphs
+```python
+from langchain.agents import create_agent
+from langchain.tools import tool
+from langgraph.checkpoint.memory import MemorySaver
 
-Subagent retains context across calls on the same thread -- conversation history accumulates.
+@tool
+def fruit_info(fruit_name: str) -> str:
+    """Look up fruit info."""
+    return f"Info about {fruit_name}"
 
-Compile with `checkpointer=True`:
+# Subagent — no checkpointer (inherits parent)
+fruit_agent = create_agent(
+    model="gpt-5.4-mini",
+    tools=[fruit_info],
+    prompt="You are a fruit expert. Use the fruit_info tool.",
+)
+
+@tool
+def ask_fruit_expert(question: str) -> str:
+    """Ask the fruit expert."""
+    response = fruit_agent.invoke(
+        {"messages": [{"role": "user", "content": question}]},
+    )
+    return response["messages"][-1].content
+
+agent = create_agent(
+    model="gpt-5.4-mini",
+    tools=[ask_fruit_expert],
+    checkpointer=MemorySaver(),
+)
+```
+
+### Stateless
+
+Minimal overhead with function-call semantics. Compile with `checkpointer=False`. No recovery on process crash during execution; no interrupt support.
+
+### Per-Thread (Stateful)
+
+Subagent retains context across calls on the same thread — conversation history accumulates. Compile with `checkpointer=True`:
 
 ```python
 fruit_agent = create_agent(
-    model="gpt-4.1-mini",
+    model="gpt-5.4-mini",
     tools=[fruit_info],
     prompt="You are a fruit expert.",
     checkpointer=True,
 )
 ```
 
-**Important Limitation:** Stateful subgraphs don't support parallel tool calls. Use `ToolCallLimitMiddleware` to prevent multiple simultaneous invocations of the same stateful subgraph.
+**Important Limitation:** Per-thread subgraphs do not support parallel tool calls. When an LLM has access to a per-thread subagent as a tool, it may try to call that tool multiple times in parallel, causing checkpoint conflicts because both calls write to the same namespace. Use `ToolCallLimitMiddleware` to restrict simultaneous invocations:
 
-## Namespace Isolation for Multiple Stateful Subgraphs
+```python
+from langchain.agents import create_agent
+from langchain.agents.middleware import ToolCallLimitMiddleware
+from langgraph.checkpoint.memory import MemorySaver
 
-When calling multiple different stateful subgraphs within a single node, wrap each in its own `StateGraph` with a unique node name to avoid checkpoint conflicts:
+agent = create_agent(
+    model="gpt-5.4-mini",
+    tools=[ask_fruit_expert],
+    middleware=[
+        ToolCallLimitMiddleware(tool_name="ask_fruit_expert", run_limit=1),
+    ],
+    checkpointer=MemorySaver(),
+)
+```
+
+## Namespace Isolation for Multiple Per-Thread Subgraphs
+
+When multiple different per-thread (stateful) subgraphs exist, each needs unique namespace isolation to prevent state conflicts. Wrap each in its own `StateGraph` with a distinct node name:
 
 ```python
 from langgraph.graph import MessagesState, StateGraph
+from langchain.agents import create_agent
 
 def create_sub_agent(model, *, name, **kwargs):
+    """Wrap an agent with a unique node name for namespace isolation."""
     agent = create_agent(model=model, name=name, **kwargs)
     return (
         StateGraph(MessagesState)
-        .add_node(name, agent)
+        .add_node(name, agent)  # unique name -> stable namespace
         .add_edge("__start__", name)
         .compile()
     )
+
+fruit_agent = create_sub_agent(
+    "gpt-5.4-mini",
+    name="fruit_agent",
+    tools=[fruit_info],
+    prompt="You are a fruit expert.",
+    checkpointer=True,
+)
+
+veggie_agent = create_sub_agent(
+    "gpt-5.4-mini",
+    name="veggie_agent",
+    tools=[veggie_info],
+    prompt="You are a veggie expert.",
+    checkpointer=True,
+)
 ```
 
 ## Checkpointer Reference
 
-| Feature | Without Interrupts | With Interrupts | Stateful |
-|---------|-------------------|-----------------|----------|
+| Feature | Stateless | Per-Invocation | Per-Thread |
+|---------|-----------|----------------|------------|
 | `checkpointer=` | `False` | `None` | `True` |
 | Interrupts (HITL) | No | Yes | Yes |
 | Multi-turn memory | No | No | Yes |
 | State inspection | No | Current invocation only | Yes |
 | Multiple different subgraphs | Yes | Yes | Namespace conflicts possible |
-| Same subgraph multiple times | Yes | Yes | No |
+| Same subgraph multiple times in parallel | Yes | Yes | No |
 
 ## Viewing Subgraph State
 
@@ -162,15 +226,18 @@ Requires:
 
 ## Streaming Subgraph Outputs
 
-Include subgraph outputs in streamed results:
+Include subgraph outputs in streamed results — set `subgraphs=True` (use `version="v2"` for the namespaced chunk format):
 
 ```python
 for chunk in graph.stream(
     {"foo": "foo"},
     subgraphs=True,
     stream_mode="updates",
+    version="v2",
 ):
-    print(chunk)
+    print(chunk["type"])  # "updates"
+    print(chunk["ns"])    # () for root, ("node_2:<id>",) for subgraph
+    print(chunk["data"])  # {"node_name": {"key": "value"}}
 ```
 
 ## Prerequisites for Persistence Features

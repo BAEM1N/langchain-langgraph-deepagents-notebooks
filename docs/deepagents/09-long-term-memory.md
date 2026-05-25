@@ -15,8 +15,18 @@ The system uses a path-based routing strategy:
 Configuration requires three components:
 
 1. A checkpointer (e.g., `MemorySaver`)
-2. A store implementation (e.g., `InMemoryStore` for dev, `PostgresStore` for production)
+2. A store implementation — `InMemoryStore` for development, `PostgresStore` (`langgraph.store.postgres`) for production. LangSmith Deployments provision a PostgreSQL-backed store automatically.
 3. A `CompositeBackend` with routing rules
+
+```python
+CompositeBackend(
+    default=StateBackend(),
+    routes={
+        "/memories/": StoreBackend(namespace=...),
+        "/skills/":   StoreBackend(namespace=...),
+    },
+)
+```
 
 The backend factory function receives a runtime parameter and returns the configured router.
 
@@ -89,6 +99,18 @@ user_scoped = StoreBackend(
 ```
 
 프로덕션 개인화 어시스턴트의 기본값. 두 스코프 조합 예는 `13-going-to-production.md`의 "Memory persistence scoping" 참고.
+
+### Context-driven namespace
+
+`invoke(..., context={"user_id": "..."})` 로 명시 전달한 사용자 식별자를 namespace로 쓰려면 `rt.context.user_id` 를 참조한다. 서버 인증과 무관하게 호출자가 사용자 컨텍스트를 직접 주입하는 시나리오(예: 자체 ID 시스템, 멀티 테넌트 SaaS)에서 사용한다.
+
+```python
+from deepagents.backends import StoreBackend
+
+user_scoped_ctx = StoreBackend(
+    namespace=lambda rt: (rt.context.user_id,),
+)
+```
 
 ## Episodic memory via checkpointers
 

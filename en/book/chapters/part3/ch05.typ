@@ -20,7 +20,7 @@ We implement LLM agent using tool with two APIs.
 from dotenv import load_dotenv
 load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == 5.2 tool Definitions — \@tool decorator and bind_tools()

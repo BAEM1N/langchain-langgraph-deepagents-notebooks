@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 print("\u2713 모델 준비 완료")
 `````)
 #output-block(`````
@@ -78,7 +78,7 @@ for t in [add, multiply]:
 + 모델이 텍스트로 응답하거나(도구 호출 없음), 최대 반복 횟수에 도달하면 루프가 종료됩니다.
 
 에이전트의 핵심 구성 요소:
-- _모델(Model)_: LLM이 어떤 도구를 호출할지 판단합니다. 문자열(`"openai:gpt-4.1"`) 또는 모델 객체를 전달할 수 있습니다. 문자열 형식은 `"provider:model_name"`으로, 빠른 프로토타이핑에 편리합니다.
+- _모델(Model)_: LLM이 어떤 도구를 호출할지 판단합니다. 문자열(`"openai:gpt-5.4"`) 또는 모델 객체를 전달할 수 있습니다. 문자열 형식은 `"provider:model_name"`으로, 빠른 프로토타이핑에 편리합니다.
 - _도구(Tools)_: 에이전트가 수행할 수 있는 액션입니다. 순차 호출, 병렬 실행, 재시도를 모두 지원합니다.
 - _시스템 프롬프트(System Prompt)_: 에이전트의 행동을 안내하는 지침입니다. 수학 에이전트라면 "당신은 수학 도우미입니다. 항상 계산 과정을 보여주세요."처럼 구체적으로 작성할수록 유용한 결과를 얻습니다.
 

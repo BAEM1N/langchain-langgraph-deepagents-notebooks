@@ -30,12 +30,12 @@ print("환경 설정 완료")
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 print(f"모델 설정 완료: {model.model_name}")
 `````)
 #output-block(`````
-모델 설정 완료: gpt-4.1
+모델 설정 완료: gpt-5.4
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -203,6 +203,23 @@ for name, features in frameworks.items():
 )
 
 #tip-box[프레임워크 선택에서 가장 과소평가되는 요소가 _Observability_(관찰 가능성)입니다. 에이전트가 예상과 다르게 동작할 때, 내부 상태와 도구 호출 과정을 추적할 수 있는지가 디버깅 시간을 결정합니다. Deep Agents의 LangSmith 통합은 이 문제에 대한 성숙한 솔루션을 제공합니다.]
+
+#line(length: 100%, stroke: 0.5pt + luma(200))
+== 3-1. 3가지 핵심 차별점
+
+표 위 항목들을 더 깊이 들여다보면, Deep Agents가 다른 두 프레임워크와 갈리는 지점은 _세 축_에 모인다. 단순 기능 차이가 아니라 설계 결정의 결과이므로, 어느 축이 본인 프로젝트에 결정적인지를 먼저 짚어 보면 선택이 분명해진다.
+
+=== Execution Model — 그래프 기반 상태 머신 vs 단방향 ReAct 루프
+
+Deep Agents는 LangGraph의 `StateGraph` 위에서 동작한다. 노드·엣지·서브그래프로 조립되며, 분기·반복·인터럽트·재개가 모두 그래프 명세에 들어간다. 결과적으로 _time travel_(과거 시점으로 분기), _interrupt/resume_(HITL 표준 경로), _subgraph 단위 스트리밍_이 자연스럽게 따라온다. OpenCode와 Claude Agent SDK는 ReAct 루프 중심이라 상태 분기·subgraph 격리에서 별도 구현 비용이 든다.
+
+=== Deployment & Multi-Tenancy — LangSmith Deployments 통합
+
+Deep Agents는 _LangSmith Deployments_에 그대로 배포되어, `assistant_id`/`thread_id`/`user_id`로 멀티 테넌시를 제공한다. cron 스케줄(consolidation agent), Store(영속 메모리), Checkpointer가 배포 시점에 자동 프로비저닝된다. OpenCode는 로컬 터미널 도구, Claude Agent SDK는 모델 호출 SDK에 가깝다 — 두 프레임워크 모두 별도 인프라 구축이 필요하다.
+
+=== Per-Model Configuration — `HarnessProfile`/`ProviderProfile`
+
+Deep Agents 0.5+는 provider/model별 기본값을 _profile로 패키징_한다. 같은 코드베이스에서 `openai:gpt-5.4`와 `anthropic:claude-sonnet-4-6`을 호출부 수정 없이 교체할 수 있다. Claude Agent SDK는 Claude 전용으로 모델 추상화 자체가 없고, OpenCode는 75+ 프로바이더를 지원하지만 _provider 차이를 흡수하는 profile_ 개념이 없다.
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 4. 아키텍처 비교

@@ -24,7 +24,7 @@
 from dotenv import load_dotenv
 load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4-mini")
 `````)
 
 == 9.2 서브그래프 개념
@@ -79,6 +79,87 @@ model = ChatOpenAI(model="gpt-4.1")
 서브그래프를 사용할 때 디버깅과 모니터링을 위해 내부 실행 과정을 관찰해야 하는 경우가 있습니다. `stream()` 또는 `astream()`에 `subgraphs=True` 옵션을 전달하면 서브그래프 내부의 각 노드 실행도 스트리밍으로 받을 수 있습니다.
 
 기본적으로 서브그래프 내부의 실행은 부모 그래프에게 "블랙박스"처럼 보입니다. 부모 그래프는 서브그래프가 반환한 최종 결과만 볼 수 있습니다. `subgraphs=True`를 설정하면 이 블랙박스를 열어 내부의 각 단계를 실시간으로 관찰할 수 있습니다.
+
+v2 스트리밍(`version="v2"`)에서 서브그래프 청크는 통일된 `StreamPart` dict로 반환됩니다. 청크의 세 필드만 기억하면 됩니다.
+
+#code-block(`````python
+for chunk in graph.stream(
+    {"foo": "foo"},
+    subgraphs=True,
+    stream_mode="updates",
+    version="v2",
+):
+    print(chunk["type"])  # "updates"
+    print(chunk["ns"])    # () = root, ("node_2:<id>",) = subgraph
+    print(chunk["data"])  # {"node_name": {"key": "value"}}
+`````)
+
+- `chunk["type"]` --- 모드 식별자 (`"updates"`, `"values"`, `"messages"`, ...)
+- `chunk["ns"]` --- 네임스페이스 튜플. root는 `()`, 서브그래프는 `("node_2:<uuid>",)`
+- `chunk["data"]` --- 모드별 payload
+
+#tip-box[v1 API에서는 `subgraphs=True` 옵션에 따라 반환 형태(`tuple` vs `dict`)가 달라져 분기 처리가 번거로웠습니다. v2는 항상 같은 dict 형태이므로 root/서브그래프 코드를 통일할 수 있습니다.]
+
+=== 서브그래프 Checkpointer 3모드
+
+서브그래프 컴파일 시 `checkpointer=` 인자에 따라 메모리/인터럽트 동작이 달라집니다.
+
+#table(
+  columns: 4,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[모드],
+  text(weight: "bold")[`checkpointer=`],
+  text(weight: "bold")[동작],
+  text(weight: "bold")[적합 시나리오],
+  [Per-invocation (기본)],
+  [`None`],
+  [매 호출마다 fresh. 단일 invoke 안에서는 부모 체크포인터 상속(인터럽트 지원)],
+  [툴로 감싼 subagent, 멀티 에이전트 라우팅],
+  [Per-thread (stateful)],
+  [`True`],
+  [동일 thread에서 호출 간 state 누적. 대화 이력 유지],
+  [장기 대화를 가진 전문 subagent],
+  [Stateless],
+  [`False`],
+  [체크포인트 없음 --- 일반 함수 호출. 인터럽트 미지원],
+  [부수효과 없는 순수 변환],
+)
+
+#warning-box[Per-thread 서브그래프는 _병렬 tool 호출_에 취약합니다. LLM이 동일 subagent를 동시에 여러 번 호출하면 같은 namespace에 동시에 쓰기가 발생해 충돌이 납니다. `ToolCallLimitMiddleware(tool_name="...", run_limit=1)`로 동시 호출을 제한하세요.]
+
+=== Namespace Isolation --- 여러 per-thread 서브그래프 분리
+
+서로 다른 per-thread 서브그래프를 같은 부모 그래프에서 사용하려면, 각각을 _고유한 노드 이름_으로 감싸 namespace를 분리해야 합니다. `StateGraph(MessagesState).add_node(name, agent)` 패턴이 표준입니다.
+
+#code-block(`````python
+from langgraph.graph import MessagesState, StateGraph
+from langchain.agents import create_agent
+
+def create_sub_agent(model, *, name, **kwargs):
+    agent = create_agent(model=model, name=name, **kwargs)
+    return (
+        StateGraph(MessagesState)
+        .add_node(name, agent)          # 고유 name → 안정적 namespace
+        .add_edge("__start__", name)
+        .compile()
+    )
+
+fruit_agent = create_sub_agent(
+    "gpt-5.4-mini", name="fruit_agent",
+    tools=[fruit_info], prompt="You are a fruit expert.",
+    checkpointer=True,
+)
+veggie_agent = create_sub_agent(
+    "gpt-5.4-mini", name="veggie_agent",
+    tools=[veggie_info], prompt="You are a veggie expert.",
+    checkpointer=True,
+)
+`````)
+
+각 subagent는 자기 이름과 동일한 namespace에서만 체크포인트를 쓰므로, 서로의 state를 침범하지 않습니다.
 
 #tip-box[서브그래프 스트리밍 시 각 이벤트에는 서브그래프의 _네임스페이스 경로_가 포함됩니다. 예를 들어 `("parent:sub_agent",)`처럼 계층 구조가 표시되어, 어느 레벨의 어느 서브그래프에서 발생한 이벤트인지 정확히 구분할 수 있습니다.]
 

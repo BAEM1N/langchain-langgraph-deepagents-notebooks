@@ -100,14 +100,14 @@ LangChain에서 모델을 초기화하는 방법은 두 가지입니다. 첫 번
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 print("\u2713 모델 설정 완료:", model.model_name)
 `````)
 #output-block(`````
-✓ 모델 설정 완료: gpt-4.1
+✓ 모델 설정 완료: gpt-5.4
 `````)
 
-#tip-box[프로바이더를 동적으로 전환하고 싶다면 `from langchain.chat_models import init_chat_model`을 사용하세요. `init_chat_model("gpt-4.1")`은 모델 이름에서 OpenAI를 자동 감지하고, `init_chat_model("claude-sonnet-4-20250514")`은 Anthropic을 자동 감지합니다.]
+#tip-box[프로바이더를 동적으로 전환하고 싶다면 `from langchain.chat_models import init_chat_model`을 사용하세요. `init_chat_model("gpt-5.4")`은 모델 이름에서 OpenAI를 자동 감지하고, `init_chat_model("claude-sonnet-4-6")`은 Anthropic을 자동 감지합니다.]
 
 모델 객체가 준비되었습니다. 실제로 동작하는지 간단한 호출로 확인해 봅시다.
 
@@ -136,7 +136,7 @@ print("\u2713 모델 응답:", response.content)
   [환경 변수],
   [`load_dotenv()`로 `.env` 파일 로드],
   [모델],
-  [`ChatOpenAI(model="gpt-4.1")`],
+  [`ChatOpenAI(model="gpt-5.4")`],
   [테스트],
   [`model.invoke("...")` → `AIMessage` 객체 반환 확인],
 )

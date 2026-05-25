@@ -8,11 +8,11 @@ This guide details major changes between LangChain v1 and previous versions, foc
 The `langchain` namespace has been significantly reduced in v1 to focus on essential agent-building components:
 
 **Core Modules Available:**
-- `langchain.agents` - Contains `create_agent` and `AgentState`
-- `langchain.messages` - Message types and content blocks
-- `langchain.tools` - Tool decorators and base classes
-- `langchain.chat_models` - Model initialization functions
-- `langchain.embeddings` - Embedding model utilities
+- `langchain.agents` — `create_agent`, `AgentState`
+- `langchain.messages` — Message types and content blocks
+- `langchain.tools` — `@tool` decorator, `BaseTool`
+- `langchain.chat_models` — `init_chat_model`
+- `langchain.embeddings` — `init_embeddings`
 
 ### Legacy Code Migration to `langchain-classic`
 
@@ -63,7 +63,7 @@ def dynamic_prompt(request: ModelRequest) -> str:
     return f"Base prompt. Expert mode: {user_role == 'expert'}"
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=tools,
     middleware=[dynamic_prompt]
 )
@@ -73,7 +73,9 @@ agent = create_agent(
 
 "Pre-model hooks are now implemented as middleware with the `before_model` method" for extensibility. Similarly, post-model hooks use `after_model`.
 
-Built-in middleware options include `SummarizationMiddleware` and `HumanInTheLoopMiddleware`.
+Middleware now exposes six lifecycle hooks: `before_agent`, `before_model`, `wrap_model_call`, `wrap_tool_call`, `after_model`, and `after_agent`. The `before_agent` / `after_agent` hooks (new in v1) run once at agent initialization and completion respectively — useful for memory loading, input validation, result persistence, and cleanup.
+
+Built-in middleware options include `PIIMiddleware` (redaction), `SummarizationMiddleware`, and `HumanInTheLoopMiddleware`.
 
 ## State Management
 
@@ -134,9 +136,25 @@ def handle_tool_errors(request, handler):
 
 ## Structured Output
 
-Two strategies now available:
+Structured output is now integrated into the main agent loop (no separate LLM call required), reducing cost and latency. Two strategies are available via `response_format`:
 - `ToolStrategy` - Uses artificial tool calling
 - `ProviderStrategy` - Uses provider-native generation
+
+```python
+from langchain.agents import create_agent
+from langchain.agents.structured_output import ToolStrategy
+from pydantic import BaseModel
+
+class Weather(BaseModel):
+    temperature: float
+    condition: str
+
+agent = create_agent(
+    "gpt-5.4-mini",
+    tools=[weather_tool],
+    response_format=ToolStrategy(Weather),
+)
+```
 
 "Prompted output is no longer supported via the `response_format` argument."
 
@@ -146,7 +164,7 @@ Two strategies now available:
 
 ## Runtime Context
 
-Static context passes via the `context` parameter:
+Runtime context now passes via the `context` parameter (replacing the older `config["configurable"]` pathway). The schema is declared with `context_schema`:
 
 ```python
 from dataclasses import dataclass
@@ -198,8 +216,8 @@ message = HumanMessage(content_blocks=[
 ### Chat Model Return Types
 "The return type signature for chat model invocation has been fixed from [`BaseMessage`](reference...) to [`AIMessage`](reference...)"
 
-### OpenAI Responses API Default
-Message content now defaults to standard blocks rather than provider-native format. Set `output_version="v0"` to restore previous behavior.
+### Content Block Serialization (`output_version`)
+Messages now expose provider-agnostic blocks via `message.content_blocks`. To serialize standard blocks back into the `content` attribute, opt in with `output_version="v1"` on the model or set the `LC_OUTPUT_VERSION=v1` environment variable. Provider-native format remains the default for `content` to preserve backward compatibility.
 
 ### Anthropic `max_tokens`
 "The `max_tokens` parameter in `langchain-anthropic` now defaults to higher values based on the model chosen, rather than the previous default of `1024`."

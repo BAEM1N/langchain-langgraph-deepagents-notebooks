@@ -39,15 +39,13 @@ print("환경 설정 완료")
 `````)
 
 #code-block(`````python
-# OpenAI gpt-4.1 모델 설정
-from langchain_openai import ChatOpenAI
+# 권장 기본 — Anthropic Claude Sonnet 4.6
+model = "anthropic:claude-sonnet-4-6"
 
-model = ChatOpenAI(model="gpt-4.1")
-
-print(f"모델 설정 완료: {model.model_name}")
+print(f"모델 설정 완료: {model}")
 `````)
 #output-block(`````
-모델 설정 완료: gpt-4.1
+모델 설정 완료: anthropic:claude-sonnet-4-6
 `````)
 
 환경 설정이 완료되었으므로, 서브에이전트의 필요성과 동작 원리를 단계별로 살펴보자. 먼저 서브에이전트가 등장하게 된 근본 원인인 _컨텍스트 블로트_ 문제부터 이해한다.
@@ -71,6 +69,21 @@ LLM 기반 에이전트는 대화 이력과 도구 호출 결과를 _하나의 �
 #align(center)[#image("../../assets/diagrams/png/subagent_context.png", width: 82%, height: 132mm, fit: "contain")]
 
 메인 에이전트는 _500 토큰짜리 요약만_ 받으므로 컨텍스트가 깔끔하게 유지됩니다. 서브에이전트 내부에서 수천 토큰의 검색 결과, 파일 내용, 분석 결과가 오갔더라도, 메인 에이전트의 컨텍스트에는 압축된 최종 결과만 추가됩니다. 이것이 서브에이전트의 핵심 가치인 _컨텍스트 격리_입니다.
+
+=== `SubAgentMiddleware` 자동 부착
+
+서브에이전트 기능은 _`SubAgentMiddleware`_가 담당합니다. `create_deep_agent()`는 사용자가 `subagents`를 지정했는지 여부와 _무관하게_ 이 미들웨어를 항상 미들웨어 스택에 자동 부착하며, `excluded_middleware`로 _제거할 수 없습니다_. 서브에이전트를 명시적으로 정의하지 않더라도 빌트인 `general-purpose` 서브에이전트가 등록되어 `task` 도구가 항상 사용 가능합니다.
+
+=== TodoList + `task` 디스패치 패턴
+
+전형적인 사용 흐름은 다음과 같습니다.
+
++ 메인 에이전트가 `write_todos`로 작업을 _구조화된 리스트_로 분해합니다 — `[조사, 분석, 보고서]`
++ 각 TODO 항목을 메인 에이전트가 _`task` 도구_로 적절한 서브에이전트에게 위임합니다
++ 서브에이전트가 _독립된 컨텍스트_에서 작업을 수행하고 _압축된 결과_만 반환합니다
++ 메인 에이전트가 결과를 받아 다음 TODO로 이동하거나 사용자에게 최종 응답을 작성합니다
+
+이 _`write_todos` → `task` → 압축된 결과_ 패턴이 Deep Agents의 핵심 위임 사이클입니다. 메인 에이전트의 컨텍스트에는 TODO 리스트와 압축 결과만 누적되므로 토큰 효율이 매우 높습니다.
 
 === 서브에이전트 사용 기준
 
@@ -152,6 +165,12 @@ LLM 기반 에이전트는 대화 이력과 도구 호출 결과를 _하나의 �
   [`skills`],
   [`list[str]`],
   [스킬 소스 경로],
+  [`response_format`],
+  [`BaseModel`],
+  [구조화 출력 스키마 (`deepagents>=0.5.3`)],
+  [`permissions`],
+  [`Permissions`],
+  [경로 단위 ACL — 서브에이전트별 파일 접근 제어],
 )
 
 #tip-box[`description`은 메인 에이전트가 서브에이전트를 _선택하는 유일한 기준_입니다. "리서치 에이전트"처럼 모호하게 쓰지 말고, _"인터넷 검색을 통해 최신 정보를 수집하고 핵심을 요약합니다. 사실 확인이나 트렌드 조사가 필요할 때 사용하세요"_처럼 구체적인 역할과 사용 시기를 명시하세요.]
@@ -276,7 +295,7 @@ Deep Agents는 별도로 정의하지 않아도 _빌트인 general-purpose 서�
 === 기본 동작
 - 메인 에이전트와 _같은 시스템 프롬프트_ 사용
 - 메인 에이전트와 _같은 도구_ 접근 가능
-- 메인 에이전트와 _같은 모델_ 사용 (이 노트북에서는 OpenAI `gpt-4.1`)
+- 메인 에이전트와 _같은 모델_ 사용 (권장 기본 `anthropic:claude-sonnet-4-6`)
 - 메인 에이전트의 _스킬_ 상속
 
 === 오버라이드
@@ -332,6 +351,21 @@ config = {
 위 코드에서 `"user_id"`는 콜론(`:`)이 없으므로 _모든_ 에이전트(메인 + 모든 서브에이전트)에 전파된다. 반면 `"researcher:max_depth"`는 `researcher` 서브에이전트에만, `"data-analyst:strict_mode"`는 `data-analyst` 서브에이전트에만 전달된다. 이 네임스페이스 키 규칙을 활용하면, 보안에 민감한 설정(API 키, 접근 권한 등)을 특정 서브에이전트에만 제한적으로 전달할 수 있다.
 
 #tip-box[`context_schema`를 사전에 정의해 두면, 잘못된 키 이름이나 타입의 컨텍스트가 전달될 때 _빌드 타임에 오류_를 잡을 수 있다. 스키마 없이도 동작하지만, 프로덕션 환경에서는 스키마 정의를 강력히 권장한다.]
+
+=== 스트리밍에서 서브에이전트 식별 — `lc_agent_name`
+
+`agent.stream(..., stream_mode="messages")` 또는 `astream_events()`로 토큰을 스트리밍할 때, 각 이벤트의 _메타데이터_에는 `lc_agent_name` 키가 포함됩니다. 이 값으로 _어떤 서브에이전트가 출력 중인지_ 구분할 수 있어 UI에 "리서처가 검색 중...", "분석가가 정리 중..." 같은 라벨을 표시할 때 활용합니다.
+
+#code-block(`````python
+# 스트리밍 중 어느 서브에이전트인지 식별
+async for event in main_agent.astream_events(
+    {"messages": [{"role": "user", "content": "..."}]},
+    version="v2",
+):
+    name = event.get("metadata", {}).get("lc_agent_name")
+    if event["event"] == "on_chat_model_stream" and name:
+        print(f"[{name}] {event['data']['chunk'].content}", end="")
+`````)
 
 지금까지 개별 서브에이전트의 정의와 컨텍스트 전파를 다루었다. 다음은 여러 서브에이전트를 _순차적으로 연결_하여 복잡한 작업 흐름을 구성하는 파이프라인 패턴을 살펴본다.
 
@@ -411,10 +445,9 @@ print("멀티 서브에이전트 파이프라인 에이전트 생성 완료")
 
 === 4. 적절한 모델 선택
 작업 복잡도에 따라 서브에이전트마다 다른 모델을 사용할 수 있습니다.
-이 노트북에서는 OpenAI `gpt-4.1` 모델을 사용합니다.
-다양한 프로바이더의 모델을 유연하게 선택할 수 있습니다:
-- 단순 수집 -\> 가벼운 모델 (예: `gpt-4.1-mini`)
-- 깊은 분석 -\> 강력한 모델 (예: `gpt-4.1`, `anthropic:claude-sonnet-4`)
+권장 기본은 `anthropic:claude-sonnet-4-6`이며, 다양한 프로바이더의 모델을 유연하게 선택할 수 있습니다:
+- 단순 수집 -\> 가벼운 모델 (예: `anthropic:claude-haiku-4-5`, `openai:gpt-5.4-mini`)
+- 깊은 분석 -\> 강력한 모델 (예: `anthropic:claude-sonnet-4-6`, `openai:gpt-5.4`)
 
 === 5. 서브에이전트 간 의존성 최소화
 서브에이전트 A의 결과가 서브에이전트 B에 필요한 경우, 반드시 _메인 에이전트를 경유_하여 전달한다. 서브에이전트끼리 직접 통신하는 구조는 디버깅이 어렵고, 실패 시 복구가 곤란하다.
@@ -431,15 +464,19 @@ print("멀티 서브에이전트 파이프라인 에이전트 생성 완료")
   text(weight: "bold")[항목],
   text(weight: "bold")[내용],
   [SubAgent],
-  [dict 기반 정의: `name`, `description`, `system_prompt`, `tools`],
+  [dict 기반 정의: `name`, `description`, `system_prompt`, `tools` + 선택 필드(`response_format`, `permissions`)],
   [CompiledSubAgent],
   [커스텀 LangGraph 그래프를 `runnable`로 연결],
   [General-Purpose],
-  [빌트인 기본 서브에이전트 (메인과 동일한 설정)],
+  [빌트인 기본 서브에이전트 — `SubAgentMiddleware`가 항상 부착(제거 불가)],
+  [디스패치 패턴],
+  [`write_todos` → `task()` → 압축된 결과 반환],
   [컨텍스트 전파],
   [`context_schema` + `config["context"]`],
   [네임스페이스 키],
   [`"에이전트이름:키"` 형식으로 서브에이전트별 설정],
+  [스트리밍 식별],
+  [이벤트 메타데이터의 `lc_agent_name`],
   [파이프라인 패턴],
   [collector -> analyzer -> writer],
 )

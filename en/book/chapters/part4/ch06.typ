@@ -25,10 +25,10 @@ print("Environment setup complete")
 `````)
 
 #code-block(`````python
-# Configure the OpenAI gpt-4.1 model
+# Configure the OpenAI gpt-5.4 model
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 `````)
 
@@ -54,6 +54,7 @@ Files stored under `/memories/` can be accessed _from any conversation thread_.
 from deepagents import create_deep_agent
 from deepagents.backends import StateBackend, StoreBackend, CompositeBackend, FilesystemBackend
 from langgraph.store.memory import InMemoryStore
+from langgraph.store.postgres import PostgresStore  # Production
 from langgraph.checkpoint.memory import MemorySaver
 
 
@@ -63,11 +64,14 @@ checkpointer = MemorySaver()     # Preserve agent state
 
 
 # 2. Composite backend factory — persist only /memories/, keep the rest ephemeral
+#    StoreBackend uses a namespace lambda to declare the memory scope explicitly.
 def memory_backend_factory(runtime):
     return CompositeBackend(
         default=StateBackend(runtime),
         routes={
-            "/memories/": StoreBackend(runtime),
+            "/memories/": StoreBackend(
+                namespace=lambda rt: (rt.context.user_id,),
+            ),
         },
     )
 
@@ -167,6 +171,8 @@ This approach saves tokens while still giving the agent access to deep task-spec
 
 === `SKILL.md` Structure
 
+The `module` field is only set for interpreter skills (loaded by the QuickJS `CodeInterpreterMiddleware`); plain-text skills omit it.
+
 #code-block(`````yaml
 ---
 name: web-research
@@ -175,6 +181,7 @@ description: >
   Covers information gathering, verification, and summarization.
 license: MIT
 compatibility: Python 3.8+
+module: ./web_research.js    # (optional) interpreter skills only
 metadata:
   category: research
 allowed-tools: ls read_file write_file
@@ -252,6 +259,38 @@ subagent = {
 
 #tip-box[Follow _least privilege_ when assigning skills to subagents. Handing a review-focused subagent unrelated deployment skills wastes tokens and invites confusion. Give each subagent only the skills that match its role.]
 
+=== Skills backend support matrix
+
+Skill source directories can live in any of `StateBackend`, `StoreBackend`, `FilesystemBackend`, or `CompositeBackend`, but each backend has different operational characteristics.
+
+#table(
+  columns: 4,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Backend],
+  text(weight: "bold")[Persistence],
+  text(weight: "bold")[Sharing scope],
+  text(weight: "bold")[Recommended use],
+  [`StateBackend`],
+  [Thread-local (ephemeral)],
+  [Current thread only],
+  [Ad-hoc experiments and tests],
+  [`StoreBackend`],
+  [Persistent (DB-backed)],
+  [Per namespace (user / org / assistant)],
+  [Team- or user-shared skills],
+  [`FilesystemBackend`],
+  [Persistent (disk)],
+  [Host directory],
+  [Standard skills committed to Git],
+  [`CompositeBackend`],
+  [Routed per path],
+  [Separated per path],
+  [Layered: `/skills/base/` + `/skills/user/`],
+)
+
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 6.10 Long-term Memory Types (in 0.5)
 
@@ -283,9 +322,29 @@ Deep Agents 0.5 classifies stored information into three categories. Each type u
 
 Example: long-running preferences in `/memories/` (semantic) + episodic case retrieval via checkpointer (episodic) + repeated procedures as skills (procedural).
 
-=== Scope patterns: agent-scoped vs user-scoped
+=== Scope patterns: agent-scoped / user-scoped / context-driven
 
-The tuple returned by `StoreBackend`'s `namespace` function _is_ the scope of the memory. The two most common patterns are:
+The tuple returned by `StoreBackend`'s `namespace` function _is_ the scope of the memory. The three most common patterns are:
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Pattern],
+  text(weight: "bold")[namespace example],
+  text(weight: "bold")[Best fit],
+  [Agent-scoped],
+  [`(rt.server_info.assistant_id,)`],
+  [Organization-wide conventions and domain knowledge (shared across users)],
+  [User-scoped],
+  [`(rt.server_info.user.identity,)`],
+  [Default for personalization assistants — fully isolated per user],
+  [Context-driven],
+  [`(rt.context.user_id, rt.context.project_id)`],
+  [Multi-dimensional isolation using keys declared in `context_schema`],
+)
 
 *Agent-scoped — shared identity accumulation.* Namespace is `(assistant_id,)`. _All user conversations_ that use the same assistant share the same memory. Suitable for organization-wide conventions and domain knowledge, but _do not store sensitive information here_ because information flows between users.
 

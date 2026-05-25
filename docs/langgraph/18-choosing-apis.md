@@ -46,4 +46,8 @@ Applications can use both APIs simultaneously. The Graph API handles complex mul
 
 ## Migration Paths
 
-Workflows can migrate from Functional to Graph API as complexity increases, or from Graph to Functional API when over-engineering becomes apparent.
+Workflows can migrate from Functional to Graph API as complexity increases (nested conditionals, parallel paths, multi-team ownership), or from Graph to Functional API when over-engineering becomes apparent on simple linear processes.
+
+## Shared Capabilities
+
+Both APIs share the same runtime and expose identical foundational features: persistence (checkpointers), streaming, human-in-the-loop interrupts, and memory management. They differ only in implementation paradigm and developer experience -- not in capability.

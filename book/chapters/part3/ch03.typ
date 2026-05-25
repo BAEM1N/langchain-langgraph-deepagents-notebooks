@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == 3.2 \@task --- 체크포인팅 가능한 작업 단위
@@ -206,7 +206,115 @@ def agent(inputs: dict) -> list:
   [빠른 프로토타이핑, 동적 로직],
 )
 
-이 장에서 Functional API의 핵심 구성 요소를 모두 다루었습니다. `@task`로 체크포인팅 단위를 정의하고, `@entrypoint`로 워크플로의 진입점을 만들며, `previous`와 `entrypoint.final`로 메모리를 관리하는 패턴은 Functional API의 전체 도구 상자입니다. 무엇보다 중요한 것은 결정론성 요구사항으로, 비결정적 작업을 `@task`로 감싸는 규칙을 항상 준수해야 합니다.
+== 3.8 \@task 재시도와 캐싱
+
+ReAct 루프까지 구현했다면, 이제 프로덕션 환경에서 신뢰성을 끌어올리는 두 가지 옵션을 살펴봅시다. `@task`는 Graph API의 `add_node()`와 동일한 정책 객체를 받아 _재시도_와 _캐싱_을 데코레이터 한 줄로 지정할 수 있습니다.
+
+`RetryPolicy`는 실패 시 자동 재시도 정책입니다. 기본 정책은 일반적인 네트워크 에러를 대상으로 하며, `retry_on`으로 특정 예외만 좁힐 수 있습니다. `max_attempts`는 최대 시도 횟수입니다.
+
+#code-block(`````python
+from langgraph.types import RetryPolicy
+
+@task(retry_policy=RetryPolicy(max_attempts=3, retry_on=ValueError))
+def fetch_data(url: str) -> dict:
+    response = httpx.get(url)
+    response.raise_for_status()
+    return response.json()
+`````)
+
+`CachePolicy`는 태스크 입력 해시를 기반으로 결과를 캐싱합니다. `ttl`은 캐시 유효 시간(초)입니다. 캐싱을 활성화하려면 `@entrypoint(cache=InMemoryCache())`로 엔트리포인트에 캐시 백엔드를 연결하고, 캐시하려는 각 `@task`에 `cache_policy`를 지정합니다 --- 두 곳에 _분리_해서 지정하는 패턴이 핵심입니다.
+
+#code-block(`````python
+from langgraph.cache.memory import InMemoryCache
+from langgraph.types import CachePolicy
+
+@task(cache_policy=CachePolicy(ttl=120))
+def slow_compute(x: int) -> int:
+    time.sleep(1)
+    return x * 2
+
+@entrypoint(cache=InMemoryCache())
+def main(inputs: dict) -> dict[str, int]:
+    a = slow_compute(inputs["a"]).result()
+    b = slow_compute(inputs["b"]).result()
+    return {"a": a, "b": b}
+`````)
+
+#tip-box[`@task(timeout=1.0, retry_policy=RetryPolicy(retry_on=NodeTimeoutError))` 패턴으로 타임아웃과 재시도를 결합할 수도 있습니다. 같은 `thread_id`로 입력에 `None`을 전달하면 직전 실패 지점부터 재시도되며, 이미 성공한 태스크의 결과는 체크포인트에서 재사용됩니다.]
+
+== 3.9 구조화된 interrupt와 Command(resume=)
+
+장애 복구뿐 아니라 _사람의 검토_가 필요한 경우에도 Functional API는 자연스러운 인터페이스를 제공합니다. `interrupt()` 함수는 워크플로 실행을 일시 중단하고 사람의 입력을 기다립니다. 단순 문자열뿐 아니라 딕셔너리 형태의 _구조화된 페이로드_를 전달할 수 있어, 호출자에게 검토에 필요한 컨텍스트를 풍부하게 제공할 수 있습니다.
+
+#code-block(`````python
+from langgraph.types import Command, interrupt
+
+@task
+def review(input_query: str):
+    # 구조화된 인터럽트 — 호출자가 풍부한 컨텍스트로 검토
+    human_review = interrupt({
+        "question": "이 결과를 승인하시겠습니까?",
+        "tool_call": {"name": "send_email", "args": {...}},
+    })
+    return human_review
+
+@entrypoint(checkpointer=checkpointer)
+def workflow(input_query: str):
+    return review(input_query).result()
+`````)
+
+재개할 때는 `Command(resume=...)`로 사람의 응답을 전달합니다. `interrupt()` 호출이 마치 _정상적으로 그 값을 반환한 것처럼_ 워크플로가 재개되므로, 호출 측 코드 흐름은 변하지 않습니다.
+
+#code-block(`````python
+config = {"configurable": {"thread_id": "review-1"}}
+workflow.invoke("초안 검토 요청", config=config)
+# 사람이 검토 후 재개
+workflow.invoke(Command(resume={"approved": True, "comment": "OK"}), config=config)
+`````)
+
+== 3.10 \@entrypoint 주입 파라미터
+
+`previous` 외에도 `@entrypoint`는 함수 시그니처의 키워드 인자 이름으로 _런타임 의존성을 자동 주입_합니다. 함수 시그니처에 해당 이름의 파라미터를 추가하기만 하면 LangGraph가 자동으로 감지합니다.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[파라미터],
+  text(weight: "bold")[역할],
+  [`previous`],
+  [직전 체크포인트의 저장값 (단기 메모리)],
+  [`store`],
+  [`BaseStore` 인스턴스로 장기 메모리 접근],
+  [`writer`],
+  [`StreamWriter` 객체로 커스텀 스트리밍 emit (async + Python < 3.11 호환용)],
+  [`config`],
+  [`RunnableConfig` — `thread_id`, metadata, configurable 값 접근],
+)
+
+#code-block(`````python
+from langgraph.types import StreamWriter
+
+@entrypoint(checkpointer=checkpointer, store=store)
+def workflow(
+    inputs: dict,
+    *,
+    previous=None,
+    store=None,
+    writer: StreamWriter = None,
+    config=None,
+):
+    writer({"phase": "start"})
+    user_id = config["configurable"]["user_id"]
+    memory = store.get(("users", user_id), "profile")
+    ...
+`````)
+
+#tip-box[Python 3.11 이상에서는 `langgraph.config.get_stream_writer()`를 사용해 함수 내 어디서든 stream writer를 가져올 수도 있어, 파라미터 주입 대신 더 간결한 호출이 가능합니다.]
+
+이 장에서 Functional API의 핵심 구성 요소를 모두 다루었습니다. `@task`로 체크포인팅 단위를 정의하고, `@entrypoint`로 워크플로의 진입점을 만들며, `previous`와 `entrypoint.final`로 메모리를 관리하고, `retry_policy`/`cache_policy`로 신뢰성을 강화하며, 구조화된 `interrupt()`로 HITL을 구성하는 패턴이 Functional API의 전체 도구 상자입니다. 무엇보다 중요한 것은 결정론성 요구사항으로, 비결정적 작업을 `@task`로 감싸는 규칙을 항상 준수해야 합니다.
 
 #chapter-summary-header()
 

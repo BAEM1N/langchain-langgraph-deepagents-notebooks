@@ -75,6 +75,15 @@ graph.update_state(config, {"foo": 2, "bar": ["b"]})
 
 The `Store` interface enables information sharing **across threads**, complementing checkpointers which are thread-specific.
 
+### Store Implementations
+
+All implementations extend `BaseStore`:
+
+- **`InMemoryStore`** — development/testing
+- **`PostgresStore`** — production
+- **`MongoDBStore`** — production
+- **`RedisStore`** — production
+
 ### Basic Usage
 
 ```python
@@ -88,11 +97,21 @@ namespace = (user_id, "memories")
 memory_id = str(uuid.uuid4())
 store.put(namespace, memory_id, {"food_preference": "I like pizza"})
 
-# Retrieve memories
+# Retrieve memories (insertion order for InMemoryStore)
 memories = store.search(namespace)
 ```
 
 Each stored item has `value`, `key`, `namespace`, `created_at`, and `updated_at` attributes.
+
+### Listing and Pagination
+
+```python
+# Prefix matching with limit/offset
+page = store.search(("alice", "memories"), limit=50, offset=0)
+
+# Discover existing namespaces
+namespaces = store.list_namespaces(prefix=("alice",), max_depth=2)
+```
 
 ### Semantic Search
 
@@ -110,6 +129,16 @@ store = InMemoryStore(
 )
 
 memories = store.search(namespace, query="What does the user like to eat?", limit=3)
+```
+
+Per-item embedding control:
+
+```python
+# Embed only selected fields
+store.put(namespace, memory_id, {"food_preference": "Italian", "context": "Dinner"}, index=["food_preference"])
+
+# Skip embedding entirely
+store.put(namespace, memory_id, {"system_info": "..."}, index=False)
 ```
 
 ### Using Store in LangGraph
@@ -138,8 +167,25 @@ LangGraph provides multiple checkpointer implementations:
 
 - **langgraph-checkpoint**: Base interface and `InMemorySaver` (included by default)
 - **langgraph-checkpoint-sqlite**: `SqliteSaver` and `AsyncSqliteSaver` for local development
-- **langgraph-checkpoint-postgres**: Production-grade `PostgresSaver` implementations
-- **langgraph-checkpoint-cosmosdb**: Azure Cosmos DB support with sync/async variants
+- **langgraph-checkpoint-postgres**: Production-grade `PostgresSaver` / `AsyncPostgresSaver` (used by LangSmith)
+- **langchain-azure-cosmosdb**: `CosmosDBSaverSync` / `CosmosDBSaver` with Microsoft Entra ID support
+
+### PostgreSQL for Production
+
+`AsyncPostgresSaver`는 비동기 그래프 실행에 사용한다. `from_conn_string`으로 connection string에서 인스턴스를 만들고 최초 1회 `setup()`을 호출해 스키마를 생성한다.
+
+```python
+from langgraph.checkpoint.postgres import AsyncPostgresSaver
+
+checkpointer = AsyncPostgresSaver.from_conn_string(
+    "postgresql://user:password@localhost/dbname"
+)
+checkpointer.setup()
+
+graph = builder.compile(checkpointer=checkpointer)
+```
+
+동기 환경에서는 `PostgresSaver`를 같은 패턴으로 사용한다. 패키지는 `langgraph-checkpoint-postgres`를 별도로 설치한다.
 
 ### Interface Methods
 
@@ -167,10 +213,35 @@ Enable state encryption using `EncryptedSerializer`:
 
 ```python
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
+from langgraph.checkpoint.sqlite import SqliteSaver
 
 serde = EncryptedSerializer.from_pycryptodome_aes()  # reads LANGGRAPH_AES_KEY
 checkpointer = SqliteSaver(connection, serde=serde)
 ```
+
+For PostgreSQL:
+
+```python
+serde = EncryptedSerializer.from_pycryptodome_aes()
+checkpointer = PostgresSaver.from_conn_string("postgresql://...", serde=serde)
+checkpointer.setup()
+```
+
+On LangSmith, encryption activates automatically when `LANGGRAPH_AES_KEY` is set.
+
+## Checkpoint Namespace
+
+Each checkpoint includes `checkpoint_ns` identifying its scope:
+
+- `""` (empty string): parent/root graph
+- `"node_name:uuid"`: subgraph invocation
+- Nested: `"outer_node:uuid|inner_node:uuid"` (joined with `|`)
+
+Access within a node via `config["configurable"]["checkpoint_ns"]`.
+
+## Pending Writes and Fault Tolerance
+
+When a node fails mid-super-step, LangGraph stores successful node writes (task-level checkpoints via `.put_writes()`) separately from the full state snapshot. On resume, successful nodes don't re-execute; only failed nodes retry.
 
 ## Capabilities Enabled by Persistence
 

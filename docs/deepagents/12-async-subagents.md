@@ -27,7 +27,7 @@
 
 ## 기본 사용
 
-`AsyncSubAgent` 스펙 리스트를 `subagents`에 전달하면 `create_deep_agent`가 `AsyncSubAgentMiddleware`를 자동 부착한다.
+`AsyncSubAgent` 스펙 리스트를 `subagents`에 전달하면 `create_deep_agent`가 `AsyncSubAgentMiddleware`를 자동 부착한다. `AsyncSubAgent(...)`는 런타임이 읽는 dict 형태의 스펙을 반환하므로, 디버깅 출력에서는 `subagent["graph_id"]`처럼 key로 접근한다.
 
 ```python
 from deepagents import AsyncSubAgent, create_deep_agent
@@ -180,7 +180,8 @@ langgraph dev --n-jobs-per-worker 10
 
 - **Agent Protocol 의존성**: `AsyncSubAgent`를 선언했는데 실행 환경이 Agent Protocol을 지원하지 않으면 초기화 단계에서 실패한다.
 - **`async_tasks` 채널은 보존하라**: 커스텀 state reducer나 middleware로 state를 재구성할 때 이 채널을 덮어쓰면 실행 중인 태스크 추적을 잃는다.
-- **폴링 비용**: `check_async_task`를 너무 자주 호출하지 않도록 시스템 프롬프트에 가이드를 넣는다(예: "한 번에 2~3개 태스크를 기동한 뒤 사용자 반응을 기다려라").
+- **폴링 비용**: `check_async_task`를 너무 자주 호출하지 않도록 시스템 프롬프트에 가이드를 넣는다(예: "한 번에 2~3개 태스크를 기동한 뒤 사용자 반응을 기다려라"). 기동 직후 곧바로 check를 도는 슈퍼바이저는 async 를 사실상 sync 로 만든다.
+- **Task ID 절단**: 모델이 LLM 응답을 재요약하는 과정에서 task id 가 잘려 나갈 수 있다. 시스템 프롬프트에 "task id 는 한 글자도 빠뜨리지 말고 원본 그대로 사용한다"를 명시한다.
 - **장시간 태스크 정리**: 장기 미종결 태스크는 `list_async_tasks` + `cancel_async_task`로 정기적으로 정리한다. LangSmith Deployments는 checkpoint 기반이라 비용이 남아 있다.
 - **HTTP 모드 타임아웃**: 원격 URL은 헤더·네트워크 타임아웃·재시도 정책을 별도로 확인한다.
 

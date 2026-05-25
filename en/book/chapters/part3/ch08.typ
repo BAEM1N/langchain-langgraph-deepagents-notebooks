@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4-mini")
 print("Model is ready")
 `````)
 
@@ -36,6 +36,106 @@ This pattern is used to obtain human approval or input additional information be
 
 Using `Command(resume=value)` causes execution to resume at the point where `interrupt()` is called. The value passed to `resume` becomes the return value of `interrupt()`.
 
+`Command(resume=...)` accepts boolean, text, or dict payloads. The pattern depends on the response shape:
+
+#code-block(`````python
+from langgraph.types import Command
+
+# 1) Simple boolean — Approval
+graph.invoke(Command(resume=True), config=config, version="v2")
+
+# 2) Text — Review & Edit
+graph.invoke(Command(resume="The edited text"), config=config, version="v2")
+
+# 3) Structured dict — Tool interrupt / multi-field response
+graph.invoke(
+    Command(resume={"action": "approve", "subject": "Updated subject"}),
+    config=config,
+    version="v2",
+)
+`````)
+
+=== Common Patterns — five HITL scenarios
+
+The five interrupt patterns you'll see in production:
+
+==== 1) Approval — sensitive action gate
+
+Pause right before a critical action (API call / DB mutation) and route based on the decision.
+
+#code-block(`````python
+from typing import Literal
+from langgraph.types import Command, interrupt
+
+def approval_node(state) -> Command[Literal["proceed", "cancel"]]:
+    decision = interrupt({
+        "question": "Approve this action?",
+        "details": state["action_details"],
+    })
+    return Command(goto="proceed" if decision else "cancel")
+
+graph.invoke(Command(resume=True), config=config, version="v2")   # approve
+graph.invoke(Command(resume=False), config=config, version="v2")  # reject
+`````)
+
+==== 2) Review & Edit — human revises LLM output
+
+#code-block(`````python
+def review_node(state):
+    edited = interrupt({
+        "instruction": "Review and edit this content",
+        "content": state["generated_text"],
+    })
+    return {"generated_text": edited}
+
+graph.invoke(Command(resume="edited body ..."), config=config, version="v2")
+`````)
+
+==== 3) Tool Interrupt — approve before the tool runs
+
+Put `interrupt()` inside a `@tool` to require human approval/edits. The resume payload is typically `{"action": "approve", ...}`.
+
+#code-block(`````python
+from langchain.tools import tool
+
+@tool
+def send_email(to: str, subject: str, body: str):
+    response = interrupt({
+        "action": "send_email",
+        "to": to, "subject": subject, "body": body,
+        "message": "Approve sending this email?",
+    })
+    if response.get("action") == "approve":
+        return f"Email sent to {response.get('to', to)}"
+    return "Email cancelled by user"
+`````)
+
+==== 4) Input Validation — loop until valid
+
+#code-block(`````python
+def get_age_node(state):
+    prompt = "What is your age?"
+    while True:
+        answer = interrupt(prompt)
+        if isinstance(answer, int) and answer > 0:
+            break
+        prompt = f"'{answer}' is not valid. Please enter a positive number."
+    return {"age": answer}
+`````)
+
+==== 5) Multiple Interrupts — match parallel responses
+
+When parallel nodes raise interrupts simultaneously, use a resume map keyed by interrupt id:
+
+#code-block(`````python
+result = graph.invoke({"vals": []}, config, version="v2")
+
+resume_map = {
+    i.id: f"answer for {i.value}" for i in result.interrupts
+}
+graph.invoke(Command(resume=resume_map), config, version="v2")
+`````)
+
 == 8.4 Interrupt in Functional API
 
 You can also use `interrupt()` in the Functional API (`@entrypoint`, `@task`).
@@ -47,6 +147,53 @@ The checkpoint system in LangGraph stores all executions of state. You can view 
 == 8.6 update_state() — Time travel + state fix
 
 `update_state()` allows you to directly modify the state of a graph from the outside. This is useful for debugging, testing, or when manual intervention is required.
+
+=== Replay vs Fork — two time-travel modes
+
+- *Replay* — re-run from a previous checkpoint as-is. Nodes after `next` are re-executed (LLM/API calls happen again — results may differ).
+- *Fork* — modify state at a previous checkpoint and create a new branch. The original thread is preserved.
+
+#code-block(`````python
+# Replay — invoke with the checkpoint config
+history = list(graph.get_state_history(config))
+before_joke = next(s for s in history if s.next == ("write_joke",))
+replay_result = graph.invoke(None, before_joke.config)
+
+# Fork — create a new branch with update_state
+fork_config = graph.update_state(
+    before_joke.config,
+    values={"topic": "chickens"},
+)
+fork_result = graph.invoke(None, fork_config)
+`````)
+
+#tip-box[Pass the _return value_ of `update_state()` (`fork_config`) to `invoke()`, not the original `before.config`. The new checkpoint id lives inside `fork_config`.]
+
+=== `as_node` — declare which node owns the update
+
+`update_state(config, values, as_node="...")` lets you declare which node should be treated as the source of the update. Useful when:
+
+- parallel branches make ownership ambiguous,
+- seeding initial state into a fresh thread for a test, or
+- skipping a node and resuming from its successor.
+
+#code-block(`````python
+fork_config = graph.update_state(
+    before_joke.config,
+    values={"topic": "chickens"},
+    as_node="generate_topic",  # resume from this node's successor
+)
+graph.invoke(None, fork_config)
+`````)
+
+=== Reducer behavior — merge vs overwrite
+
+How `values` is applied depends on whether the channel has a reducer.
+
+- _Channel with reducer_ (e.g. `MessagesState.messages` uses `add_messages`) → values are _merged_; appending messages accumulates.
+- _Channel without reducer_ (plain `TypedDict` fields) → values are _overwritten_.
+
+To _replace_ a single message, send `RemoveMessage(id=...)` plus the new one. Plain dict fields can be replaced directly with `values={"field": new_value}`.
 
 == 8.7 Summary
 

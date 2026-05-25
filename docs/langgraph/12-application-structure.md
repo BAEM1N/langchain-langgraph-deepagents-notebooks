@@ -30,7 +30,20 @@ my-app/
 ```
 
 **Python with pyproject.toml:**
-Same structure but substitutes `pyproject.toml` for `requirements.txt`.
+```
+my-app/
+├── my_agent/
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   ├── tools.py
+│   │   ├── nodes.py
+│   │   └── state.py
+│   ├── __init__.py
+│   └── agent.py
+├── .env
+├── langgraph.json
+└── pyproject.toml
+```
 
 ## Configuration File Details
 

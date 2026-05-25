@@ -31,7 +31,7 @@ assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY is required!"
 assert os.environ.get("TAVILY_API_KEY"), "TAVILY_API_KEY is required!"
 
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 print("✓ Environment ready")
 
 `````)

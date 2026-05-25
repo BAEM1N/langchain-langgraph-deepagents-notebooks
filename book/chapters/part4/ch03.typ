@@ -18,21 +18,65 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
-assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY가 설정되지 않았습니다!"
+assert os.environ.get("ANTHROPIC_API_KEY"), "ANTHROPIC_API_KEY가 설정되지 않았습니다!"
 print("환경 설정 완료")
 
-# OpenAI gpt-4.1 모델 초기화
+# 권장 기본 — Anthropic Claude Sonnet 4.6 (provider:model 포맷)
 from deepagents import create_deep_agent
-from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
-print(f"기본 모델: {model.model_name}")
+model = "anthropic:claude-sonnet-4-6"
+print(f"기본 모델: {model}")
 `````)
 #output-block(`````
 환경 설정 완료
 
-기본 모델: gpt-4.1
+기본 모델: anthropic:claude-sonnet-4-6
 `````)
+
+#line(length: 100%, stroke: 0.5pt + luma(200))
+== 0. `create_deep_agent()` 전체 시그니처 (17 파라미터)
+
+세부 커스터마이징에 들어가기 전, `create_deep_agent()`가 받는 _17개 파라미터_의 전체 시그니처를 한 번에 조감합니다. 이 모든 항목은 _선택적_이며, `model` 하나만으로도 에이전트가 작동합니다.
+
+#code-block(`````python
+def create_deep_agent(
+    model=None,             # 1. LLM (ChatModel 객체 또는 "provider:model")
+    tools=None,             # 2. 커스텀 도구 리스트
+    system_prompt=None,     # 3. 사용자 시스템 프롬프트 (USER)
+    middleware=(),          # 4. 추가 미들웨어 (사용자 정의)
+    subagents=None,         # 5. SubAgent dict 리스트 / CompiledSubAgent
+    skills=None,            # 6. SKILL.md 디렉터리 (progressive disclosure)
+    memory=None,            # 7. AGENTS.md 경로 (항상 주입)
+    response_format=None,   # 8. Pydantic 구조화 출력 스키마
+    context_schema=None,    # 9. 런타임 컨텍스트 TypedDict (서브에이전트 전파)
+    checkpointer=None,      # 10. LangGraph Checkpointer (지속성)
+    store=None,             # 11. LangGraph BaseStore (StoreBackend용)
+    cache=None,             # 12. 프롬프트 캐시 설정 (Anthropic 등)
+    backend=None,           # 13. BackendProtocol 또는 lambda runtime: ...
+    permissions=None,       # 14. allow_read/allow_write/deny_* ACL
+    interrupt_on=None,      # 15. {"tool_name": True} HITL 게이트
+    debug=False,            # 16. 디버그 로깅
+    name=None,              # 17. 그래프 이름
+):
+    ...
+`````)
+
+#tip-box[`permissions`, `context_schema`, `cache`는 deepagents 최신 버전(`>=0.5.0`)에서 추가된 파라미터입니다. 구버전에서는 미들웨어로 직접 추가해야 합니다.]
+
+=== 시스템 프롬프트 조립 순서
+
+`system_prompt`에 전달한 텍스트는 _그대로_ 사용되지 않고, Deep Agents의 내부 프롬프트 빌더가 _세 부분_을 정해진 순서로 조립합니다.
+
+#code-block(`````
+[USER]    system_prompt (사용자가 전달한 문자열)
+   ↓
+[BASE]    하네스 BASE 프롬프트 (TodoList/Filesystem/SubAgent 사용법)
+   + CUSTOM  미들웨어가 주입하는 도구 설명 (Memory · Skills · Permissions 등)
+   ↓
+[SUFFIX]  하네스 SUFFIX (안전 가이드, 출력 규약)
+`````)
+
+즉, _USER → BASE/CUSTOM → SUFFIX_ 순으로 결합됩니다. 사용자는 USER 부분만 채우면 되고, BASE/SUFFIX는 미들웨어가 자동으로 관리합니다. _덮어쓰지 않고 추가하는_ 구조이므로 빌트인 도구 사용법을 반복할 필요가 없습니다.
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 1. 모델 선택
@@ -41,7 +85,7 @@ print(f"기본 모델: {model.model_name}")
 
 Deep Agents는 _LangChain ChatModel 객체_ 또는 *`provider:model`* 포맷으로 다양한 LLM을 지원합니다. 이 유연성 덕분에 프로바이더 잠금(lock-in) 없이 프로젝트 요구사항에 가장 적합한 모델을 선택할 수 있습니다. 동일한 에이전트 코드를 유지하면서 모델만 교체하여 성능과 비용을 최적화하는 것도 가능합니다.
 
-본 노트북에서는 _OpenAI gpt-4.1_을 기본 모델로 사용합니다.
+본 노트북에서는 _Anthropic Claude Sonnet 4.6_(`anthropic:claude-sonnet-4-6`)을 권장 기본 모델로 사용합니다. OpenAI 예제는 `gpt-5.4`를 사용합니다.
 
 #table(
   columns: 4,
@@ -50,49 +94,49 @@ Deep Agents는 _LangChain ChatModel 객체_ 또는 *`provider:model`* 포맷으�
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[프로바이더],
-  text(weight: "bold")[모델 예시],
+  text(weight: "bold")[모델 예시 (provider:model)],
   text(weight: "bold")[환경 변수],
   text(weight: "bold")[비고],
-  [_OpenAI_],
-  [`gpt-4.1`],
-  [`OPENAI_API_KEY`],
-  [_본 노트북 기본_],
-  [Anthropic],
+  [_Anthropic_],
   [`anthropic:claude-sonnet-4-6`],
   [`ANTHROPIC_API_KEY`],
-  [직접 연결],
+  [_권장 기본_ — 프롬프트 캐싱·HITL 최적],
+  [OpenAI],
+  [`openai:gpt-5.4`],
+  [`OPENAI_API_KEY`],
+  [도구 호출 정확도 ↑],
   [Google],
-  [`google_genai:gemini-2.5-flash`],
+  [`google_genai:gemini-3.5-flash`],
   [`GOOGLE_API_KEY`],
-  [],
+  [비용 효율],
   [Azure],
-  [`azure_openai:gpt-4o`],
+  [`azure_openai:gpt-5.4`],
   [`AZURE_OPENAI_*`],
-  [],
+  [기업용 배포],
   [AWS Bedrock],
   [`bedrock:anthropic.claude-sonnet-4-6`],
   [AWS 자격 증명],
-  [],
+  [VPC 격리],
 )
 
-기본 모델은 `gpt-4.1`이며, 자동 재시도(기본 6회)와 타임아웃 처리가 내장되어 있습니다. `model` 파라미터는 LangChain `BaseChatModel` 객체 또는 `"provider:model-name"` 형태의 문자열을 모두 받습니다. 문자열로 전달하면 Deep Agents가 내부적으로 적절한 ChatModel 인스턴스를 생성합니다. ChatModel 객체를 직접 전달하면 `temperature`, `max_tokens` 등 세밀한 파라미터를 제어할 수 있으므로, 프로덕션 환경에서는 이 방식을 권장합니다.
+권장 기본 모델은 `anthropic:claude-sonnet-4-6`이며, 자동 재시도(기본 6회)와 타임아웃 처리가 내장되어 있습니다. `model` 파라미터는 LangChain `BaseChatModel` 객체 또는 `"provider:model-name"` 형태의 문자열을 모두 받습니다. 문자열로 전달하면 Deep Agents가 내부적으로 적절한 ChatModel 인스턴스를 생성합니다. ChatModel 객체를 직접 전달하면 `temperature`, `max_tokens` 등 세밀한 파라미터를 제어할 수 있으므로, 프로덕션 환경에서는 이 방식을 권장합니다.
 
-#warning-box[모든 LLM이 도구 호출(function calling)을 동일한 수준으로 지원하는 것은 아닙니다. Deep Agents는 도구 호출에 크게 의존하므로, 도구 호출 성능이 검증된 모델(GPT-4.1, Claude Sonnet 4 이상, Gemini 2.5 등)을 사용하는 것이 좋습니다. 도구 호출을 지원하지 않는 모델을 사용하면 빌트인 도구가 제대로 동작하지 않을 수 있습니다.]
+#warning-box[모든 LLM이 도구 호출(function calling)을 동일한 수준으로 지원하는 것은 아닙니다. Deep Agents는 도구 호출에 크게 의존하므로, 도구 호출 성능이 검증된 모델(Claude Sonnet 4.5 이상, GPT-5 계열, Gemini 3.x 등)을 사용하는 것이 좋습니다. 도구 호출을 지원하지 않는 모델을 사용하면 빌트인 도구가 제대로 동작하지 않을 수 있습니다.]
 
-아래 코드에서 `create_deep_agent()`에 `model` 객체를 전달하는 패턴을 확인하세요. 주석 처리된 부분은 다른 프로바이더를 사용하는 방법을 보여줍니다.
+아래 코드에서 `create_deep_agent()`에 `provider:model` 문자열을 전달하는 패턴을 확인하세요. 주석 처리된 부분은 다른 프로바이더를 사용하는 방법을 보여줍니다.
 
 #code-block(`````python
-# OpenAI gpt-4.1 모델 사용 (위에서 초기화한 model 객체)
-agent_claude = create_deep_agent(
-    model=model,
+# 권장 기본 — Anthropic Claude Sonnet 4.6 (provider:model 포맷)
+agent_default = create_deep_agent(
+    model="anthropic:claude-sonnet-4-6",
 )
 
-print(f"에이전트 생성 완료: {type(agent_claude).__name__}")
+print(f"에이전트 생성 완료: {type(agent_default).__name__}")
 
 # 참고: 다른 프로바이더를 사용하려면 해당 API 키를 설정하고 아래처럼 호출
-# agent_openai = create_deep_agent(model="openai:gpt-4o")
-# agent_gemini = create_deep_agent(model="google_genai:gemini-2.5-flash")
-# agent_anthropic = create_deep_agent(model="anthropic:claude-sonnet-4-6")
+# agent_openai = create_deep_agent(model="openai:gpt-5.4")
+# agent_gemini = create_deep_agent(model="google_genai:gemini-3.5-flash")
+# agent_bedrock = create_deep_agent(model="bedrock:anthropic.claude-sonnet-4-6")
 `````)
 #output-block(`````
 에이전트 생성 완료: CompiledStateGraph
@@ -247,17 +291,19 @@ print("도서 추천 에이전트 생성 완료")
 아래는 `create_deep_agent()`가 자동으로 조립하는 미들웨어 스택의 실행 순서입니다. 순서가 중요합니다. 예를 들어, `FilesystemMiddleware`가 파일 도구를 주입한 뒤에 `SubAgentMiddleware`가 서브에이전트 도구를 추가하므로, 서브에이전트는 파일 도구에 접근할 수 있습니다.
 
 #code-block(`````python
-1. TodoListMiddleware        — 태스크 관리 (write_todos 도구)
-2. MemoryMiddleware          — AGENTS.md 로딩 (memory 파라미터 사용 시)
-3. SkillsMiddleware          — SKILL.md 로딩 (skills 파라미터 사용 시)
-4. FilesystemMiddleware      — 파일 도구 (ls, read, write, edit, glob, grep)
-5. SubAgentMiddleware        — 서브에이전트 (task 도구)
-6. SummarizationMiddleware   — 컨텍스트 압축
-7. AnthropicCachingMiddleware — 프롬프트 캐싱 (Anthropic 모델용)
-8. PatchToolCallsMiddleware  — 잘못된 도구 호출 보정
-9. [사용자 커스텀 미들웨어]     — middleware 파라미터
-10. HumanInTheLoopMiddleware  — 승인 워크플로 (interrupt_on 사용 시)
+1.  TodoListMiddleware                  — 태스크 관리 (write_todos 도구)
+2.  MemoryMiddleware                    — AGENTS.md 로딩 (memory 파라미터 사용 시)
+3.  SkillsMiddleware                    — SKILL.md 로딩 (skills 파라미터 사용 시)
+4.  FilesystemMiddleware                — 파일 도구 (ls, read, write, edit, glob, grep)
+5.  SubAgentMiddleware  [필수, 제거 불가]  — 서브에이전트 (task 도구)
+6.  SummarizationMiddleware             — 컨텍스트 압축 (~85% 자동 요약)
+7.  AnthropicPromptCachingMiddleware    — 프롬프트 캐싱 (Anthropic 모델 자동 적용)
+8.  PatchToolCallsMiddleware            — 잘못된/누락된 도구 호출 보정
+9.  [사용자 커스텀 미들웨어]                — middleware 파라미터
+10. HumanInTheLoopMiddleware            — 승인 워크플로 (interrupt_on 사용 시)
 `````)
+
+#warning-box[`SubAgentMiddleware`는 `excluded_middleware`로 _제거할 수 없습니다_. `task` 도구는 Deep Agents의 핵심 위임 메커니즘이라 항상 활성화되며, 서브에이전트를 정의하지 않더라도 빌트인 `general-purpose` 서브에이전트가 자동으로 사용됩니다.]
 
 각 미들웨어가 어떤 도구를 추가하고 어떤 역할을 하는지 아래 표에서 확인합니다. "(없음)"으로 표시된 미들웨어는 도구 대신 시스템 프롬프트 수정이나 메시지 변환을 수행합니다.
 
@@ -320,6 +366,36 @@ for mw in [FilesystemMiddleware, MemoryMiddleware, SubAgentMiddleware, SkillsMid
 #tip-box[`SummarizationMiddleware`의 클래스 이름이 `_DeepAgentsSummarizationMiddleware`(언더스코어 프리픽스)인 이유는 내부 구현 세부사항이기 때문입니다. 직접 인스턴스화할 필요 없이 `create_deep_agent()`가 자동으로 관리합니다.]
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
+== 6. 샌드박스 옵션
+
+`tools` 파라미터로 직접 함수를 노출하는 것 외에도, Deep Agents는 _신뢰할 수 없는 코드 실행_을 안전하게 격리하는 _샌드박스_ 옵션을 제공합니다. 코딩 에이전트나 데이터 분석 에이전트가 임의의 스크립트를 실행해야 할 때 사용합니다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[샌드박스],
+  text(weight: "bold")[실행 환경],
+  text(weight: "bold")[적합 시나리오],
+  [Modal],
+  [원격 컨테이너 (GPU 지원)],
+  [장기 실행 코드, GPU 추론],
+  [Daytona],
+  [원격 개발 컨테이너],
+  [Git 워크스페이스 통합, 멀티 언어],
+  [Deno],
+  [로컬 TypeScript/JavaScript 격리],
+  [경량 JS/TS 코드 실행],
+  [로컬 VFS (Local Virtual FS)],
+  [In-process 가상 파일시스템],
+  [네트워크/디스크 없이 단위 테스트],
+)
+
+#tip-box[샌드박스는 _도구_로 노출되거나(예: `execute_python` 도구) _백엔드_로 노출됩니다(예: `SandboxBackend`로 파일 격리). 두 경로를 조합해 "파일 격리 + 코드 격리"를 동시에 달성할 수 있습니다. 자세한 사용법은 Part 4의 샌드박스 챕터를 참고하세요.]
+
+#line(length: 100%, stroke: 0.5pt + luma(200))
 == 핵심 정리
 
 #table(
@@ -331,15 +407,19 @@ for mw in [FilesystemMiddleware, MemoryMiddleware, SubAgentMiddleware, SkillsMid
   text(weight: "bold")[항목],
   text(weight: "bold")[방법],
   [모델 선택],
-  [`model="provider:model-name"`],
+  [`model="anthropic:claude-sonnet-4-6"` 등 provider 접두 형식],
   [시스템 프롬프트],
-  [`system_prompt="역할과 규칙을 정의"`],
+  [USER → BASE/CUSTOM → SUFFIX 순으로 조립됨],
   [커스텀 도구],
   [함수 + docstring + 타입 힌트 → `tools=[func]`],
   [구조화된 출력],
   [`response_format=PydanticModel` → `result["structured_response"]`],
   [미들웨어],
-  [자동 구성됨 (TodoList, Filesystem, SubAgent, Summarization 등)],
+  [`SubAgentMiddleware`는 제거 불가. 나머지는 파라미터에 따라 자동 구성],
+  [전체 파라미터],
+  [17개 — `permissions`, `context_schema`, `checkpointer`, `store`, `cache`, `interrupt_on` 포함],
+  [샌드박스],
+  [Modal, Daytona, Deno, 로컬 VFS — 도구 또는 백엔드로 노출],
 )
 
 에이전트의 다섯 가지 커스터마이징 축(모델, 프롬프트, 도구, 출력 형식, 미들웨어)을 모두 살펴보았습니다. 이 다섯 가지 축은 `create_deep_agent()`의 파라미터에 1:1로 대응하므로, 필요한 파라미터만 조합하면 거의 모든 도메인의 전문가 에이전트를 설계할 수 있습니다. 다음 장에서는 에이전트의 파일 도구가 실제로 데이터를 읽고 쓰는 _스토리지 백엔드_ 계층을 심화합니다. 백엔드는 에이전트의 "기억 장치"로서, 에이전트 코드를 변경하지 않고도 저장소 전략을 완전히 전환할 수 있는 강력한 추상화를 제공합니다.

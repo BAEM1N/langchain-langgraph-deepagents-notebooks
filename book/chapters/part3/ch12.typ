@@ -18,7 +18,7 @@
 from dotenv import load_dotenv
 load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == 12.2 내구성 실행 개념
@@ -380,6 +380,86 @@ API 호출, 파일 쓰기 등의 부수 효과를 개별 `@task`로 분리합니
 각 워크플로 인스턴스에 고유한 `thread_id`를 부여합니다.
 장애 복구 시 동일한 `thread_id`로 재개합니다.
 
+== 12.12 노드 시도 단위 fault tolerance --- `TimeoutPolicy` + `heartbeat`
+
+내구성 실행이 _어디까지 진행했는지_를 checkpoint로 보존한다면, LangGraph 1.2의 fault tolerance 기능은 _언제 포기하고, 어떻게 보정할지_를 노드 시도(attempt) 단위로 제어합니다. `add_node(..., timeout=TimeoutPolicy(...))`로 단일 시도에 시간 제한을 두면, 초과 시 `NodeTimeoutError`가 발생하고 retry policy가 있으면 다음 시도로 넘어갑니다. timeout이 발생한 시도의 partial write는 폐기됩니다.
+
+장기 작업 노드는 `Runtime.heartbeat()`와 `refresh_on="heartbeat"`를 결합해 idle timeout을 갱신할 수 있습니다.
+
+#code-block(`````python
+from langgraph.func import task
+from langgraph.runtime import Runtime
+from langgraph.types import TimeoutPolicy
+
+async def long_running_node(state: State, runtime: Runtime) -> dict:
+    for batch in fetch_batches():
+        process(batch)
+        runtime.heartbeat()
+    return {"result": "done"}
+
+builder.add_node(
+    "long_running_node",
+    long_running_node,
+    timeout=TimeoutPolicy(idle_timeout=30, refresh_on="heartbeat"),
+)
+`````)
+
+== 12.13 Graceful shutdown --- `RunControl` / `GraphDrained`
+
+장기 실행 그래프를 SIGTERM 같은 외부 시그널에서 즉시 강제 종료하지 않고, 현재 superstep을 끝낸 뒤 checkpoint를 남기려면 `RunControl.request_drain()`을 사용합니다. drain이 요청되면 런은 `GraphDrained`로 멈추고 _같은 config_로 나중에 재개할 수 있습니다. 노드 내부에서는 `Runtime.drain_requested`로 drain 신호를 직접 분기해 안전 종료 처리를 추가할 수 있습니다.
+
+#code-block(`````python
+from langgraph.runtime import RunControl, Runtime
+from langgraph.errors import GraphDrained
+
+# 1) 호출 측 — 외부 시그널(SIGTERM 등)에 drain 요청
+control = RunControl()
+control.request_drain("sigterm")
+
+try:
+    result = graph.invoke(inputs, config, control=control)
+except GraphDrained as e:
+    print(f"Drained: {e.reason}")
+    # checkpoint는 이미 저장됨
+
+# 같은 config로 재개
+graph.invoke(None, config)
+
+# 2) 노드 내부 — drain 신호를 직접 감지
+async def my_node(state: State, runtime: Runtime) -> dict:
+    if runtime.drain_requested:
+        return {"status": "skipped"}
+    # ... 일반 처리
+    return {"status": "done"}
+`````)
+
+#tip-box[drain은 인터럽트와 다릅니다. 인터럽트는 사용자 입력을 기다리며 일시 정지하는 _애플리케이션 레벨_ 신호이고, drain은 superstep 경계에서 안전하게 멈추기 위한 _운영 레벨_ 신호입니다. 두 가지를 함께 사용하면 점검·배포·롤링 업데이트 중에도 진행 상태를 잃지 않습니다.]
+
+== 12.14 DeltaChannel (beta) --- checkpoint 저장량 최적화
+
+기본 checkpoint는 매 superstep마다 채널 값을 _전체_ 저장합니다. 메시지 목록처럼 append-heavy 채널은 장기 thread에서 저장량이 빠르게 늘어납니다. `langgraph≥1.2`에서 도입된 `DeltaChannel`은 누적 전체값 대신 delta만 저장해 checkpoint 비용을 낮추고, `snapshot_frequency`로 K step마다 한 번씩 full snapshot을 남겨 reconstruction 비용을 제한합니다.
+
+#code-block(`````python
+from typing import Annotated, Sequence
+from typing_extensions import TypedDict
+from langgraph.channels import DeltaChannel
+
+def list_reducer(state: list, writes: Sequence[list]) -> list:
+    # bulk reducer 시그니처: (current_state, sequence_of_writes) -> new_state
+    result = list(state)
+    for write in writes:
+        result.extend(write)
+    return result
+
+class State(TypedDict):
+    messages: Annotated[
+        list[str],
+        DeltaChannel(list_reducer, snapshot_frequency=5),
+    ]
+`````)
+
+#warning-box[`DeltaChannel`은 `langgraph≥1.2` beta 기능입니다. Reducer는 associative해야 하며 _write 시점이 아니라 reconstruction 시점_에 실행됩니다. 프로덕션 적용 전 저장량, 복구 지연, 마이그레이션 비용을 함께 측정하세요. 저장 최적화는 `DeltaChannel`로, 실패 복구 제어는 `TimeoutPolicy` / `error_handler`로 분리해 이해하면 설계가 명확해집니다.]
+
 #chapter-summary-header()
 
 #table(
@@ -404,6 +484,12 @@ API 호출, 파일 쓰기 등의 부수 효과를 개별 `@task`로 분리합니
   [`\@entrypoint` + `\@task`로 내구성 보장],
   [장애 복구],
   [같은 `thread_id`로 체크포인트에서 재개],
+  [노드 timeout],
+  [`TimeoutPolicy(idle_timeout=..., refresh_on="heartbeat")`로 시도별 시간 제한],
+  [Graceful shutdown],
+  [`RunControl.request_drain()` → `GraphDrained` → 같은 config로 재개],
+  [DeltaChannel (beta)],
+  [`langgraph≥1.2`. delta만 저장 + `snapshot_frequency`로 reconstruction 비용 제한],
 )
 
 

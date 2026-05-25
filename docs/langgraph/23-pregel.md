@@ -1,32 +1,38 @@
-# LangGraph Runtime Documentation
+# LangGraph Runtime (Pregel)
+
+> 공식 문서: <https://docs.langchain.com/oss/python/langgraph/pregel>
 
 ## Overview
 
-LangGraph's runtime is implemented through the [`Pregel`](https://reference.langchain.com/python/langgraph/pregel/main/Pregel) component, which manages application execution. Creating a `StateGraph` or using the `@entrypoint` decorator produces a Pregel instance ready for invocation.
+LangGraph runtime은 [`Pregel`](https://reference.langchain.com/python/langgraph/pregel/main/Pregel) 컴포넌트로 구현되며, 애플리케이션 실행을 관리한다. `StateGraph` 를 컴파일하거나 `@entrypoint` 데코레이터를 사용하면 invocation 가능한 Pregel 인스턴스가 생성된다.
 
-The system combines "**actors** read data from channels and write data to channels" through a bulk synchronous parallel model.
+전체 모델은 bulk synchronous parallel(BSP) 방식이다 — "**actors** read data from channels and write data to channels."
 
 ### Execution Flow
 
-Each step follows three phases:
+각 step은 세 단계를 거친다.
 
-1. **Plan**: Determine which actors execute this step
-2. **Execution**: Run selected actors in parallel until completion, failure, or timeout
-3. **Update**: Refresh channels with new values
+1. **Plan**: 이번 step에서 실행할 actor 선정
+2. **Execution**: 선정된 actor를 병렬 실행, 완료/실패/타임아웃까지 대기
+3. **Update**: actor가 쓴 값으로 채널 갱신
 
-Repetition continues until no actors remain or max steps are reached.
+남은 actor가 없거나 max step에 도달할 때까지 반복된다.
 
 ## Core Components
 
 ### Actors
-`PregelNode` actors subscribe to channels, read data, and write results. They implement LangChain's Runnable interface.
+`PregelNode` actor는 채널을 구독하고, 데이터를 읽고, 결과를 다시 쓴다. LangChain Runnable 인터페이스를 구현한다.
 
 ### Channels
-Communication mechanisms between actors with value types, update types, and update functions:
+Actor 간 통신 메커니즘. value type, update type, update function을 가진다.
 
-- **LastValue**: Stores the most recent value; ideal for inputs/outputs
-- **Topic**: Configurable PubSub for multiple values with optional deduplication
-- **BinaryOperatorAggregate**: Applies operators to current values and updates
+| Type | Purpose |
+|------|---------|
+| **`LastValue`** | 가장 최근 값을 저장. 입력/출력에 적합한 기본 채널 |
+| **`EphemeralValue`** | 실행 step 내부에서만 유효한 임시 값 |
+| **`Topic`** | 설정 가능한 PubSub, 다중 값 + optional 중복 제거 / 누적 |
+| **`BinaryOperatorAggregate`** | 현재 값과 업데이트에 binary operator 적용 (러닝 토탈 등) |
+| **`DeltaChannel`** (beta, `langgraph>=1.2`) | step별 incremental delta만 저장. 자주 쓰이고 빠르게 자라는 채널(메시지 리스트 등)에 적합 |
 
 ## Implementation Approaches
 
@@ -254,6 +260,31 @@ print("Channels: ")
 print(write_essay.channels)
 ```
 
+## DeltaChannel (Beta, `langgraph>=1.2`)
+
+`DeltaChannel` 은 매 step의 full 누적값이 아니라 incremental delta만 저장한다. 메시지 리스트처럼 자주 쓰이고 무한히 자라는 채널의 checkpoint 비용을 줄이는 데 쓴다. Reducer는 associative해야 하며 **write 시점이 아니라 reconstruction 시점**에 실행된다.
+
+```python
+from typing import Annotated, Sequence
+from typing_extensions import TypedDict
+from langgraph.channels import DeltaChannel
+
+def list_reducer(state: list, writes: Sequence[list]) -> list:
+    result = list(state)
+    for write in writes:
+        result.extend(write)
+    return result
+
+class State(TypedDict):
+    messages: Annotated[
+        list[str],
+        DeltaChannel(list_reducer, snapshot_frequency=5),
+    ]
+```
+
+- `snapshot_frequency` 만큼 step이 진행될 때마다 full snapshot이 한 번 기록되어 reconstruction 비용을 제한한다.
+- Bulk reducer 시그니처는 `(current_state, sequence_of_writes) -> new_state` 다.
+
 ---
 
-**Note**: The Pregel name references "Google's Pregel algorithm" for efficient large-scale parallel computation using graphs.
+**Note**: Pregel이라는 이름은 그래프 기반 대규모 병렬 계산을 위한 "Google's Pregel algorithm" 에서 따왔다.

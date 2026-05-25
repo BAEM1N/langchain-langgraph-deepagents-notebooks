@@ -19,7 +19,7 @@
 from dotenv import load_dotenv
 load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == 12.2 durable execution Concept
@@ -317,7 +317,87 @@ Production: `PostgresSaver` or external database
 Give each workflow instance a unique `thread_id`.
 Upon failover, use resume with the same `thread_id`.
 
-== 12.12 Summary
+== 12.12 Per-node fault tolerance --- `TimeoutPolicy` + `heartbeat`
+
+Durable execution preserves _how far_ a run has progressed via checkpoints. The fault-tolerance features in LangGraph 1.2 control _when to give up and how to compensate_ at the level of an individual node attempt. `add_node(..., timeout=TimeoutPolicy(...))` applies a per-attempt time budget; on overrun, `NodeTimeoutError` is raised and the retry policy (if any) advances to the next attempt. Partial writes from the failing attempt are discarded.
+
+Long-running nodes combine `Runtime.heartbeat()` with `refresh_on="heartbeat"` to refresh the idle timeout.
+
+#code-block(`````python
+from langgraph.func import task
+from langgraph.runtime import Runtime
+from langgraph.types import TimeoutPolicy
+
+async def long_running_node(state: State, runtime: Runtime) -> dict:
+    for batch in fetch_batches():
+        process(batch)
+        runtime.heartbeat()
+    return {"result": "done"}
+
+builder.add_node(
+    "long_running_node",
+    long_running_node,
+    timeout=TimeoutPolicy(idle_timeout=30, refresh_on="heartbeat"),
+)
+`````)
+
+== 12.13 Graceful shutdown --- `RunControl` / `GraphDrained`
+
+To stop a long-running graph cleanly on signals like SIGTERM --- finishing the current superstep and persisting a checkpoint instead of force-killing the process --- use `RunControl.request_drain()`. When drain is requested, the run stops with `GraphDrained` and can later be resumed with the _same config_. Inside a node, branch on `Runtime.drain_requested` to add safe-shutdown handling.
+
+#code-block(`````python
+from langgraph.runtime import RunControl, Runtime
+from langgraph.errors import GraphDrained
+
+# 1) Caller side --- request drain on an external signal (e.g., SIGTERM)
+control = RunControl()
+control.request_drain("sigterm")
+
+try:
+    result = graph.invoke(inputs, config, control=control)
+except GraphDrained as e:
+    print(f"Drained: {e.reason}")
+    # The checkpoint has already been saved.
+
+# Resume with the same config
+graph.invoke(None, config)
+
+# 2) Inside a node --- detect the drain signal directly
+async def my_node(state: State, runtime: Runtime) -> dict:
+    if runtime.drain_requested:
+        return {"status": "skipped"}
+    # ... normal processing
+    return {"status": "done"}
+`````)
+
+#tip-box[Drain is distinct from interrupt. Interrupt is an _application-level_ signal that pauses to await user input; drain is an _operational_ signal that stops cleanly at a superstep boundary. Combining both means rolling deploys and maintenance windows never lose in-flight progress.]
+
+== 12.14 DeltaChannel (beta) --- checkpoint size optimization
+
+Standard checkpoints persist the _full_ value of every channel on each superstep. For append-heavy channels (e.g., message lists), storage grows quickly on long-lived threads. `DeltaChannel` (introduced in `langgraph≥1.2`) stores incremental deltas instead, and writes a full snapshot every `snapshot_frequency` steps to bound reconstruction cost.
+
+#code-block(`````python
+from typing import Annotated, Sequence
+from typing_extensions import TypedDict
+from langgraph.channels import DeltaChannel
+
+def list_reducer(state: list, writes: Sequence[list]) -> list:
+    # bulk reducer signature: (current_state, sequence_of_writes) -> new_state
+    result = list(state)
+    for write in writes:
+        result.extend(write)
+    return result
+
+class State(TypedDict):
+    messages: Annotated[
+        list[str],
+        DeltaChannel(list_reducer, snapshot_frequency=5),
+    ]
+`````)
+
+#warning-box[`DeltaChannel` is a `langgraph≥1.2` beta feature. The reducer must be associative and runs _at reconstruction time, not at write time_. Measure storage, recovery latency, and migration cost before adopting it in production. Treat `DeltaChannel` as a _storage optimization_ and `TimeoutPolicy` / `error_handler` as _failure-recovery controls_ --- they are independent dimensions of the durability design.]
+
+== 12.15 Summary
 
 #table(
   columns: 2,
@@ -341,6 +421,12 @@ Upon failover, use resume with the same `thread_id`.
   [Durability guaranteed with `\@entrypoint` + `\@task`],
   [Disaster recovery],
   [At checkpoint with same `thread_id` resume],
+  [Node timeout],
+  [`TimeoutPolicy(idle_timeout=..., refresh_on="heartbeat")` per-attempt budget],
+  [Graceful shutdown],
+  [`RunControl.request_drain()` → `GraphDrained` → resume with same config],
+  [DeltaChannel (beta)],
+  [`langgraph≥1.2`. Store deltas + `snapshot_frequency` to bound reconstruction],
 )
 
 === Next Steps

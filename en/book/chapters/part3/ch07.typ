@@ -74,7 +74,87 @@ _Use Case:_
 
 #tip-box[If you graph with `stream_mode="custom"` streaming, only the data sent with `writer()` will be received.]
 
-== 7.8 Summary
+== 7.8 `nostream` tag — exclude internal LLM calls from the messages stream
+
+When a graph mixes a user-facing model and internal evaluation/routing models, the internal tokens should not leak into the `messages` stream. Tag the auxiliary model with `nostream` and LangGraph filters it out automatically.
+
+#code-block(`````python
+from langchain_anthropic import ChatAnthropic
+
+# Auxiliary model — not exposed in the messages stream
+internal_model = ChatAnthropic(model_name="claude-haiku-4-5-20251001").with_config(
+    {"tags": ["nostream"]}
+)
+`````)
+
+== 7.9 `chunk_position` — detect the last chunk of a message
+
+The `messages` mode metadata includes a `chunk_position` field. `chunk_position == "last"` marks the completion of a single message. Run token-by-token UI updates as usual, but trigger persistence/post-processing only on the last chunk.
+
+#code-block(`````python
+for msg, metadata in graph.stream(inputs, stream_mode="messages"):
+    if metadata.get("chunk_position") == "last":
+        save_final_message(msg, node=metadata["langgraph_node"])
+        continue
+    print(msg.content, end="", flush=True)
+`````)
+
+The three metadata keys you'll actually use:
+
+- `tags` — tags attached to the model/chain (e.g. `["joke"]`, `["nostream"]`)
+- `langgraph_node` — node that produced the current token
+- `chunk_position` — `"first"`, `"middle"`, or `"last"`
+
+== 7.10 `invoke` v2 — `GraphOutput` return type
+
+Calling `invoke()` with `version="v2"` wraps the result in `GraphOutput`. Legacy dict access still works but is deprecated; new code should use `.value` / `.interrupts`.
+
+#code-block(`````python
+from langgraph.types import GraphOutput
+
+result = graph.invoke(inputs, version="v2")
+assert isinstance(result, GraphOutput)
+
+result.value         # final state (dict / Pydantic / dataclass)
+result.interrupts    # tuple[Interrupt, ...] — empty when no interrupt
+
+if result.interrupts:
+    payload = result.interrupts[0].value
+    print("HITL pending:", payload)
+`````)
+
+== 7.11 `stream_events` v3 — projection-based resume
+
+LangGraph 1.2+ adds an _event streaming projection_ layer on top of the raw `stream_mode` API. `graph.stream_events(..., version="v3")` returns a single run-stream object; callers consume independent projections such as `stream.messages`, `stream.values`, `stream.subgraphs`, `stream.output`. The biggest gain over v2 raw streaming is _resume_ — the same API restarts the run after an interrupt.
+
+#code-block(`````python
+from langgraph.types import Command
+
+stream = graph.stream_events(
+    {"messages": [{"role": "user", "content": "Start security review"}]},
+    version="v3",
+)
+
+for message in stream.messages:
+    for token in message.text:
+        print(token, end="", flush=True)
+
+if stream.interrupted:
+    print("\nApproval needed:", stream.interrupts)
+    stream = graph.stream_events(
+        Command(resume={"decisions": [{"type": "approve"}]}),
+        version="v3",
+    )
+    for message in stream.messages:
+        for token in message.text:
+            print(token, end="", flush=True)
+
+final_state = stream.output  # single entry point for the final state
+`````)
+
+#tip-box[Use v2 raw streaming for debugging and custom-mode processing, v3 `stream_events` for app/UI code and typed projection consumption. The two APIs coexist, so a single graph can serve a debug v2 stream and a production v3 stream side by side.]
+
+== 7.12 Summary
 
 #table(
   columns: 3,

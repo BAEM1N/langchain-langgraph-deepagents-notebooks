@@ -17,13 +17,13 @@
 
 == 2.1 환경 설정
 
-이 장의 모든 예제는 OpenAI의 `gpt-4.1` 모델을 사용합니다. `load_dotenv()`는 프로젝트 루트의 `.env` 파일에서 `OPENAI_API_KEY`를 읽어 환경 변수로 등록합니다. `override=True`를 설정하면 이미 시스템에 설정된 환경 변수가 있더라도 `.env` 파일의 값이 우선 적용되므로, 프로젝트별로 다른 API 키를 사용할 때 유용합니다.
+이 장의 모든 예제는 OpenAI의 `gpt-5.4` 모델을 사용합니다. `load_dotenv()`는 프로젝트 루트의 `.env` 파일에서 `OPENAI_API_KEY`를 읽어 환경 변수로 등록합니다. `override=True`를 설정하면 이미 시스템에 설정된 환경 변수가 있더라도 `.env` 파일의 값이 우선 적용되므로, 프로젝트별로 다른 API 키를 사용할 때 유용합니다.
 
 #code-block(`````python
 from dotenv import load_dotenv
 load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == 2.2 StateGraph 기본 구조
@@ -199,7 +199,109 @@ builder = StateGraph(
 
 #tip-box[입출력 스키마를 분리하면 API 문서 자동 생성, 타입 검증, 그리고 LangGraph Platform 배포 시 Swagger 문서 생성이 훨씬 깔끔해집니다. 또한 그래프를 서브그래프로 재사용할 때 인터페이스 계약이 명확해지므로, 팀 간 협업에서도 큰 도움이 됩니다.]
 
-이 장에서 Graph API의 핵심 구성 요소를 모두 다루었습니다. `StateGraph` 빌더의 생성-컴파일-실행 라이프사이클, `Annotated` 타입 힌트를 활용한 리듀서 기반 상태 병합, `add_conditional_edges`와 `Command`를 통한 동적 분기, `MessagesState`를 활용한 LLM 대화 패턴, 그리고 입출력 스키마를 통한 인터페이스 분리까지 --- 이 모든 것이 이후 장에서 반복적으로 사용되는 기초 패턴입니다. 특히 리듀서와 조건부 엣지는 에이전트의 상태 관리와 의사결정 로직의 근간이므로, 다음 장으로 넘어가기 전에 충분히 익혀 두시기 바랍니다.
+== 2.7 add_node() 고급 옵션
+
+기본 골격을 익혔으니, 프로덕션 환경에서 자주 쓰이는 `add_node()`의 고급 파라미터들을 살펴봅시다. 단순히 함수만 등록하는 것을 넘어, 재시도, 타임아웃, 캐싱, 에러 복구, 실행 지연까지 노드 단위로 세밀하게 제어할 수 있습니다.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[파라미터],
+  text(weight: "bold")[설명],
+  [`retry_policy`],
+  [`RetryPolicy(max_attempts=..., retry_on=...)` — 실패 시 자동 재시도. 기본 정책은 일반 네트워크 에러 위주이며, `ValueError`/`TypeError`/`RuntimeError`는 제외],
+  [`timeout`],
+  [`TimeoutPolicy(run_timeout=..., idle_timeout=...)` — 초과 시 `NodeTimeoutError` 발생. async 노드 전용, attempt별 독립 적용],
+  [`cache_policy`],
+  [`CachePolicy(ttl=..., key_func=...)` — 입력 해시 기반 결과 캐싱. 컴파일 시 `InMemoryCache` 또는 `SqliteCache` 필요],
+  [`error_handler`],
+  [`NodeError`를 인자로 받아 복구용 `Command`를 반환하는 콜백 — 폴백 노드로 우회하거나 상태에 에러 정보를 기록],
+  [`defer`],
+  [`True`로 지정하면 다른 분기의 pending 태스크가 모두 완료된 뒤에 실행 — 분기 길이가 다른 fan-out/fan-in에 유용],
+)
+
+#code-block(`````python
+from langgraph.cache.memory import InMemoryCache
+from langgraph.types import RetryPolicy, CachePolicy
+
+builder.add_node(
+    "expensive_node",
+    expensive_node,
+    retry_policy=RetryPolicy(max_attempts=3, retry_on=ValueError),
+    cache_policy=CachePolicy(ttl=3),
+)
+graph = builder.compile(cache=InMemoryCache())
+`````)
+
+#tip-box[`cache_policy`는 `@task`의 `cache_policy`와 동일한 객체이며, Graph API에서도 같은 방식으로 컴파일 시 `cache=`를 지정해야 동작합니다. `retry_policy`의 `retry_on`을 좁히지 않으면 `ValueError`처럼 코드 버그성 예외도 그대로 재시도되어 비용이 발생할 수 있으므로, 대상 예외를 명시하는 편이 안전합니다.]
+
+== 2.8 Runtime 컨텍스트와 context_schema
+
+상태(`State`)에는 노드 간에 흐르는 데이터를 담지만, LLM 프로바이더나 사용자 ID처럼 호출 시점에 주입하되 상태를 오염시키지 않는 _런타임 의존성_이 필요한 경우가 많습니다. LangGraph는 `context_schema` + `Runtime[ContextSchema]` 패턴으로 이를 노출합니다. 상태와 런타임 컨텍스트가 분리되므로 체크포인트에 불필요한 자격 증명이나 핸들이 함께 저장되지 않습니다.
+
+- `StateGraph(State, context_schema=ContextSchema)` — 컨텍스트 스키마를 그래프에 선언합니다
+- 노드 시그니처에 `runtime: Runtime[ContextSchema]`를 추가하면 `runtime.context`로 호출 시 전달된 값에 접근합니다
+- `graph.invoke(inputs, context={...})` — `context` 키워드 인자로 컨텍스트를 주입합니다
+- `runtime.execution_info`로 `attempt`, `thread_id`, `run_id`, 체크포인트 정보에 접근할 수 있어 재시도 횟수에 따라 동작을 분기할 수 있습니다
+- `runtime.server_info`는 LangGraph Server에서 assistant ID, graph ID, 인증된 사용자 정보를 제공합니다
+- `runtime.drain_requested`는 graceful shutdown 신호를 노드에 전달합니다
+
+#code-block(`````python
+from dataclasses import dataclass
+from langgraph.runtime import Runtime
+
+@dataclass
+class ContextSchema:
+    llm_provider: str = "openai"
+    user_id: str | None = None
+
+def node(state: State, runtime: Runtime[ContextSchema]):
+    if runtime.execution_info.attempt > 1:
+        # 첫 시도가 실패한 경우 폴백 로직
+        ...
+    print("thread:", runtime.execution_info.thread_id)
+    print("run:", runtime.execution_info.run_id)
+    return {"results": "processed"}
+
+graph = StateGraph(State, context_schema=ContextSchema).compile()
+graph.invoke({...}, context={"llm_provider": "anthropic", "user_id": "u-1"})
+`````)
+
+== 2.9 Send와 Command.PARENT — 동적 팬아웃과 서브그래프 라우팅
+
+`Command` 객체를 한 번 더 확장해 봅시다. 라우팅과 상태 업데이트의 조합 외에도, 두 가지 고급 사용처가 있습니다.
+
+`Send("worker", {...})`는 라우팅 함수가 _하나의 노드 이름_ 대신 _Send 객체 리스트_를 반환하도록 하여, 컴파일 시점이 아닌 _실행 시점_에 워커 인스턴스를 동적으로 생성합니다. 각 `Send`는 워커 노드에 _독립적인 상태_를 주입하므로, 동일한 노드 함수가 서로 다른 데이터를 동시에 처리할 수 있습니다. 이것이 Map-Reduce 패턴의 Map 단계이며, 4장에서 자세히 다룹니다.
+
+#code-block(`````python
+from langgraph.types import Send
+
+def fan_out(state):
+    # 런타임에 항목 수만큼 워커 생성
+    return [Send("worker", {"task": t}) for t in state["tasks"]]
+
+builder.add_conditional_edges("planner", fan_out)
+`````)
+
+서브그래프 안의 노드에서 `Command(graph=Command.PARENT, goto="next", update={...})`를 반환하면 _부모 그래프_의 노드로 라우팅됩니다. 서브그래프가 자신의 종료 조건을 판단하고 부모 워크플로의 다음 단계를 직접 지정하는 패턴에 유용합니다.
+
+#code-block(`````python
+from langgraph.types import Command
+
+def sub_node(state):
+    return Command(
+        graph=Command.PARENT,
+        goto="parent_aggregator",
+        update={"sub_result": state["value"]},
+    )
+`````)
+
+#tip-box[`Command.PARENT`는 9장의 서브그래프와 결합할 때 본격적으로 활용됩니다. 여기서는 "서브그래프에서 부모로 직접 라우팅이 가능하다"는 사실만 기억해 두면 됩니다.]
+
+이 장에서 Graph API의 핵심 구성 요소를 모두 다루었습니다. `StateGraph` 빌더의 생성-컴파일-실행 라이프사이클, `Annotated` 타입 힌트를 활용한 리듀서 기반 상태 병합, `add_conditional_edges`와 `Command`를 통한 동적 분기, `MessagesState`를 활용한 LLM 대화 패턴, 입출력 스키마를 통한 인터페이스 분리, `add_node()`의 고급 옵션, `Runtime` 컨텍스트 주입, 그리고 `Send`/`Command.PARENT`까지 --- 이 모든 것이 이후 장에서 반복적으로 사용되는 기초 패턴입니다. 특히 리듀서와 조건부 엣지는 에이전트의 상태 관리와 의사결정 로직의 근간이므로, 다음 장으로 넘어가기 전에 충분히 익혀 두시기 바랍니다.
 
 #chapter-summary-header()
 

@@ -28,22 +28,68 @@ LangGraph의 메모리 시스템은 두 가지 계층으로 구분됩니다. _�
 from dotenv import load_dotenv
 load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4-mini")
 `````)
 
 == 6.2 체크포인터 --- 각 실행 단계의 상태를 자동으로 저장합니다
 
 체크포인터는 LangGraph에서 지속성, Human-in-the-loop, 타임 트래블, 내구성 실행 등 거의 모든 고급 기능의 기반입니다. 체크포인터 없이는 그래프 실행이 끝나면 상태가 사라지지만, 체크포인터가 있으면 각 슈퍼스텝(노드 실행) 후 상태가 자동으로 스냅샷되어, 나중에 정확히 그 시점부터 재개할 수 있습니다.
 
-LangGraph는 용도에 따라 세 가지 체크포인터를 제공합니다:
+LangGraph는 용도에 따라 다양한 체크포인터 구현을 제공합니다. 다음 표는 자주 쓰이는 7가지를 한눈에 비교합니다.
 
-- *`InMemorySaver`*: 개발/테스트용. 메모리에 저장하므로 빠르지만, 프로세스 종료 시 모든 상태가 삭제됩니다. 별도 설치가 필요 없으며, `langgraph` 패키지에 기본 포함되어 있습니다
-- *`SqliteSaver`*: 로컬 개발용. SQLite 파일에 저장하므로 프로세스를 재시작해도 상태가 유지됩니다. `pip install langgraph-checkpoint-sqlite`로 설치합니다
-- *`PostgresSaver`*: 프로덕션용. PostgreSQL 데이터베이스에 저장하며, 수평 확장과 동시 접근을 지원합니다. `pip install langgraph-checkpoint-postgres`로 설치하고, 첫 사용 시 `checkpointer.setup()`을 호출하여 스키마를 생성해야 합니다
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[체크포인터],
+  text(weight: "bold")[패키지],
+  text(weight: "bold")[용도],
+  [`InMemorySaver`],
+  [`langgraph-checkpoint` (기본 포함)],
+  [개발/테스트. 프로세스 종료 시 상태 소실],
+  [`SqliteSaver`],
+  [`langgraph-checkpoint-sqlite`],
+  [로컬 개발. 단일 파일 영속화, async 변형 제공],
+  [`PostgresSaver`],
+  [`langgraph-checkpoint-postgres`],
+  [프로덕션 기본값. `AsyncPostgresSaver` 비동기 지원],
+  [`MongoDBSaver`],
+  [`langgraph-checkpoint-mongodb`],
+  [도큐먼트 DB. JSON 친화적인 스토리지 백엔드],
+  [`RedisSaver`],
+  [`langgraph-checkpoint-redis`],
+  [인메모리 영속화. 낮은 지연, async 변형 제공],
+  [`OracleSaver`],
+  [`langgraph-checkpoint-oracle`],
+  [엔터프라이즈 Oracle DB. 벡터 검색까지 지원],
+  [`CosmosDBSaver`],
+  [`langchain-azure-cosmosdb`],
+  [Azure Cosmos DB. Microsoft Entra ID 인증 호환],
+)
 
 체크포인터를 `compile(checkpointer=checkpointer)`에 전달하면, 그래프의 각 노드 실행 후 자동으로 상태가 저장됩니다. 각 체크포인트는 `StateSnapshot` 객체로, 상태 값(`values`), 체크포인트 ID, 부모 체크포인트 ID, 다음 실행할 노드(`next`), 타임스탬프 등의 메타데이터를 포함합니다. 이 정보들을 통해 그래프 실행의 전체 이력을 추적하고, 특정 시점으로 돌아갈 수 있습니다.
 
-#warning-box[`InMemorySaver`는 프로세스가 종료되면 모든 상태가 사라집니다. 프로덕션 환경에서는 반드시 `PostgresSaver`나 `SqliteSaver`를 사용하세요. 또한 `PostgresSaver`는 첫 사용 시 `checkpointer.setup()`을 호출하여 데이터베이스 테이블을 생성해야 합니다.]
+DB 기반 체크포인터는 컨텍스트 매니저 + `setup()` 패턴으로 초기화합니다. 비동기 그래프에서는 `AsyncPostgresSaver` 같은 async 변형을 사용합니다.
+
+#code-block(`````python
+from langgraph.checkpoint.postgres import PostgresSaver
+
+DB_URI = "postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable"
+with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
+    checkpointer.setup()  # 최초 1회 — 스키마 생성
+    graph = builder.compile(checkpointer=checkpointer)
+
+# 비동기 그래프
+from langgraph.checkpoint.postgres import AsyncPostgresSaver
+
+checkpointer = AsyncPostgresSaver.from_conn_string(DB_URI)
+await checkpointer.setup()
+graph = builder.compile(checkpointer=checkpointer)
+`````)
+
+#warning-box[`InMemorySaver`는 프로세스가 종료되면 모든 상태가 사라집니다. 프로덕션 환경에서는 반드시 `PostgresSaver`(또는 `MongoDBSaver`/`RedisSaver`/`OracleSaver`)를 사용하세요. DB 기반 체크포인터는 첫 사용 시 반드시 `checkpointer.setup()`을 호출해 스키마를 생성해야 합니다.]
 
 체크포인터를 설정했으니, 이제 저장된 상태를 조회하는 방법을 알아봅시다. LangGraph는 상태를 읽고, 이력을 추적하고, 수정하는 세 가지 핵심 API를 제공합니다.
 
@@ -126,7 +172,61 @@ for i, snapshot in enumerate(graph.get_state_history(config)):
 - `get(namespace, key)`: 특정 항목을 조회합니다. 존재하지 않으면 `None`을 반환합니다
 - `search(namespace)`: 네임스페이스 내 항목을 검색합니다. `query` 파라미터를 전달하면 시맨틱 검색도 가능합니다
 
-#tip-box[`InMemoryStore`는 `index` 설정을 통해 임베딩 기반 _시맨틱 검색_도 지원합니다. `InMemoryStore(index={"embed": init_embeddings("openai:text-embedding-3-small"), "dims": 1536})` 형태로 초기화한 뒤, `store.search(namespace, query="...")` 형태로 호출하면 저장된 데이터 중 의미적으로 유사한 항목을 찾을 수 있습니다. 프로덕션에서는 `PostgresStore`나 `RedisStore`로 교체하여 영속성을 확보하세요.]
+#tip-box[`InMemoryStore`는 `index` 설정을 통해 임베딩 기반 _시맨틱 검색_도 지원합니다. `InMemoryStore(index={"embed": init_embeddings("openai:text-embedding-3-small"), "dims": 1536, "fields": ["food_preference", "$"]})` 형태로 초기화한 뒤, `store.search(namespace, query="...")` 형태로 호출하면 저장된 데이터 중 의미적으로 유사한 항목을 찾을 수 있습니다. `fields`로 임베딩 대상 키를 제한하거나, `put(..., index=False)`로 특정 항목의 임베딩을 건너뛸 수 있습니다. 프로덕션에서는 `PostgresStore`/`RedisStore`/`OracleStore`로 교체해 영속성을 확보하세요.]
+
+=== Context와 Runtime --- 노드에서 사용자 식별자와 스토어 접근
+
+장기 메모리를 _사용자별로_ 분리하려면 노드 함수가 현재 사용자의 ID를 알아야 합니다. LangGraph는 `@dataclass`로 정의한 `Context`를 `StateGraph(..., context_schema=Context)`로 등록하고, 노드 시그니처에 `runtime: Runtime[Context]`를 선언하는 방식으로 이를 해결합니다. `graph.invoke(...)` 호출 시 `context=Context(user_id=...)`를 전달하면, 노드 안에서 `runtime.context.user_id`로 접근할 수 있고, 동일한 runtime 객체에서 `runtime.store`로 스토어까지 자연스럽게 사용할 수 있습니다.
+
+#code-block(`````python
+import uuid
+from dataclasses import dataclass
+from langgraph.runtime import Runtime
+from langgraph.graph import StateGraph, MessagesState, START
+
+@dataclass
+class Context:
+    user_id: str
+
+async def call_model(state: MessagesState, runtime: Runtime[Context]):
+    user_id = runtime.context.user_id
+    namespace = (user_id, "memories")  # docs 권장 형식
+
+    memories = await runtime.store.asearch(
+        namespace, query=state["messages"][-1].content, limit=3
+    )
+    await runtime.store.aput(
+        namespace, str(uuid.uuid4()), {"data": "User prefers dark mode"}
+    )
+    return {"messages": [await model.ainvoke(state["messages"])]}
+
+builder = StateGraph(MessagesState, context_schema=Context)
+builder.add_node(call_model)
+builder.add_edge(START, "call_model")
+graph = builder.compile(checkpointer=checkpointer, store=store)
+
+graph.invoke(
+    {"messages": [{"role": "user", "content": "hi"}]},
+    {"configurable": {"thread_id": "1"}},
+    context=Context(user_id="alice"),
+)
+`````)
+
+#tip-box[네임스페이스는 튜플 어떤 형태든 가능하지만, 공식 문서는 `(user_id, "memories")` 패턴을 권장합니다. 사용자별로 1차 분리하고, 두 번째 원소로 메모리 종류(`"memories"`, `"preferences"` 등)를 구분하면 `search`로 카테고리별 조회가 쉬워집니다.]
+
+프로덕션 스토어는 체크포인터와 동일하게 컨텍스트 매니저로 사용합니다.
+
+#code-block(`````python
+from langgraph.store.postgres import PostgresStore
+
+with PostgresStore.from_conn_string(DB_URI) as store:
+    store.setup()
+    graph = builder.compile(checkpointer=checkpointer, store=store)
+
+# Redis / Oracle 도 동일 패턴
+from langgraph.store.redis import RedisStore
+from langgraph.store.oracle import OracleStore  # 벡터 검색 기본 지원
+`````)
 
 아래 코드에서는 `InMemoryStore`의 기본 CRUD 연산을 실습합니다. 네임스페이스로 사용자 데이터를 분류하고, `put()`, `get()`, `search()`로 데이터를 관리하는 패턴을 확인하세요.
 

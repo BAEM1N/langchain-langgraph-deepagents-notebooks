@@ -13,17 +13,52 @@
 #learning-objectives([`.env` 파일에서 API 키를 로드하는 방법을 익힌다], [`create_deep_agent()`로 기본 에이전트를 생성한다], [`agent.invoke()`와 `agent.stream()`으로 에이전트를 실행한다], [Tavily 검색 도구를 연동하는 리서치 에이전트를 만든다], [빌트인 도구의 종류와 역할을 이해한다])
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
-== 1. API 키 설정
+== 1. 프로젝트 부트스트랩과 API 키 설정
 
-에이전트를 만들기 전에 API 키부터 설정합니다. Deep Agents 자체는 모델 무관(model-agnostic)이지만, 이 교재에서는 OpenAI의 `gpt-4.1`을 사용하므로 해당 키가 필요합니다. 리서치 에이전트 예제에서는 Tavily 검색 API도 사용합니다.
+에이전트를 만들기 전에 프로젝트와 API 키부터 설정합니다. Deep Agents 자체는 모델 무관(model-agnostic)이며, _권장 기본 모델_은 Anthropic `claude-sonnet-4-6`입니다. OpenAI(`gpt-5.4`), Google(`gemini-3.5-flash`), OpenRouter 등 다양한 프로바이더 중 환경에 맞는 것을 선택해 키를 발급받습니다. 리서치 에이전트 예제에서는 Tavily 검색 API도 사용합니다.
 
-`.env` 파일에 아래 키를 설정해 주세요:
-#code-block(`````python
+=== uv 기반 프로젝트 부트스트랩
+
+권장하는 단계별 흐름은 다음과 같습니다. `uv`는 의존성 잠금과 가상환경을 자동으로 관리하므로 `pip`보다 재현성이 높습니다.
+
+#code-block(`````bash
+# 1) 프로젝트 초기화
+uv init my-deepagent
+cd my-deepagent
+
+# 2) deepagents + 사용할 프로바이더 패키지 추가
+uv add deepagents langchain-anthropic   # 권장 기본
+# uv add deepagents langchain-openai
+# uv add deepagents langchain-google-genai
+uv add tavily-python python-dotenv
+
+# 3) 잠금 파일 동기화
+uv sync
+`````)
+
+=== 프로바이더별 API 키 분기
+
+사용할 프로바이더에 따라 `.env`에 필요한 키를 채웁니다.
+
+#code-block(`````bash
+# Anthropic (권장 기본)
+ANTHROPIC_API_KEY=your-key-here
+
+# OpenAI
 OPENAI_API_KEY=your-key-here
+
+# Google Gemini
+GOOGLE_API_KEY=your-key-here
+
+# OpenRouter (OpenAI 호환)
+OPENAI_API_KEY=your-openrouter-key
+OPENAI_BASE_URL=https://openrouter.ai/api/v1
+
+# 공통 — 리서치 예제에서 사용
 TAVILY_API_KEY=your-key-here
 `````)
 
-#tip-box[`.env.example` 파일을 복사하여 `.env`로 만들면 됩니다.]
+#tip-box[`.env.example` 파일을 복사하여 `.env`로 만들면 됩니다. 모든 키를 다 설정할 필요는 없고, 자신이 사용할 프로바이더의 키만 채우면 됩니다.]
 
 #code-block(`````python
 # 환경 변수 로드
@@ -32,7 +67,8 @@ import os
 
 load_dotenv()
 
-assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY가 설정되지 않았습니다!"
+# 권장 기본 — Anthropic
+assert os.environ.get("ANTHROPIC_API_KEY"), "ANTHROPIC_API_KEY가 설정되지 않았습니다!"
 assert os.environ.get("TAVILY_API_KEY"), "TAVILY_API_KEY가 설정되지 않았습니다!"
 print("API 키가 정상적으로 로드되었습니다.")
 `````)
@@ -51,13 +87,21 @@ API 키가 준비되었으니, 이제 첫 번째 에이전트를 생성합니다
 
 #code-block(`````python
 from deepagents import create_deep_agent
-from langchain_openai import ChatOpenAI
 
-# OpenAI gpt-4.1 모델 설정
-model = ChatOpenAI(model="gpt-4.1")
+# 권장 기본 — Anthropic Claude Sonnet 4.6
+# 문자열 한 줄로 provider:model 포맷 전달
+agent = create_deep_agent(model="anthropic:claude-sonnet-4-6")
 
-# 기본 에이전트 생성
-agent = create_deep_agent(model=model)
+# (대안 1) OpenAI gpt-5.4
+# agent = create_deep_agent(model="openai:gpt-5.4")
+
+# (대안 2) Google Gemini 3.5 Flash
+# agent = create_deep_agent(model="google_genai:gemini-3.5-flash")
+
+# (대안 3) ChatModel 객체로 세밀 제어
+# from langchain_anthropic import ChatAnthropic
+# model = ChatAnthropic(model="claude-sonnet-4-6", temperature=0)
+# agent = create_deep_agent(model=model)
 
 print(f"에이전트 타입: {type(agent).__name__}")
 print("에이전트가 성공적으로 생성되었습니다!")
@@ -135,7 +179,7 @@ print(f"도구 설명: {internet_search.__doc__.strip().splitlines()[0]}")
 #code-block(`````python
 # 리서치 에이전트 생성 — 검색 도구 + 커스텀 시스템 프롬프트
 research_agent = create_deep_agent(
-    model=model,
+    model="anthropic:claude-sonnet-4-6",
     tools=[internet_search],
     system_prompt="당신은 전문 리서처입니다. 사용자의 질문에 대해 인터넷 검색을 수행하고, 결과를 정리하여 한국어로 보고서를 작성합니다.",
 )
@@ -214,7 +258,7 @@ print("리서치 에이전트가 생성되었습니다!")
   [커스텀 도구],
   [Python 함수 + docstring + 타입 힌트],
   [모델 포맷],
-  [`ChatOpenAI(model="gpt-4.1")` 또는 `"provider:model-name"`],
+  [Provider 접두 권장 — `"anthropic:claude-sonnet-4-6"`, `"openai:gpt-5.4"`, `"google_genai:gemini-3.5-flash"`. ChatModel 객체도 가능],
 )
 
 기본 에이전트의 생성과 실행을 마쳤습니다. 다음 장에서는 모델 선택, 시스템 프롬프트 작성, 구조화된 출력, 미들웨어 아키텍처 등 에이전트를 목적에 맞게 세밀하게 커스터마이징하는 방법을 다룹니다.

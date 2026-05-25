@@ -100,6 +100,91 @@ _활용 사례:_
 
 #warning-box[Python 3.10 이하에서 비동기 함수(`async def`) 안에서 `get_stream_writer()`를 사용하면 컨텍스트 전파 문제가 발생할 수 있습니다. 이 경우, 노드 함수의 파라미터에 `writer: StreamWriter`를 직접 선언하여 LangGraph가 주입하도록 하세요: `async def my_node(state: State, writer: StreamWriter):`.]
 
+== 7.8 nostream 태그 --- 내부 LLM 호출을 messages 스트림에서 제외
+
+하나의 그래프에서 사용자에게 보여줄 응답 모델과, 내부 평가·라우팅용 보조 모델을 함께 사용하는 경우가 흔합니다. 이때 보조 모델의 토큰까지 `messages` 스트림에 흘러나가면 UI가 어지러워집니다. 해결책은 보조 모델 호출에 `nostream` 태그를 부여하는 것입니다.
+
+#code-block(`````python
+from langchain_anthropic import ChatAnthropic
+
+# 보조 모델 — messages 스트림에 노출되지 않음
+internal_model = ChatAnthropic(model_name="claude-haiku-4-5-20251001").with_config(
+    {"tags": ["nostream"]}
+)
+`````)
+
+`tags=["nostream"]`이 부여된 모델은 `stream_mode="messages"`에서 자동으로 필터링됩니다. 사용자용 응답 모델만 그대로 두면, UI에는 최종 답변 토큰만 노출됩니다.
+
+== 7.9 chunk_position --- 메시지의 마지막 청크 감지
+
+`messages` 모드의 metadata에는 `chunk_position` 필드가 함께 전달됩니다. `chunk_position == "last"`인 시점에 메시지 한 건이 완결됩니다. 토큰 단위 UI 업데이트는 계속 진행하다가, last 청크에서만 DB 저장이나 후처리 트리거를 걸 수 있습니다.
+
+#code-block(`````python
+for msg, metadata in graph.stream(inputs, stream_mode="messages"):
+    if metadata.get("chunk_position") == "last":
+        # 메시지 종료 시점 — 저장/로깅/후처리
+        save_final_message(msg, node=metadata["langgraph_node"])
+        continue
+    print(msg.content, end="", flush=True)
+`````)
+
+`metadata`에서 자주 활용하는 키는 다음 세 가지입니다.
+
+- `tags` --- 모델/체인에 부여한 태그. 예: `["joke"]`, `["nostream"]`
+- `langgraph_node` --- 현재 토큰을 생성한 노드 이름
+- `chunk_position` --- `"first"`, `"middle"`, `"last"` 중 하나
+
+== 7.10 invoke v2 --- GraphOutput 반환 타입
+
+`invoke()`를 `version="v2"`로 호출하면 결과가 `GraphOutput`으로 감싸여 반환됩니다. 기존 dict 접근(`result["key"]`)도 동작하지만 deprecated 경로이므로, 새 코드는 `.value` / `.interrupts`를 사용합니다.
+
+#code-block(`````python
+from langgraph.types import GraphOutput
+
+result = graph.invoke(inputs, version="v2")
+assert isinstance(result, GraphOutput)
+
+result.value         # 최종 state (dict / Pydantic / dataclass)
+result.interrupts    # tuple[Interrupt, ...] — interrupt 없으면 빈 튜플
+
+if result.interrupts:
+    payload = result.interrupts[0].value
+    print("HITL 응답 대기:", payload)
+`````)
+
+`interrupts` 필드 덕분에 별도 분기 없이 "이번 invoke가 정상 종료인지, interrupt로 멈췄는지"를 한 줄로 판별할 수 있습니다.
+
+== 7.11 stream_events v3 --- projection 기반 재개
+
+LangGraph 1.2+에서는 raw `stream_mode` 위에 _event streaming projection_ 레이어가 추가되었습니다. `graph.stream_events(..., version="v3")`는 하나의 run stream 객체를 반환하며, 호출자는 `stream.messages` / `stream.values` / `stream.subgraphs` / `stream.output` 같은 projection만 독립적으로 소비합니다. interrupt로 멈춘 뒤 동일 API로 재개할 수 있다는 점이 v2 raw streaming과의 가장 큰 차이입니다.
+
+#code-block(`````python
+from langgraph.types import Command
+
+stream = graph.stream_events(
+    {"messages": [{"role": "user", "content": "보안 점검 시작"}]},
+    version="v3",
+)
+
+for message in stream.messages:
+    for token in message.text:
+        print(token, end="", flush=True)
+
+if stream.interrupted:
+    print("\n승인 요청:", stream.interrupts)
+    stream = graph.stream_events(
+        Command(resume={"decisions": [{"type": "approve"}]}),
+        version="v3",
+    )
+    for message in stream.messages:
+        for token in message.text:
+            print(token, end="", flush=True)
+
+final_state = stream.output  # 최종 state 단일 접근점
+`````)
+
+#tip-box[v2 raw streaming은 디버깅·custom 모드 직접 처리에, v3 `stream_events`는 애플리케이션/UI 코드와 typed projection 소비에 적합합니다. 두 API는 공존하므로, 같은 그래프를 디버깅용 v2와 서비스용 v3로 동시에 운영해도 무방합니다.]
+
 이 장에서 LangGraph의 5가지 스트리밍 모드를 모두 살펴보았습니다. `values`는 전체 상태 스냅샷, `updates`는 노드별 변경 사항, `messages`는 LLM 토큰, `custom`은 사용자 정의 데이터, `debug`는 내부 실행 상세를 제공합니다. 각 모드는 서로 다른 수준의 정보를 제공하므로, 용도에 맞게 선택하거나 조합하는 것이 중요합니다.
 
 #chapter-summary-header()

@@ -22,7 +22,7 @@ LangGraph 앱을 테스트, 배포, 모니터링하는 방법을 알아봅니다
 from dotenv import load_dotenv
 load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == 10.2 앱 구조 — langgraph.json
@@ -75,12 +75,14 @@ langgraph.json 예시:
 
 Studio는 `langgraph dev` 실행 시 자동으로 제공되는 웹 기반 디버깅 도구입니다. 그래프의 구조를 시각적으로 확인하고, 실행 과정을 단계별로 추적하며, 인터럽트 지점에서 상태를 직접 수정할 수 있습니다. 개발 과정에서 `print()` 디버깅 대신 Studio를 사용하면 에이전트의 의사결정 과정을 훨씬 직관적으로 파악할 수 있습니다.
 
-_기능:_
-- 그래프 구조 시각화 --- 노드, 엣지, 조건부 분기를 다이어그램으로 표시
-- 실시간 실행 추적 --- 현재 어떤 노드가 실행 중인지, 상태가 어떻게 변하는지 확인
-- 상태 검사 및 수정 --- 각 체크포인트의 상태를 조회하고 직접 수정 가능
-- 인터랙티브 테스트 --- UI에서 직접 입력을 보내고 결과를 확인
-- 체크포인트 탐색 (타임 트래블) --- 8장에서 배운 타임 트래블을 GUI로 수행
+_Key Features (7가지):_
++ _Real-time Visualization_ --- 프롬프트, 도구 호출, 결과, 최종 출력 등 모든 단계가 실시간으로 렌더링
++ _Interactive Testing_ --- 다양한 입력으로 실행하고 중간 상태를 UI에서 직접 검사
++ _Hot-reloading_ --- 프롬프트나 도구 시그니처 수정이 서버 재시작 없이 즉시 반영
++ _Trace Inspection_ --- 프롬프트, 도구 인자, 반환값, 토큰 수, 지연 시간 추적
++ _Exception Capture_ --- 예외 발생 시 주변 상태와 함께 캡처되어 디버깅에 활용
++ _Thread Replay_ --- 대화 스레드를 임의 지점부터 다시 실행하여 변경 검증
++ _Optional Tracing_ --- `LANGSMITH_TRACING=false`로 외부 전송 없이 로컬 실행만 유지
 
 #tip-box[LangGraph Studio는 로컬에서 `langgraph dev`를 실행할 때뿐만 아니라, LangSmith에 배포된 원격 에이전트에도 연결할 수 있습니다. 프로덕션 환경에서 발생한 문제를 Studio로 재현하고 디버깅할 수 있어, 운영 중 트러블슈팅에 매우 유용합니다.]
 
@@ -93,18 +95,29 @@ $ langgraph dev
 
 == 10.4 Agent Chat UI
 
-Studio가 개발자를 위한 디버깅 도구라면, Agent Chat UI는 사용자 관점에서 에이전트와 상호작용하는 채팅 인터페이스입니다. `langgraph dev` 서버에 연결하여 실제 사용자 경험을 시뮬레이션할 수 있습니다.
+Studio가 개발자를 위한 디버깅 도구라면, Agent Chat UI는 사용자 관점에서 에이전트와 상호작용하는 Next.js 기반 채팅 인터페이스입니다. `create_agent`로 만든 에이전트와 바로 연동되며, `langgraph dev` 서버나 배포된 서버 모두에 연결할 수 있습니다.
 
+_설치 --- npx 사용 (권장):_
 #code-block(`````bash
-$ npx @anthropic-ai/agent-chat-ui
+$ npx create-agent-chat-app --project-name my-chat-ui
+$ cd my-chat-ui
+$ pnpm install
+$ pnpm dev
 `````)
+
+_Hosted 버전:_ #link("https://agentchat.vercel.app")[agentchat.vercel.app] 에 접속해 에이전트 deployment URL이나 로컬 서버 주소를 입력합니다.
+
+_연결 정보:_
+- _Graph ID_ --- `langgraph.json`의 `graphs` 섹션 키
+- _Deployment URL_ --- 에이전트 서버 주소 (로컬은 `http://localhost:2024`)
+- _LangSmith API key_ --- 선택 (로컬 서버 사용 시 불필요)
 
 _기능:_
 - 실시간 스트리밍 채팅 --- 7장에서 다룬 토큰 단위 스트리밍을 UI로 확인
-- 도구 호출 시각화 --- 에이전트가 어떤 도구를 호출했는지 실시간 표시
-- 대화 분기 (branching) --- 대화의 특정 시점에서 다른 경로로 분기
+- 도구 호출 / 결과 렌더링 --- 에이전트가 어떤 도구를 호출했는지 실시간 표시
+- Time-travel debugging, state forking --- 대화의 특정 시점에서 다른 경로로 분기
 - Human-in-the-loop 승인 --- 8장의 인터럽트 패턴을 UI에서 직접 테스트
-- 멀티 에이전트 메시지 구분 --- 여러 에이전트의 응답을 시각적으로 구분
+- Generative UI 지원 --- 멀티 에이전트 응답을 시각적으로 구분
 
 == 10.5 테스트 --- 결정론적 에이전트 테스트
 
@@ -223,13 +236,14 @@ GenericFakeChatModel 테스트 통과!
 
 테스트를 통과한 에이전트를 실제 사용자에게 제공하려면 배포가 필요합니다. LangGraph는 세 가지 배포 옵션을 제공하며, 팀의 인프라 역량과 보안 요구사항에 따라 선택할 수 있습니다.
 
-_1. LangGraph Platform (managed):_
+_1. LangSmith Cloud (managed):_
 
-LangChain이 관리하는 클라우드 환경에 배포합니다. 인프라 관리가 필요 없어 가장 간편합니다.
+GitHub 저장소를 LangSmith Deployments에서 연결하면 자동 배포됩니다 (약 15분 소요). 배포 흐름은 다음과 같습니다:
 
-#code-block(`````bash
-$ langgraph deploy
-`````)
++ 애플리케이션 코드를 GitHub 저장소(공개/비공개)에 푸시
++ LangSmith → _Deployments_ → _"+ New Deployment"_ 클릭
++ 비공개 저장소는 GitHub 계정 연결 후 저장소 선택, 제출
++ 배포 완료 후 Studio 버튼으로 그래프 확인, Deployment details에서 API URL 복사
 
 _2. Self-hosted Docker:_
 
@@ -240,12 +254,34 @@ $ langgraph build -t my-agent
 $ docker run -p 2024:2024 my-agent
 `````)
 
-_3. LangGraph Cloud:_
+_3. 배포 후 API 호출 (Python SDK):_
 
-GitHub 리포지토리와 연동하여 코드 푸시 시 자동 배포됩니다. CI/CD 파이프라인과 자연스럽게 통합됩니다.
+배포 URL과 LangSmith API key를 전달해 동일한 SDK로 호출합니다.
 
-- GitHub 연동 자동 배포
-- https://smith.langchain.com 에서 관리
+#code-block(`````python
+from langgraph_sdk import get_sync_client
+
+client = get_sync_client(url="your-deployment-url", api_key="your-langsmith-api-key")
+
+for chunk in client.runs.stream(
+    None,                                              # thread_id=None → stateless run
+    "agent",                                           # langgraph.json의 graph name
+    input={"messages": [{"role": "human", "content": "What is LangGraph?"}]},
+    stream_mode="updates",
+):
+    print(f"Receiving new event of type: {chunk.event}...")
+    print(chunk.data)
+`````)
+
+_REST 호출:_ 배포 서버는 `X-Api-Key` 헤더로 LangSmith API key를 인증합니다.
+
+#code-block(`````bash
+curl -s --request POST \
+    --url <DEPLOYMENT_URL>/runs/stream \
+    --header 'Content-Type: application/json' \
+    --header "X-Api-Key: <LANGSMITH API KEY>" \
+    --data '{"assistant_id": "agent", "input": {"messages": [{"role": "human", "content": "What is LangGraph?"}]}, "stream_mode": "updates"}'
+`````)
 
 #tip-box[어떤 배포 옵션을 선택하든, 배포된 에이전트는 동일한 REST API를 노출합니다. 따라서 Python SDK(`langgraph-sdk`)나 HTTP 클라이언트를 사용하여 동일한 방식으로 에이전트를 호출할 수 있습니다. 개발 단계에서 `langgraph dev`로 테스트한 코드가 프로덕션에서도 동일하게 동작합니다.]
 
@@ -269,6 +305,66 @@ _자동 추적 항목:_
 - 에러 및 재시도 --- 장애 원인 분석 및 알림 설정
 
 #warning-box[프로덕션에서 LangSmith 트레이싱을 활성화하면 모든 LLM 입출력이 기록됩니다. 개인정보가 포함된 데이터를 처리하는 경우, LangSmith의 데이터 보존 정책과 조직의 개인정보 처리 방침을 반드시 확인하세요. 필요시 `hide_inputs`/`hide_outputs` 옵션으로 민감한 데이터를 필터링할 수 있습니다.]
+
+=== Selective tracing --- `tracing_context`
+
+특정 구간만 켜거나 끄려면 `langsmith.tracing_context` 컨텍스트 매니저를 사용합니다. 프로젝트 / 태그 / 메타데이터를 동적으로 지정할 수도 있습니다.
+
+#code-block(`````python
+import langsmith as ls
+
+# 이 호출만 트레이싱
+with ls.tracing_context(enabled=True):
+    agent.invoke({"messages": [{"role": "user", "content": "Send a test email"}]})
+
+# 동적 프로젝트 + 태그 + 메타데이터
+with ls.tracing_context(
+    project_name="email-agent-test",
+    enabled=True,
+    tags=["production", "email-assistant", "v1.0"],
+    metadata={"user_id": "user_123", "session_id": "session_456"},
+):
+    agent.invoke({"messages": [{"role": "user", "content": "Send a welcome email"}]})
+`````)
+
+`invoke()`의 `config` 인자로 태그/메타데이터를 한 번에 주입할 수도 있습니다.
+
+#code-block(`````python
+agent.invoke(
+    {"messages": [{"role": "user", "content": "Send a welcome email"}]},
+    config={
+        "tags": ["production", "email-assistant", "v1.0"],
+        "metadata": {"user_id": "user_123", "session_id": "session_456"},
+    },
+)
+`````)
+
+=== Data privacy --- `LangChainTracer` + `with_config`
+
+민감 정보를 트레이스에 남기지 않으려면 `LangChainTracer`에 anonymizer를 적용한 `Client`를 주입하고, 컴파일된 그래프에 `.with_config({"callbacks": [tracer]})`로 부착합니다.
+
+#code-block(`````python
+from langchain_core.tracers.langchain import LangChainTracer
+from langgraph.graph import StateGraph, MessagesState
+from langsmith import Client
+from langsmith.anonymizer import create_anonymizer
+
+anonymizer = create_anonymizer([
+    {"pattern": r"\b\d{3}-?\d{2}-?\d{4}\b", "replace": "<ssn>"},
+])
+
+tracer_client = Client(anonymizer=anonymizer)
+tracer = LangChainTracer(client=tracer_client)
+
+graph = (
+    StateGraph(MessagesState)
+    # .add_node(...).add_edge(...)
+    .compile()
+    .with_config({"callbacks": [tracer]})
+)
+`````)
+
+위 패턴은 SSN처럼 정규식으로 식별 가능한 패턴을 로깅 직전에 마스킹한 뒤 LangSmith로 전송합니다.
 
 == 10.9 Pregel 런타임 개요
 

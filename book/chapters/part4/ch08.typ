@@ -32,12 +32,12 @@ print("환경 설정 완료")
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 print(f"모델 설정 완료: {model.model_name}")
 `````)
 #output-block(`````
-모델 설정 완료: gpt-4.1
+모델 설정 완료: gpt-5.4
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -97,7 +97,7 @@ _AgentHarness_는 장기 실행 자율 에이전트를 위한 _포괄적 기능 
 #code-block(`````python
 # AgentHarness 개념 — create_deep_agent가 하네스를 조립합니다
 harness_config = {
-    "model": "gpt-4.1",
+    "model": "openai:gpt-5.4",
     "system_prompt": "당신은 프로젝트 관리 어시스턴트입니다.",
     "planning": True,         # write_todos 도구 활성화
     "filesystem": True,       # 파일시스템 도구 활성화
@@ -111,7 +111,7 @@ for key, value in harness_config.items():
 `````)
 #output-block(`````
 AgentHarness 구성 요소:
-  model: gpt-4.1
+  model: openai:gpt-5.4
   system_prompt: 당신은 프로젝트 관리 어시스턴트입니다.
   planning: True
   filesystem: True
@@ -192,7 +192,7 @@ for i, item in enumerate(todo_list, 1):
   [`ls`],
   [디렉토리 목록 (메타데이터 포함)],
   [`read_file`],
-  [파일 내용 읽기 (줄 번호 포함, 이미지 지원)],
+  [파일 내용 읽기 (줄 번호 포함, 멀티모달 — 이미지 PNG/JPG/GIF/WebP/HEIC, 비디오 MP4/MOV/AVI, 오디오 WAV/MP3/AAC/FLAC, 문서 PDF/PPT)],
   [`write_file`],
   [파일 생성],
   [`edit_file`],
@@ -315,10 +315,10 @@ for sa in subagent_config:
   text(weight: "bold")[동작],
   text(weight: "bold")[트리거],
   [_오프로딩_],
-  [20,000 토큰 초과 콘텐츠를 디스크에 저장, 포인터 참조 유지],
+  [configurable threshold (기본 20,000 토큰) 초과 콘텐츠를 디스크에 저장, 포인터 참조 유지],
   [콘텐츠 크기 기준],
   [_요약_],
-  [대화 히스토리를 구조화된 요약으로 압축],
+  [대화 히스토리를 구조화된 요약(session intent / artifacts / next steps)으로 압축. 모델 `max_input_tokens`의 약 _85%_ 도달 시 트리거하며, 최근 _10%_ 메시지는 그대로 보존. `max_input_tokens` 미설정 시 170k 토큰 fallback],
   [모델 윈도우 한계 접근 시],
 )
 
@@ -398,6 +398,39 @@ for ex in execute_examples:
 `````)
 
 #tip-box[코드 실행의 보안과 샌드박스 프로바이더 선택에 대한 심화 내용은 10장 "샌드박스와 ACP"에서 다룹니다. 이 장에서는 하네스 관점에서 `execute` 도구의 역할만 이해하면 충분합니다.]
+
+=== 두 갈래 실행: Sandbox `execute` vs QuickJS `CodeInterpreterMiddleware`
+
+하네스는 코드 실행을 두 갈래로 노출한다. 하나는 _샌드박스 백엔드_가 노출하는 셸 `execute` 도구, 다른 하나는 _interpreter 미들웨어_가 노출하는 QuickJS eval 도구다. 둘은 서로 다른 문제를 푼다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[항목],
+  text(weight: "bold")[Sandbox `execute` (셸)],
+  text(weight: "bold")[QuickJS `CodeInterpreterMiddleware`],
+  [실행 위치],
+  [에이전트 외부의 격리 환경 (Modal/Daytona/Runloop 등)],
+  [에이전트 루프 내부의 QuickJS VM],
+  [언어],
+  [셸 명령 → 임의 언어 (Python, Node, …)],
+  [JavaScript (QuickJS)],
+  [네트워크/파일시스템],
+  [기본 활성 (정책으로 제어)],
+  [기본 비활성 — bridge로 노출된 도구만],
+  [패키지 설치],
+  [`pip install`/`npm install` 가능],
+  [불가능],
+  [적합한 용도],
+  [패키지 설치·테스트 실행·대용량 데이터 처리],
+  [도구 호출 조합·서브에이전트 fan-out·구조화 데이터 변환],
+  [활성화],
+  [`backend=ModalSandbox(...)` 등 백엔드 교체],
+  [`middleware=[CodeInterpreterMiddleware(...)]` 추가],
+)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 7. Human-in-the-Loop
@@ -504,6 +537,104 @@ for scope, path in memory_config.items():
 === 메모리 설정 ===
   global: ~/.deepagents/my-agent/memories/
   project: .deepagents/AGENTS.md
+`````)
+
+#line(length: 100%, stroke: 0.5pt + luma(200))
+== 9. Harness Profiles
+
+`HarnessProfile`은 `create_deep_agent()` 호출부를 바꾸지 않고도 provider/model별 harness 기본값을 패키징한다. 시스템 프롬프트, 도구 설명 override, 제외할 도구/미들웨어, 일반 목적 서브에이전트 설정, 추가 미들웨어를 profile로 등록할 수 있다.
+
+=== `HarnessProfile` 7필드
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[필드],
+  text(weight: "bold")[의미],
+  [`base_system_prompt`],
+  [베이스 system prompt 자체를 교체],
+  [`system_prompt_suffix`],
+  [조립된 베이스 prompt 끝에 텍스트 추가],
+  [`tool_description_overrides`],
+  [도구 이름별 설명 override (mapping)],
+  [`excluded_tools`],
+  [주입 이후 이름으로 제거할 도구 집합 (set)],
+  [`excluded_middleware`],
+  [제거할 middleware 클래스 집합 (set)],
+  [`extra_middleware`],
+  [추가로 붙일 middleware 인스턴스 리스트],
+  [`general_purpose_subagent`],
+  [`GeneralPurposeSubagentProfile`로 일반 목적 서브에이전트 활성·비활성·커스터마이즈],
+)
+
+=== Merge semantics
+
+여러 profile이 매칭될 때의 병합 규칙은 다음과 같다.
+
+- 후행 profile이 선행 profile의 _scalar 필드_(예: `base_system_prompt`)를 덮어쓴다.
+- `tool_description_overrides` 같은 _mapping류_는 키 단위로 merge.
+- `excluded_tools`/`excluded_middleware` 같은 _set류_는 합집합.
+
+=== `ProviderProfile` 3필드
+
+`ProviderProfile`은 harness 동작이 아니라 `init_chat_model()`에 넘길 초기화 인자를 다룬다. credential check, provider별 기본 temperature, runtime header 구성처럼 모델 생성 전후 기본값을 묶을 때 사용한다.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[필드],
+  text(weight: "bold")[의미],
+  [`init_kwargs`],
+  [`init_chat_model()` 호출 시 전달할 기본 kwargs (예: `temperature`)],
+  [`credentials_check`],
+  [모델 초기화 전에 실행하는 자격 증명 확인 callable],
+  [`runtime_headers`],
+  [요청마다 첨부할 HTTP 헤더 매핑],
+)
+
+=== YAML/JSON 워크플로 — `HarnessProfileConfig.from_dict`
+
+`HarnessProfileConfig`는 `from_dict()`, `to_dict()`, `from_harness_profile()` 클래스 메서드를 제공한다. YAML로 profile을 관리해 코드를 건드리지 않고 운영 환경별로 다른 설정을 적용할 수 있다.
+
+#code-block(`````yaml
+# profile.yaml
+base_system_prompt: You are helpful.
+system_prompt_suffix: Respond briefly.
+excluded_tools:
+  - execute
+excluded_middleware:
+  - SummarizationMiddleware
+general_purpose_subagent:
+  enabled: false
+`````)
+
+#code-block(`````python
+import yaml
+from deepagents import HarnessProfileConfig, register_harness_profile
+
+with open("profile.yaml") as f:
+    register_harness_profile(
+        "openai:gpt-5.4",
+        HarnessProfileConfig.from_dict(yaml.safe_load(f)),
+    )
+`````)
+
+=== Entry-point 플러그인
+
+`pyproject.toml`의 entry-point로 profile을 패키지처럼 배포할 수 있다. 로드 순서는 _built-ins → entry-point plugins → 사용자 코드의 직접 `register_*_profile` 호출_ 순이다.
+
+#code-block(`````toml
+[project.entry-points."deepagents.harness_profiles"]
+"anthropic:claude-sonnet-4-6" = "my_pkg.profiles:claude_profile"
+
+[project.entry-points."deepagents.provider_profiles"]
+"openai" = "my_pkg.profiles:openai_provider"
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))

@@ -17,17 +17,23 @@
 == 1. What Is Deep Agents?
 
 _Deep Agents_ is an _Agent Harness_ framework created by the LangChain team.
-It makes it easier to build autonomous agents for complex multi-step tasks by including the following capabilities out of the box:
+It makes it easier to build autonomous agents for complex multi-step tasks by including the following _11 core capabilities_ out of the box:
 
-- _Task planning_ — break complex problems into manageable steps
-- _Filesystem management_ — read, write, and search files in virtual or local environments
-- _Subagent delegation_ — distribute work to specialized agents
-- _Long-term memory_ — retain knowledge across conversations
-- _Context management_ — manage information efficiently within the model's token budget
+- _Task planning_ — `write_todos` breaks complex problems into a structured task list
+- _Filesystem management_ — read, write, and search files (`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`)
+- _Filesystem permissions_ — per-path ACL with `allow_read` / `allow_write` / `deny_read` etc.
+- _Subagent delegation_ — distribute work via the `task` tool
+- _Long-term memory + skills_ — `AGENTS.md` (`memory`) and `SKILL.md` (`skills`) with progressive disclosure
+- _Context management_ — automatic offloading and summarization within the token budget
+- _QuickJS interpreter_ — sandboxed JS interpreter (`use_interpreter=True`) for arbitrary computation
+- _Sandbox execution_ — Modal, Daytona, Deno, and local Virtual FS backends
+- _Human-in-the-loop_ — per-tool approval gates with `interrupt_on={"tool_name": True}`
+- _Customization hooks_ — `before_model` / `after_model` / `wrap_model_call` middleware hooks
+- _Context propagation_ — subagent-specific config via `context_schema` and namespace keys (`"agent:key"`)
 
 It is built on top of LangChain's core agent components, and it uses _LangGraph_ as its execution engine.
 
-#tip-box[_Model setup used in this course_: These materials use the _OpenAI gpt-4.1_ model. Set the `OPENAI_API_KEY` environment variable and use `ChatOpenAI(model="gpt-4.1")`.]
+#tip-box[_Model setup used in this course_: The recommended default for Deep Agents is _Anthropic Claude Sonnet 4.6_ (`anthropic:claude-sonnet-4-6`). OpenAI examples use `openai:gpt-5.4`, Google examples use `google_genai:gemini-3.5-flash`. The `provider:model` prefix form is preferred; set the matching `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY`.]
 
 
 === Architecture Overview
@@ -36,44 +42,51 @@ It is built on top of LangChain's core agent components, and it uses _LangGraph_
 
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
-== 2. SDK vs CLI
+== 2. SDK vs Code vs ACP
 
-Deep Agents is available in two forms:
+Deep Agents ships _three interfaces_ on top of the same `AgentHarness` engine:
 
 #table(
-  columns: 3,
+  columns: 4,
   align: left,
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[Category],
   text(weight: "bold")[Deep Agents SDK],
-  text(weight: "bold")[Deep Agents CLI],
+  text(weight: "bold")[Deep Agents Code],
+  text(weight: "bold")[ACP server],
   [_Package_],
   [`deepagents`],
   [`deepagents-cli`],
+  [`deepagents-cli` (`--acp`)],
   [_Purpose_],
   [Build agents programmatically],
   [Use a coding agent directly from the terminal],
+  [Speak the Agent Client Protocol to external clients],
   [_Install_],
-  [`pip install deepagents`],
+  [`pip install -qU deepagents langchain-{provider}`],
+  [`uv tool install deepagents-cli`],
   [`uv tool install deepagents-cli`],
   [_Usage_],
   [Call `create_deep_agent()` from Python],
-  [Run `deepagents-cli` in the terminal],
+  [Run `deepagents` in the terminal],
+  [`deepagents --acp`; clients connect over stdio],
   [_Customization_],
   [Full API access (tools, backends, middleware)],
-  [Config files + slash commands],
+  [`.deepagents/config.json` + slash commands],
+  [Same config exposed over ACP],
   [_Best fit_],
-  [App integrations and automation pipelines],
+  [App integrations, automation pipelines, custom agent services],
   [Interactive coding assistance],
+  [Zed, custom IDE clients, third-party shells],
 )
 
-#tip-box[In this course, we focus primarily on the _SDK_.]
+#tip-box[In this course we focus on the _SDK_. Deep Agents Code and the ACP server are covered later in Part 4. Choose the LangChain integration package for your provider — for example `pip install -qU deepagents langchain-anthropic` or `pip install -qU deepagents langchain-openai`.]
 
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
-== 3. Five Core Concepts
+== 3. Five Core Concepts (Planning · Context Management · Backends · Subagents · Memory & Skills)
 
 === 3.1 Planning
 The agent uses the `write_todos` tool to break complex work into a _structured task list_.
@@ -86,10 +99,12 @@ Deep Agents manages large amounts of information generated during a task:
 
 === 3.3 Backends
 The agent filesystem is implemented with _pluggable backends_:
-- `StateBackend` — store files in the agent state (ephemeral)
-- `FilesystemBackend` — access the local disk
-- `StoreBackend` — cross-thread persistent storage
-- `CompositeBackend` — route paths to different backends
+- `StateBackend` — store files in agent state (ephemeral, default)
+- `FilesystemBackend` — local disk, with `virtual_mode=True` blocking `..` / `~` / paths outside `root_dir`
+- `StoreBackend` — cross-thread persistent storage via LangGraph `BaseStore`
+- `CompositeBackend` — route prefixes to different backends (for example `/memories/` → persistent)
+- `ContextHubBackend` — lazy fetch + write-through remote sync (`deepagents>=0.5.2`), with `namespace=lambda rt: ...`
+- Sandbox backends — _Modal_, _Daytona_, _Deno_, local _VFS_ for isolated file and code execution; the QuickJS interpreter (`use_interpreter=True`) is a complementary middleware
 
 === 3.4 Subagents
 The main agent can delegate specialized work to _subagents_. Each subagent can be given:
@@ -98,10 +113,11 @@ The main agent can delegate specialized work to _subagents_. Each subagent can b
 - A separate context window
 - A restricted toolset
 
-=== 3.5 Memory
-Deep Agents inherits LangGraph's memory model and supports both:
+=== 3.5 Memory & Skills
+Deep Agents inherits LangGraph's memory model and adds skill loading:
 - _Short-term memory_ — message history within a thread
-- _Long-term memory_ — reusable information across threads
+- _Long-term memory_ — `AGENTS.md` (`memory` parameter) always injected, `StoreBackend` for cross-thread state
+- _Skills_ — `SKILL.md` files loaded via _progressive disclosure_ (`skills` parameter) so only frontmatter is loaded upfront, with full content fetched on demand
 
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -160,6 +176,22 @@ Deep Agents is especially strong when you want to build agents that need _planni
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 5. Installation Check
+
+Install `deepagents` together with the LangChain integration package for your chosen provider:
+
+#code-block(`````bash
+# Recommended default — Anthropic
+pip install -qU deepagents langchain-anthropic
+
+# OpenAI
+pip install -qU deepagents langchain-openai
+
+# Google Gemini
+pip install -qU deepagents langchain-google-genai
+
+# OpenRouter (OpenAI-compatible)
+pip install -qU deepagents langchain-openai  # just change base_url
+`````)
 
 Run the cells below to verify that the `deepagents` package is installed correctly.
 
@@ -220,10 +252,10 @@ for name, param in sig.parameters.items():
   [`create_deep_agent()`],
   [Execution engine],
   [LangGraph (`CompiledStateGraph`)],
-  [Model used here],
-  [_OpenAI gpt-4.1_ via `ChatOpenAI(model="gpt-4.1")`],
+  [Recommended model],
+  [_Anthropic Claude Sonnet 4.6_ via `"anthropic:claude-sonnet-4-6"` (OpenAI: `"openai:gpt-5.4"`)],
   [Core concepts],
-  [Planning, Context Management, Backends, Subagents, Memory],
+  [Planning, Context Management, Backends, Subagents, Memory & Skills],
   [Built-in tools],
   [`write_todos`, `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`],
 )

@@ -85,7 +85,7 @@ This `model` object will be used repeatedly in subsequent Note books.
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 print("✓ Model setup complete:", model.model_name)
 `````)
 
@@ -111,7 +111,7 @@ print("✓ Model response:", response.content)
   [Environment Variables],
   [Load file `.env` into `load_dotenv()`],
   [model],
-  [`ChatOpenAI(model="gpt-4.1")`],
+  [`ChatOpenAI(model="gpt-5.4")`],
   [test],
   [`model.invoke("...")` → Check response],
 )

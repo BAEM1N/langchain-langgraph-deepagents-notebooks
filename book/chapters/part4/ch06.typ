@@ -28,10 +28,10 @@ print("환경 설정 완료")
 `````)
 
 #code-block(`````python
-# OpenAI gpt-4.1 모델 설정
+# OpenAI gpt-5.4 모델 설정
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 환경 설정을 마쳤으므로, 왜 장기 메모리가 필요한지부터 이해한 뒤 구현 방법으로 넘어간다.
@@ -60,6 +60,7 @@ model = ChatOpenAI(model="gpt-4.1")
 from deepagents import create_deep_agent
 from deepagents.backends import StateBackend, StoreBackend, CompositeBackend, FilesystemBackend
 from langgraph.store.memory import InMemoryStore
+from langgraph.store.postgres import PostgresStore   # 프로덕션용
 from langgraph.checkpoint.memory import MemorySaver
 
 
@@ -69,11 +70,14 @@ checkpointer = MemorySaver()     # 에이전트 상태 유지
 
 
 # 2. CompositeBackend 팩토리 — /memories/만 영속, 나머지는 에페메럴
+#    StoreBackend는 namespace lambda로 스코프를 명시적으로 지정한다.
 def memory_backend_factory(runtime):
     return CompositeBackend(
         default=StateBackend(runtime),
         routes={
-            "/memories/": StoreBackend(runtime),
+            "/memories/": StoreBackend(
+                namespace=lambda rt: (rt.context.user_id,),
+            ),
         },
     )
 
@@ -189,7 +193,7 @@ print(f"임시 디렉토리 생성: {tmp_dir}")
 
 === SKILL.md 구조
 
-다음은 `SKILL.md` 파일의 전체 구조이다. YAML 프론트매터(`---`로 감싼 부분)에는 스킬 메타데이터를, 그 아래 마크다운 본문에는 에이전트가 따라야 할 상세 지침을 작성한다.
+다음은 `SKILL.md` 파일의 전체 구조이다. YAML 프론트매터(`---`로 감싼 부분)에는 스킬 메타데이터를, 그 아래 마크다운 본문에는 에이전트가 따라야 할 상세 지침을 작성한다. 프론트매터의 `module` 필드는 interpreter용 스킬(QuickJS `CodeInterpreterMiddleware`에서 로드)일 때만 지정하며, 일반 텍스트 스킬에서는 생략한다.
 
 #code-block(`````yaml
 ---
@@ -199,6 +203,7 @@ description: >               # 설명 (최대 1024자) — 매칭에 사용
   정보 수집, 검증, 정리까지의 전체 워크플로를 다룹니다.
 license: MIT
 compatibility: Python 3.8+
+module: ./web_research.js    # (선택) interpreter 스킬일 때만
 metadata:
   category: research
 allowed-tools: ls read_file write_file
@@ -283,6 +288,38 @@ subagent = {
 
 #tip-box[서브에이전트에 스킬을 부여할 때는 _최소 권한 원칙_을 따르라. 리뷰 전문 서브에이전트에 배포 관련 스킬까지 주면 불필요한 토큰 소비와 혼란이 발생한다. 각 서브에이전트의 역할에 딱 맞는 스킬만 할당하라.]
 
+=== Skills 백엔드 지원 매트릭스
+
+스킬 소스 디렉토리는 `StateBackend`/`StoreBackend`/`FilesystemBackend`/`CompositeBackend` 어느 곳에든 둘 수 있지만, 각 백엔드는 다른 운영 특성을 가진다. 다음 표가 선택 기준이다.
+
+#table(
+  columns: 4,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[백엔드],
+  text(weight: "bold")[지속성],
+  text(weight: "bold")[공유 범위],
+  text(weight: "bold")[권장 용도],
+  [`StateBackend`],
+  [Thread-local (에페메럴)],
+  [현재 스레드],
+  [임시 실험·테스트],
+  [`StoreBackend`],
+  [영속 (DB-backed)],
+  [namespace 단위 (user/org/assistant)],
+  [팀·사용자 공유 스킬],
+  [`FilesystemBackend`],
+  [영속 (디스크)],
+  [호스트 디렉토리],
+  [Git에 커밋된 표준 스킬],
+  [`CompositeBackend`],
+  [경로별로 라우팅],
+  [경로별로 분리],
+  [`/skills/base` + `/skills/user/`처럼 계층 구성],
+)
+
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 6.10 장기 기억 유형 분류 (0.5 기준)
 
@@ -314,9 +351,29 @@ Deep Agents 0.5는 저장되는 정보를 세 범주로 구분해 관리합니�
 
 예: 장시간 누적 선호는 `/memories/`(semantic) + 일화적 사례 검색은 checkpointer(episodic) + 반복 절차는 skill(procedural).
 
-=== 스코프 패턴: agent-scoped vs user-scoped
+=== 스코프 패턴: agent-scoped / user-scoped / context-driven
 
-`StoreBackend`의 `namespace` 함수가 반환하는 튜플이 곧 메모리의 스코프입니다. 가장 흔한 두 패턴은 다음과 같습니다.
+`StoreBackend`의 `namespace` 함수가 반환하는 튜플이 곧 메모리의 스코프입니다. 다음 세 패턴이 가장 자주 쓰입니다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[패턴],
+  text(weight: "bold")[namespace 예],
+  text(weight: "bold")[적합한 용도],
+  [Agent-scoped],
+  [`(rt.server_info.assistant_id,)`],
+  [조직 공통 컨벤션·도메인 지식 (사용자 간 공유)],
+  [User-scoped],
+  [`(rt.server_info.user.identity,)`],
+  [개인화 어시스턴트의 기본값 — 사용자별 완전 격리],
+  [Context-driven],
+  [`(rt.context.user_id, rt.context.project_id)`],
+  [`context_schema`에 선언한 키로 다차원 격리],
+)
 
 *Agent-scoped — 공통 정체성 축적.* 네임스페이스가 `(assistant_id,)`. 같은 assistant를 쓰는 _모든 사용자 대화_가 같은 메모리를 공유합니다. 조직 공통 컨벤션·도메인 지식에 적합하며, 사용자 간 정보가 섞이므로 _민감 정보 저장 금지_.
 

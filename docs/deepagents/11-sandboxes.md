@@ -11,6 +11,8 @@
 | `langchain-modal` | Modal | ML/AI 워크로드, GPU 지원 |
 | `langchain-daytona` | Daytona | TypeScript/Python, 빠른 콜드 스타트 |
 | `langchain-runloop` | Runloop | 일회용 devbox 기반 격리 |
+| `langsmith[sandbox]` | LangSmith | LangSmith Deployments 통합 (private beta) |
+| `langchain-agentcore-codeinterpreter` | AgentCore | AWS Bedrock 기반 코드 인터프리터 |
 
 ## 통합 패턴
 
@@ -169,11 +171,21 @@ Runloop은 일회용 devbox 패턴으로, 세션별 완전 격리가 기본값�
 
 ## 라이프사이클 관리
 
-샌드박스는 **명시적으로 종료**해야 비용이 누적되지 않는다.
+샌드박스는 **명시적으로 종료**해야 비용이 누적되지 않는다. 운영 모드는 두 가지다.
 
-- 단발성 작업: `try/finally`로 즉시 종료
-- 채팅/장기 세션: 대화 스레드당 고유 샌드박스를 두고 **TTL로 자동 정리**
-- LangSmith Deployment에서 운영할 때는 세션 종료 훅에 종료 로직을 연결
+### Thread-scoped (기본)
+
+대화 thread 하나당 샌드박스 하나. 첫 run에서 생성, 같은 thread의 다음 turn에서 재사용. idle TTL 로 자동 정리한다.
+
+### Assistant-scoped
+
+같은 assistant 의 모든 thread 가 샌드박스 하나를 공유. 파일·패키지·레포지토리가 대화 사이에 누적된다. **주의**: 누적 상태가 무한정 늘어나므로 반드시 TTL 또는 주기적 스냅샷을 설정한다.
+
+### 운영 체크리스트
+
+- 단발성 스크립트 실행: `try/finally`로 즉시 종료
+- 채팅/장기 세션: 대화 thread 당 고유 샌드박스를 두고 TTL로 자동 정리
+- LangSmith Deployments 에서 운영할 때는 세션 종료 훅에 종료 로직을 연결
 
 ## 관련 문서
 

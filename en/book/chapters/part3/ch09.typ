@@ -15,7 +15,7 @@ Modularize complex workflow with subgraphs.
 from dotenv import load_dotenv
 load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4-mini")
 `````)
 
 == 9.2 Subgraph concept
@@ -48,6 +48,87 @@ Organize the full text agent into subgraphs.
 == 9.6 Subgraph streaming
 
 Steps inside a subgraph are also streaming possible.
+
+With v2 streaming (`version="v2"`) subgraph chunks arrive as a uniform `StreamPart` dict. Three fields cover everything:
+
+#code-block(`````python
+for chunk in graph.stream(
+    {"foo": "foo"},
+    subgraphs=True,
+    stream_mode="updates",
+    version="v2",
+):
+    print(chunk["type"])  # "updates"
+    print(chunk["ns"])    # () = root, ("node_2:<id>",) = subgraph
+    print(chunk["data"])  # {"node_name": {"key": "value"}}
+`````)
+
+- `chunk["type"]` — mode identifier (`"updates"`, `"values"`, `"messages"`, ...)
+- `chunk["ns"]` — namespace tuple. `()` for root, `("node_2:<uuid>",)` for a subgraph
+- `chunk["data"]` — mode-specific payload
+
+#tip-box[In v1 the return shape changed (tuple vs dict) depending on `subgraphs=True`. v2 always returns the same dict, so root- and subgraph-handling code can be unified.]
+
+=== Subgraph checkpointer — three modes
+
+The `checkpointer=` argument on subgraph compile controls memory and interrupt behavior.
+
+#table(
+  columns: 4,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Mode],
+  text(weight: "bold")[`checkpointer=`],
+  text(weight: "bold")[Behavior],
+  text(weight: "bold")[Fit],
+  [Per-invocation (default)],
+  [`None`],
+  [Fresh per call; inherits parent's checkpointer for interrupts within a single invocation],
+  [Tool-wrapped subagents, multi-agent routing],
+  [Per-thread (stateful)],
+  [`True`],
+  [Accumulates state across calls on the same thread],
+  [Specialized subagents with long-running conversation],
+  [Stateless],
+  [`False`],
+  [No checkpointing — plain function call; no interrupt support],
+  [Pure transforms with no side effects],
+)
+
+#warning-box[Per-thread subgraphs do not support _parallel tool calls_. When the LLM tries to invoke the same subagent in parallel, both calls write to the same namespace and conflict. Use `ToolCallLimitMiddleware(tool_name="...", run_limit=1)` to cap simultaneous invocations.]
+
+=== Namespace isolation — multiple per-thread subgraphs
+
+When several per-thread subgraphs coexist, wrap each one in its own `StateGraph` with a unique node name so namespaces don't collide. `StateGraph(MessagesState).add_node(name, agent)` is the standard pattern.
+
+#code-block(`````python
+from langgraph.graph import MessagesState, StateGraph
+from langchain.agents import create_agent
+
+def create_sub_agent(model, *, name, **kwargs):
+    agent = create_agent(model=model, name=name, **kwargs)
+    return (
+        StateGraph(MessagesState)
+        .add_node(name, agent)          # unique name → stable namespace
+        .add_edge("__start__", name)
+        .compile()
+    )
+
+fruit_agent = create_sub_agent(
+    "gpt-5.4-mini", name="fruit_agent",
+    tools=[fruit_info], prompt="You are a fruit expert.",
+    checkpointer=True,
+)
+veggie_agent = create_sub_agent(
+    "gpt-5.4-mini", name="veggie_agent",
+    tools=[veggie_info], prompt="You are a veggie expert.",
+    checkpointer=True,
+)
+`````)
+
+Each subagent writes checkpoints only under its own name, so subgraphs never collide.
 
 == 9.7 Summary
 

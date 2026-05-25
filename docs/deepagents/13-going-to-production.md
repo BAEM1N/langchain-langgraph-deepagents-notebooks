@@ -13,14 +13,24 @@
 
 이 세 개념 위에서 관리해야 할 영역이 다음 10개다. 각 영역은 독립적으로 도입 가능하며, 리스크 프로파일에 따라 선택적으로 적용한다.
 
-## 1. LangSmith Deployments
+## 1. 배포 옵션: Managed vs Self-hosted Deployments
 
-`deepagents deploy` CLI 또는 LangSmith Deployment를 통해 배포하면 다음 인프라가 자동 프로비저닝된다.
+배포 경로는 두 가지다.
+
+- **Managed Deep Agents** (private preview, 권장 기본값) — LangSmith가 호스팅하는 API-first 런타임. 에이전트 설정·도구·런타임 옵션이 LangSmith 안에 패키징되어 인프라 셋업 없이 곧바로 멀티테넌트 운영이 가능하다.
+- **LangSmith Deployments** — 커스텀 애플리케이션 코드, 고급 인증, 전체 Agent Server API가 필요한 팀용. 직접 배포 코드를 들고 가되 다음 인프라는 자동 프로비저닝된다.
+
+LangSmith Deployments에서 자동으로 따라오는 인프라:
 
 - Assistants / Threads / Runs API
 - Store + Checkpointer (퍼시스턴스)
 - 인증, Webhook, Cron, Observability
 - MCP/A2A 노출 옵션
+
+두 경로 모두 invoke 시 다음 두 가지를 명시적으로 넘긴다.
+
+- **`thread_id`** — 대화 식별자. 메시지 히스토리 영속화·재개의 단위.
+- **`context`** — run 단위 데이터(user_id, API 키, feature flag 등). 도구·미들웨어에서 `runtime.context`로 접근.
 
 `langgraph.json` 최소 설정:
 
@@ -118,7 +128,7 @@ from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
 
 agent = create_deep_agent(
-    model="google_genai:gemini-3.1-pro-preview",
+    model="google_genai:gemini-3.5-flash",
     backend=CompositeBackend(
         default=StateBackend(),
         routes={
@@ -194,7 +204,7 @@ async def agent(config: RunnableConfig):
             )
         )
     return create_deep_agent(
-        model="google_genai:gemini-3.1-pro-preview",
+        model="google_genai:gemini-3.5-flash",
         backend=DaytonaSandbox(sandbox=sandbox),
     )
 ```
@@ -213,7 +223,7 @@ async def agent(config: RunnableConfig):
             CreateSandboxFromSnapshotParams(labels={"assistant_id": assistant_id})
         )
     return create_deep_agent(
-        model="google_genai:gemini-3.1-pro-preview",
+        model="google_genai:gemini-3.5-flash",
         backend=DaytonaSandbox(sandbox=sandbox),
     )
 ```
@@ -252,7 +262,7 @@ from langchain.agents.middleware import (
 )
 
 agent = create_deep_agent(
-    model="google_genai:gemini-3.1-pro-preview",
+    model="google_genai:gemini-3.5-flash",
     middleware=[
         ModelCallLimitMiddleware(run_limit=50),
         ToolCallLimitMiddleware(run_limit=200),
@@ -283,10 +293,10 @@ from langchain.agents.middleware import (
 )
 
 agent = create_deep_agent(
-    model="google_genai:gemini-3.1-pro-preview",
+    model="google_genai:gemini-3.5-flash",
     middleware=[
         ModelRetryMiddleware(max_retries=3, backoff_factor=2.0, initial_delay=1.0),
-        ModelFallbackMiddleware("gpt-4.1"),   # 다른 프로바이더로 fallback
+        ModelFallbackMiddleware("gpt-5.4"),   # 다른 프로바이더로 fallback
         ToolRetryMiddleware(
             max_retries=2,
             tools=["search", "fetch_url"],
@@ -304,7 +314,7 @@ agent = create_deep_agent(
 from langchain.agents.middleware import PIIMiddleware
 
 agent = create_deep_agent(
-    model="google_genai:gemini-3.1-pro-preview",
+    model="google_genai:gemini-3.5-flash",
     middleware=[
         PIIMiddleware("email", strategy="redact", apply_to_input=True),
         PIIMiddleware("credit_card", strategy="mask", apply_to_input=True),

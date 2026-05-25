@@ -19,8 +19,9 @@ The agent uses **progressive disclosure**: it reads skill descriptions in frontm
 **Frontmatter fields in SKILL.md:**
 - `name`: Skill identifier
 - `description`: Task-matching criteria (max 1024 characters)
+- `module`: Optional path to a Python/TypeScript file exposed to the interpreter (interpreter skills only)
 - `license`, `compatibility`, `metadata`, `allowed-tools`: Optional metadata
-- File size limit: 10 MB per skill
+- File size limit: 10 MB per skill (oversized files are skipped during loading)
 
 ## Usage Patterns
 
@@ -31,14 +32,22 @@ agent = create_deep_agent(
 )
 ```
 
-Three backend options support skills:
-- **StateBackend**: Seed files via `invoke(files={...})`
-- **StoreBackend**: Store in InMemoryStore
-- **FilesystemBackend**: Load from disk
+Four backend options support skills:
+- **StateBackend**: Seed files via `invoke(files={...})` with `create_file_data()`
+- **StoreBackend**: Load skills from persistent storage namespaces (`InMemoryStore`, `PostgresStore`)
+- **FilesystemBackend**: Read skills from disk relative to the agent's root directory
+- **CompositeBackend**: Route skill files to one backend (typically `StoreBackend`) while delegating execution to another (e.g., a sandbox)
 
 ## Source Precedence
 
-When multiple sources contain same-named skills, the last listed source wins. This enables layering from different origins.
+When multiple sources contain same-named skills, the skill from the source listed later in the `skills` array takes precedence (last one wins). This enables layering from different origins in order of importance.
+
+## Code Execution Patterns
+
+Skills support two complementary code-execution shapes.
+
+- **Interpreter skills**: Expose importable functions to the interpreter through the `module` frontmatter field. Use for reusable, deterministic helpers — parsing, validation, scoring, normalization — that must produce consistent results across invocations.
+- **Sandbox script execution**: Run scripts that need dependencies, CLI tools, or OS filesystem access. Requires syncing skill files into the sandbox via custom middleware before agent startup (see `11-sandboxes.md`).
 
 ## Subagent Skills
 
@@ -49,9 +58,10 @@ When multiple sources contain same-named skills, the last listed source wins. Th
 
 | Aspect | Skills | Memory |
 |--------|--------|--------|
-| **Loading** | On-demand via relevance | Always loaded |
-| **Format** | `SKILL.md` | `AGENTS.md` |
-| **Best for** | Large, task-specific contexts | Always-relevant conventions |
+| **Loading** | On-demand via progressive disclosure | Always injected into system prompt |
+| **Format** | `SKILL.md` in named directories | `AGENTS.md` files |
+| **Layering** | Last source wins | User + project combined |
+| **Best for** | Large, task-specific contexts; bundled capabilities | Always-relevant project conventions |
 
 ## Design Recommendations
 

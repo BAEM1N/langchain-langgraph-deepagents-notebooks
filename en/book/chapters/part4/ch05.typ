@@ -26,12 +26,10 @@ print("Environment setup complete")
 `````)
 
 #code-block(`````python
-# Configure the OpenAI gpt-4.1 model
-from langchain_openai import ChatOpenAI
+# Recommended default — Anthropic Claude Sonnet 4.6
+model = "anthropic:claude-sonnet-4-6"
 
-model = ChatOpenAI(model="gpt-4.1")
-
-print(f"Model configured: {model.model_name}")
+print(f"Model configured: {model}")
 
 `````)
 
@@ -53,6 +51,21 @@ When too much intermediate data builds up in the main context, the agent can los
 
 The main agent receives only a _short summary_, so its context stays compact and focused.
 
+
+=== `SubAgentMiddleware` is auto-attached
+
+Subagent support is implemented by _`SubAgentMiddleware`_. `create_deep_agent()` always attaches this middleware regardless of whether you pass `subagents`, and it _cannot be removed_ via `excluded_middleware`. If you do not declare any subagents, a built-in `general-purpose` subagent registers automatically so the `task` tool is always available.
+
+=== TodoList + `task` dispatch pattern
+
+The canonical loop looks like this:
+
++ The main agent calls `write_todos` to break the work into a _structured list_, for example `[research, analyze, write]`
++ For each TODO the main agent calls the _`task` tool_ to dispatch the item to the right subagent
++ The subagent runs in an _isolated context_ and returns only a _compressed result_
++ The main agent moves to the next TODO or composes the final answer
+
+This _`write_todos` → `task` → compressed result_ pattern is the core delegation cycle in Deep Agents. The main context only accumulates the todo list and the compressed results, which keeps token usage efficient.
 
 === When to Use a Subagent
 
@@ -128,6 +141,12 @@ A `SubAgent` is defined as a dictionary.
   [`skills`],
   [`list[str]`],
   [Skill source paths],
+  [`response_format`],
+  [`BaseModel`],
+  [Structured-output schema (`deepagents>=0.5.3`)],
+  [`permissions`],
+  [`Permissions`],
+  [Per-path ACL — restrict the subagent's filesystem access],
 )
 
 
@@ -278,6 +297,21 @@ config = {
 }
 `````)
 
+=== Identifying subagents during streaming — `lc_agent_name`
+
+When you stream tokens through `agent.stream(..., stream_mode="messages")` or `astream_events()`, each event's _metadata_ includes the `lc_agent_name` key. Use it to label UI output as "researcher searching...", "analyzer summarizing...", and similar.
+
+#code-block(`````python
+# Identify which subagent is emitting tokens during streaming
+async for event in main_agent.astream_events(
+    {"messages": [{"role": "user", "content": "..."}]},
+    version="v2",
+):
+    name = event.get("metadata", {}).get("lc_agent_name")
+    if event["event"] == "on_chat_model_stream" and name:
+        print(f"[{name}] {event['data']['chunk'].content}", end="")
+`````)
+
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 6. Multi-Subagent Pipelines
@@ -353,13 +387,17 @@ Do not create subagents for tasks that the main agent can solve directly in one 
   [Why subagents matter],
   [They solve context bloat and enable specialization],
   [Basic definition],
-  [Subagent dictionary with `name`, `description`, `system_prompt`, and `tools`],
+  [Subagent dictionary with `name`, `description`, `system_prompt`, `tools` plus optional `response_format` / `permissions`],
   [Advanced form],
   [`CompiledSubAgent` wraps a precompiled runnable],
   [Built-in fallback],
-  [Deep Agents provides a default `general-purpose` subagent],
+  [`SubAgentMiddleware` is always attached (not removable); a default `general-purpose` subagent fills the slot],
+  [Dispatch pattern],
+  [`write_todos` → `task()` → compressed result],
   [Context propagation],
-  [Runtime context is inherited automatically],
+  [Runtime context is inherited; namespace keys (`"agent:key"`) target specific subagents],
+  [Streaming],
+  [`lc_agent_name` in event metadata identifies the active subagent],
   [Pipeline pattern],
   [Subagents can be chained into collect → analyze → write workflows],
 )

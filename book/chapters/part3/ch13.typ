@@ -26,7 +26,7 @@ Part 3의 마지막 장입니다. 12개 장에 걸쳐 `Graph API`와 `Functional
 from dotenv import load_dotenv
 load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == 13.2 Graph API vs Functional API 개요
@@ -320,11 +320,27 @@ Pregel 결과: {'b': 'foofoo'}
 
 == 13.10 채널 타입
 
-Pregel의 가장 핵심적인 추상화는 채널입니다. 채널은 Graph API의 상태 필드와 리듀서에 정확히 대응됩니다. Pregel은 세 가지 채널 타입을 제공하며, 각각 Graph API에서 익숙한 패턴과 1:1로 매핑됩니다.
+Pregel의 가장 핵심적인 추상화는 채널입니다. 채널은 Graph API의 상태 필드와 리듀서에 정확히 대응됩니다. Pregel은 5가지 채널 타입을 제공합니다.
 
-- `LastValue`: 리듀서 없는 필드에 대응합니다. 새 값이 들어오면 이전 값을 단순히 덮어씁니다.
-- `Topic`: `operator.add` 리듀서에 대응합니다. 새 값이 들어올 때마다 리스트에 누적됩니다.
-- `BinaryOperatorAggregate`: 커스텀 리듀서에 대응합니다. 두 값을 결합하는 함수를 직접 지정합니다.
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Type],
+  text(weight: "bold")[Purpose],
+  [`LastValue`],
+  [가장 최근 값을 저장. 입력/출력에 적합한 기본 채널],
+  [`EphemeralValue`],
+  [실행 step 내부에서만 유효한 임시 값],
+  [`Topic`],
+  [설정 가능한 PubSub. 다중 값 + optional 중복 제거 / 누적],
+  [`BinaryOperatorAggregate`],
+  [현재 값과 업데이트에 binary operator 적용 (러닝 토탈 등)],
+  [_`DeltaChannel`_ (beta, `langgraph≥1.2`)],
+  [step별 incremental delta만 저장. 자주 쓰이고 빠르게 자라는 채널(메시지 리스트 등)에 적합],
+)
 
 #tip-box[Graph API에서 `Annotated[list, operator.add]` 타입 힌트를 사용하면, 내부적으로 Pregel의 `BinaryOperatorAggregate` 채널이 생성됩니다. Graph API의 "리듀서"라는 개념이 Pregel 레벨에서는 "채널 타입"으로 표현되는 것입니다. 이 대응 관계를 이해하면 Graph API의 상태 관리 동작을 더 정확히 예측할 수 있습니다.]
 
@@ -421,6 +437,33 @@ Topic: {'c': ['foofoo', 'foofoofoofoo']}
 BinaryOperatorAggregate: {'c': 'foofoo | foofoofoofoo'}
 `````)
 
+=== DeltaChannel (beta, `langgraph≥1.2`)
+
+`DeltaChannel`은 매 step의 full 누적값이 아니라 _incremental delta만 저장_합니다. 메시지 리스트처럼 자주 쓰이고 무한히 자라는 채널의 checkpoint 비용을 줄이는 데 사용합니다.
+
+- Reducer는 _associative_해야 하며, _write 시점이 아니라 reconstruction 시점_에 실행됩니다.
+- `snapshot_frequency=K`로 K step마다 full snapshot을 한 번 기록해 reconstruction 비용을 제한합니다.
+- Bulk reducer 시그니처는 `(current_state, sequence_of_writes) -> new_state` 입니다.
+
+#code-block(`````python
+from typing import Annotated, Sequence
+from typing_extensions import TypedDict
+from langgraph.channels import DeltaChannel
+
+def list_reducer(state: list, writes: Sequence[list]) -> list:
+    # (current_state, sequence_of_writes) -> new_state
+    result = list(state)
+    for write in writes:
+        result.extend(write)
+    return result
+
+class State(TypedDict):
+    messages: Annotated[
+        list[str],
+        DeltaChannel(list_reducer, snapshot_frequency=5),
+    ]
+`````)
+
 == 13.11 슈퍼스텝 실행 모델
 
 채널 타입을 이해했다면, 이제 Pregel이 이 채널들을 어떻게 조율하여 그래프를 실행하는지 살펴봅시다. Pregel은 _슈퍼스텝(Super-step)_ 단위로 실행됩니다. 슈퍼스텝은 Pregel 실행의 기본 시간 단위로, 각 슈퍼스텝에서 실행 준비가 된 모든 노드(액터)가 _병렬로_ 실행됩니다. 모든 노드의 실행이 완료되면 채널이 업데이트되고, 그 후에야 다음 슈퍼스텝이 시작됩니다.
@@ -493,7 +536,7 @@ Part 3 전체를 통해 LangGraph의 모든 핵심 개념을 다루었습니다.
   [Pregel],
   [LangGraph의 내부 실행 엔진, 액터-채널 모델],
   [채널],
-  [LastValue, Topic, BinaryOperatorAggregate 3종류],
+  [`LastValue` / `EphemeralValue` / `Topic` / `BinaryOperatorAggregate` / `DeltaChannel`(beta)],
   [슈퍼스텝],
   [동일 레벨 노드 병렬 실행 → 채널 업데이트 → 다음 스텝],
   [선택 기준],

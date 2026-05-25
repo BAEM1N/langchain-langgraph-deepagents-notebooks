@@ -32,7 +32,7 @@ Deep Agents의 컨텍스트 엔지니어링은 4층으로 구성된다.
 from deepagents import create_deep_agent
 
 agent = create_deep_agent(
-    model="google_genai:gemini-3.1-pro-preview",
+    model="google_genai:gemini-3.5-flash",
     system_prompt=(
         "You are a research assistant specializing in scientific literature. "
         "Always cite sources. Use subagents for parallel research on different topics."
@@ -46,7 +46,7 @@ agent = create_deep_agent(
 
 ```python
 agent = create_deep_agent(
-    model="google_genai:gemini-3.1-pro-preview",
+    model="google_genai:gemini-3.5-flash",
     memory=["/project/AGENTS.md", "~/.deepagents/preferences.md"],
 )
 ```
@@ -68,7 +68,7 @@ agent = create_deep_agent(
 
 ```python
 agent = create_deep_agent(
-    model="google_genai:gemini-3.1-pro-preview",
+    model="google_genai:gemini-3.5-flash",
     skills=["/skills/research/", "/skills/web-search/"],
 )
 ```
@@ -96,7 +96,7 @@ def fetch_user_data(query: str, runtime: ToolRuntime[Context]) -> str:
     return f"Data for user {user_id}: {query}"
 
 agent = create_deep_agent(
-    model="google_genai:gemini-3.1-pro-preview",
+    model="google_genai:gemini-3.5-flash",
     tools=[fetch_user_data],
     context_schema=Context,
 )
@@ -175,7 +175,7 @@ from deepagents.middleware.summarization import (
 )
 
 backend = StateBackend
-model = "google_genai:gemini-3.1-pro-preview"
+model = "google_genai:gemini-3.5-flash"
 
 agent = create_deep_agent(
     model=model,
@@ -233,7 +233,7 @@ def make_backend(runtime):
     )
 
 agent = create_deep_agent(
-    model="google_genai:gemini-3.1-pro-preview",
+    model="google_genai:gemini-3.5-flash",
     store=InMemoryStore(),
     backend=make_backend,
     system_prompt=(

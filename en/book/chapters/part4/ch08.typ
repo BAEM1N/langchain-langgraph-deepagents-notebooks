@@ -27,7 +27,7 @@ print("Environment setup complete")
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 print(f"Model configured: {model.model_name}")
 
@@ -71,7 +71,7 @@ When you call `create_deep_agent()`, all of these pieces are assembled into a si
 #code-block(`````python
 # AgentHarness concept — create_deep_agent assembles the harness
 harness_config = {
-    "model": "gpt-4.1",
+    "model": "openai:gpt-5.4",
     "system_prompt": "You are a project management assistant.",
     "planning": True,
     "filesystem": True,
@@ -141,7 +141,7 @@ The harness supports standard file operations through configurable filesystem ba
   [`ls`],
   [List directory contents with metadata],
   [`read_file`],
-  [Read file contents with line numbers (and image support)],
+  [Read file contents with line numbers and multimodal returns — images (PNG, JPG, GIF, WebP, HEIC), video (MP4, MOV, AVI), audio (WAV, MP3, AAC, FLAC), documents (PDF, PPT)],
   [`write_file`],
   [Create files],
   [`edit_file`],
@@ -243,10 +243,10 @@ The initial prompt is assembled from the system prompt, instructions, memory gui
   text(weight: "bold")[Behavior],
   text(weight: "bold")[Trigger],
   [_Offloading_],
-  [Stores content larger than 20,000 tokens on disk and keeps only pointers in context],
+  [Stores content above a configurable threshold (default 20,000 tokens) on disk and keeps only pointers in context],
   [Based on content size],
   [_Summarization_],
-  [Compresses conversation history into a structured summary],
+  [Compresses conversation history into a structured summary (session intent / artifacts / next steps). Triggered around _85%_ of `max_input_tokens`; the most recent _10%_ of messages are preserved verbatim. Falls back to a 170k-token threshold when `max_input_tokens` is not set.],
   [Triggered when the model window limit is approached],
 )
 
@@ -281,6 +281,39 @@ for section, settings in context_config.items():
 
 Sandbox backends expose the `execute` tool, which runs commands in an isolated environment.
 That improves safety, cleanliness, and reproducibility without affecting the host system.
+
+=== Two execution paths: sandbox `execute` (shell) vs QuickJS `CodeInterpreterMiddleware`
+
+The harness exposes two distinct execution paths. The _sandbox backend_ contributes a shell-style `execute` tool, while the _interpreter middleware_ contributes a QuickJS eval tool. They solve different problems.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Aspect],
+  text(weight: "bold")[Sandbox `execute` (shell)],
+  text(weight: "bold")[QuickJS `CodeInterpreterMiddleware`],
+  [Where it runs],
+  [Isolated environment outside the agent (Modal / Daytona / Runloop ...)],
+  [QuickJS VM inside the agent loop],
+  [Language],
+  [Shell commands → any language (Python, Node, ...)],
+  [JavaScript (QuickJS)],
+  [Network / filesystem],
+  [On by default (governed by policy)],
+  [Off by default — only bridged tools],
+  [Package install],
+  [`pip install` / `npm install` supported],
+  [Not supported],
+  [Best fit],
+  [Installing packages, running tests, processing large data],
+  [Composing tool calls, subagent fan-out, structured data transforms],
+  [How to enable],
+  [Swap the backend, e.g. `backend=ModalSandbox(...)`],
+  [Add `middleware=[CodeInterpreterMiddleware(...)]`],
+)
 
 
 #code-block(`````python
@@ -378,6 +411,104 @@ print("\n=== Memory configuration ===")
 for scope, path in memory_config.items():
     print(f"  {scope}: {path}")
 
+`````)
+
+#line(length: 100%, stroke: 0.5pt + luma(200))
+== 9. Harness Profiles
+
+`HarnessProfile` packages provider/model-specific harness defaults without touching the `create_deep_agent()` call site. System prompt suffixes, tool description overrides, excluded tools and middleware, general-purpose subagent options, and extra middleware can all be registered as a profile.
+
+=== `HarnessProfile` (7 fields)
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Field],
+  text(weight: "bold")[Meaning],
+  [`base_system_prompt`],
+  [Replace the base system prompt itself],
+  [`system_prompt_suffix`],
+  [Append text to the assembled base prompt],
+  [`tool_description_overrides`],
+  [Per-tool description overrides (mapping)],
+  [`excluded_tools`],
+  [Tools to remove by name after injection (set)],
+  [`excluded_middleware`],
+  [Middleware classes to remove (set)],
+  [`extra_middleware`],
+  [Additional middleware instances to attach],
+  [`general_purpose_subagent`],
+  [Enable, disable, or customize the general-purpose subagent via `GeneralPurposeSubagentProfile`],
+)
+
+=== Merge semantics
+
+When multiple profiles match:
+
+- A later profile overrides earlier _scalar_ fields (for example `base_system_prompt`).
+- _Mapping_-style fields such as `tool_description_overrides` merge key by key.
+- _Set_-style fields (`excluded_tools`, `excluded_middleware`) take the union.
+
+=== `ProviderProfile` (3 fields)
+
+`ProviderProfile` does not change harness behavior; it bundles initialization arguments for `init_chat_model()` — credential checks, provider default temperature, runtime headers, and so on.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Field],
+  text(weight: "bold")[Meaning],
+  [`init_kwargs`],
+  [Default kwargs passed to `init_chat_model()` (for example `temperature`)],
+  [`credentials_check`],
+  [Callable run before model initialization to verify credentials],
+  [`runtime_headers`],
+  [HTTP header mapping attached to every request],
+)
+
+=== YAML / JSON workflow — `HarnessProfileConfig.from_dict`
+
+`HarnessProfileConfig` provides `from_dict()`, `to_dict()`, and `from_harness_profile()` class methods, so profiles can be managed as YAML and applied per environment without code changes.
+
+#code-block(`````yaml
+# profile.yaml
+base_system_prompt: You are helpful.
+system_prompt_suffix: Respond briefly.
+excluded_tools:
+  - execute
+excluded_middleware:
+  - SummarizationMiddleware
+general_purpose_subagent:
+  enabled: false
+`````)
+
+#code-block(`````python
+import yaml
+from deepagents import HarnessProfileConfig, register_harness_profile
+
+with open("profile.yaml") as f:
+    register_harness_profile(
+        "openai:gpt-5.4",
+        HarnessProfileConfig.from_dict(yaml.safe_load(f)),
+    )
+`````)
+
+=== Entry-point plugins
+
+Profiles can ship as packages via `pyproject.toml` entry points. The load order is _built-ins → entry-point plugins → user code's direct `register_*_profile` calls_.
+
+#code-block(`````toml
+[project.entry-points."deepagents.harness_profiles"]
+"anthropic:claude-sonnet-4-6" = "my_pkg.profiles:claude_profile"
+
+[project.entry-points."deepagents.provider_profiles"]
+"openai" = "my_pkg.profiles:openai_provider"
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))

@@ -51,12 +51,13 @@ Nodes are Python functions accepting current state and returning state updates. 
 
 | Error Type | Handler | Strategy |
 |-----------|---------|----------|
-| Transient (network, rate limits) | System | Retry policy |
-| LLM-recoverable (tool failures) | LLM | Store error, loop back |
-| User-fixable (missing info) | Human | Pause with interrupt() |
+| Transient (network, rate limits) | System | `RetryPolicy(max_attempts=3)` |
+| LLM-recoverable (tool failures) | LLM | Store error in state, loop back |
+| User-fixable (missing info) | Human | Pause with `interrupt()` |
+| Recoverable failure after retries | Developer | `error_handler` after retry exhaustion |
 | Unexpected | Developer | Bubble up |
 
-Code example structure: nodes use `Command` objects for routing decisions with type hints like `Command[Literal["node1", "node2"]]`.
+Code example structure: nodes use `Command` objects for routing decisions with type hints like `Command[Literal["node1", "node2"]]`. State is declared as a `TypedDict` (for example, `EmailAgentState`) so different nodes can independently format the same raw data.
 
 ### Step 5: Wire Together
 
@@ -68,7 +69,9 @@ memory = MemorySaver()
 app = workflow.compile(checkpointer=memory)
 ```
 
-The `interrupt()` function pauses execution indefinitely, saves state, and resumes exactly where execution stopped when input is provided.
+The `interrupt()` function pauses execution indefinitely, saves all state via the checkpointer, and resumes exactly where execution stopped when input is provided. When combined with other operations in a node, `interrupt()` must come first.
+
+The `thread_id` in the execution config ensures that all state for a conversation thread persists together, enabling pause-and-resume workflows across extended timeframes.
 
 ## Core Insights
 

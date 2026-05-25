@@ -30,15 +30,27 @@ Your application code must reside in a GitHub repository (public or private supp
 **Python SDK approach:**
 ```python
 from langgraph_sdk import get_sync_client
-client = get_sync_client(url="your-deployment-url", api_key="your-api-key")
-for chunk in client.runs.stream(None, "agent", input={"messages": [...]}, stream_mode="updates"):
+
+client = get_sync_client(url="your-deployment-url", api_key="your-langsmith-api-key")
+
+for chunk in client.runs.stream(
+    None,
+    "agent",
+    input={"messages": [{"role": "human", "content": "What is LangGraph?"}]},
+    stream_mode="updates",
+):
+    print(f"Receiving new event of type: {chunk.event}...")
     print(chunk.data)
 ```
 
+- First positional argument is `thread_id` (`None` creates a stateless run).
+- Second positional argument is the assistant/graph name registered in `langgraph.json`.
+
 **REST API approach:**
 ```bash
-curl -s --request POST --url <DEPLOYMENT_URL>/runs/stream \
-  --header 'Content-Type: application/json' \
-  --header "X-Api-Key: <LANGSMITH_API_KEY>" \
-  --data '{"assistant_id": "agent", "input": {...}, "stream_mode": "updates"}'
+curl -s --request POST \
+    --url <DEPLOYMENT_URL>/runs/stream \
+    --header 'Content-Type: application/json' \
+    --header "X-Api-Key: <LANGSMITH API KEY>" \
+    --data '{"assistant_id": "agent", "input": {"messages": [{"role": "human", "content": "What is LangGraph?"}]}, "stream_mode": "updates"}'
 ```

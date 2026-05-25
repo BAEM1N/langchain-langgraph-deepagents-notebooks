@@ -5,31 +5,67 @@ Human-in-the-loop enables approval workflows that pause agent execution when sen
 
 ## Key Configuration
 
-The `interrupt_on` parameter controls which tools need approval:
+The `interrupt_on` parameter maps tool names to interrupt settings with three options:
 
-- **`True`**: Enable interrupts with default options (approve, edit, reject)
-- **`False`**: Disable interrupts
-- **Custom dict**: Specify allowed decision types
+```python
+interrupt_on = {
+    "tool_name": True,                                       # Default: all decisions allowed
+    "tool_name": False,                                      # No interrupts
+    "tool_name": {"allowed_decisions": ["approve", "reject"]}  # Custom subset
+}
+```
 
 ## Decision Types
 
-Users can take three actions when reviewing pending tool calls:
+Four human approval decisions are supported when reviewing pending tool calls:
 
-1. **Approve** – Execute with original arguments
-2. **Edit** – Modify arguments before execution
-3. **Reject** – Skip the tool call entirely
+1. **`approve`** – Execute the tool with the original arguments as proposed by the agent
+2. **`edit`** – Modify the tool arguments before execution
+3. **`reject`** – Skip executing this tool call entirely
+4. **`respond`** – Return the human's message directly as the tool result, skipping execution
 
 ## Implementation Requirements
 
 A checkpointer is **REQUIRED** for human-in-the-loop workflows. The `MemorySaver` or equivalent persists agent state between interrupt and resume cycles.
 
+```python
+from langgraph.checkpoint.memory import MemorySaver
+checkpointer = MemorySaver()
+```
+
+All invoke calls require `version="v2"` for interrupt support.
+
 ## Handling Interrupts
 
-When triggered, agents return `result["__interrupt__"]` containing pending actions. Developers then:
+When triggered, the result exposes pending actions via `result.interrupts`. Each entry's `interrupt_value["action_requests"]` lists the proposed tool calls along with their `allowed_decisions`. Developers then:
 
-1. Extract action details and allowed decisions
+1. Extract action details and allowed decisions from `interrupt_value["action_requests"]`
 2. Collect user input for each action
 3. Resume using `Command(resume={"decisions": [...]})` with the same thread ID
+
+### Resume Formats by Decision Type
+
+```python
+# Approve as-is
+Command(resume={"decisions": [{"type": "approve"}]})
+
+# Edit before execution
+Command(resume={"decisions": [{
+    "type": "edit",
+    "edited_action": {
+        "name": "tool_name",
+        "args": {"param": "new_value"},
+    },
+}]})
+
+# Reject the call
+Command(resume={"decisions": [{"type": "reject"}]})
+
+# Respond with a synthetic tool result
+Command(resume={"decisions": [{"type": "respond", "message": "..."}]})
+```
+
+The same `config` (identical `thread_id`) must be reused for both the initial invocation and the resume call.
 
 ## Multiple Tool Calls
 

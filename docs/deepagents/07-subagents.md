@@ -26,12 +26,14 @@ Subagents solve the context bloat problem. When agents use tools producing large
 |-------|------|-------------|
 | `name` | `str` | Required unique identifier |
 | `description` | `str` | Required; what the subagent does |
-| `system_prompt` | `str` | Required; custom instructions |
-| `tools` | `list[Callable]` | Required; available tools |
+| `system_prompt` | `str` | Required; custom instructions (does not inherit from parent) |
+| `tools` | `list[Callable]` | Required; overrides parent tools when specified |
 | `model` | `str` \| `BaseChatModel` | Optional; overrides main agent model |
-| `middleware` | `list[Middleware]` | Optional; custom behavior/logging |
-| `interrupt_on` | `dict[str, bool]` | Optional; human-in-the-loop config |
-| `skills` | `list[str]` | Optional; skill source paths |
+| `middleware` | `list[Middleware]` | Optional; custom behavior/logging (no inheritance) |
+| `interrupt_on` | `dict[str, bool]` | Optional; human-in-the-loop config that overrides main agent settings |
+| `skills` | `list[str]` | Optional; isolated skill directories per subagent |
+| `response_format` | `ResponseFormat` | Optional; structured output schema (requires deepagents ≥ 0.5.3) |
+| `permissions` | `list[FilesystemPermission]` | Optional; replaces parent rules entirely |
 
 ### CompiledSubAgent
 
@@ -42,6 +44,14 @@ For complex workflows using pre-built LangGraph graphs:
 | `name` | `str` | Required unique identifier |
 | `description` | `str` | Required; what it does |
 | `runnable` | `Runnable` | Required; compiled LangGraph graph |
+
+### Dispatch Mechanism
+
+The main agent uses the `task()` tool — injected by `SubAgentMiddleware` — to delegate work by subagent name and receives isolated results back. `SubAgentMiddleware` is required scaffolding that attaches automatically whenever synchronous subagents exist; it cannot be removed via `excluded_middleware` and raises `ValueError` if forced out.
+
+Pair the dispatch tool with a planning step. The built-in `TodoList` (see `04-todos.md`) lets the supervisor break a request into ordered items before delegating each item to a subagent — this keeps the dispatch decisions explicit and reviewable.
+
+During streaming or tool execution, agents are differentiated by the `lc_agent_name` metadata, which makes it possible to attribute tool calls and messages back to the correct subagent.
 
 ## Basic SubAgent Example
 
@@ -70,7 +80,7 @@ research_subagent = {
     "description": "Used to research more in depth questions",
     "system_prompt": "You are a great researcher",
     "tools": [internet_search],
-    "model": "openai:gpt-5.2",
+    "model": "openai:gpt-5.4",
 }
 
 agent = create_deep_agent(
@@ -109,9 +119,11 @@ agent = create_deep_agent(
 
 Beyond user-defined subagents, deep agents have access to a built-in general-purpose subagent that:
 - Uses the same system prompt as the main agent
-- Accesses all same tools
+- Accesses all same tools (includes filesystem tools by default)
 - Uses the same model (unless overridden)
-- Inherits skills from the main agent (when configured)
+- Inherits skills from the main agent (unlike custom subagents)
+
+To disable it entirely, set `GeneralPurposeSubagentProfile(enabled=False)` on the harness profile. To replace it, supply a custom subagent with `name="general-purpose"`.
 
 ### Overriding the General-Purpose Subagent
 

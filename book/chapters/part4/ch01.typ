@@ -5,7 +5,7 @@
 
 #chapter(1, "Deep Agents 소개")
 
-Deep Agents는 LangChain 팀이 개발한 에이전트 하네스 프레임워크로, 복잡한 멀티 스텝 작업을 수행하는 자율 에이전트를 체계적으로 구축할 수 있게 해 준다. 이 장에서는 `Planning`, `Context Management`, `Backends`, `Subagents`, `Memory` 등 Deep Agents의 핵심 개념 다섯 가지를 소개하고, SDK와 CLI의 차이점을 살펴본다. 프레임워크의 전체 구조를 조감함으로써 이후 장에서 다룰 심화 주제들의 기반을 마련한다.
+Deep Agents는 LangChain 팀이 개발한 에이전트 하네스 프레임워크로, 복잡한 멀티 스텝 작업을 수행하는 자율 에이전트를 체계적으로 구축할 수 있게 해 준다. 이 장에서는 `Planning`, `Context Management`, `Backends`, `Subagents`, `Memory & Skills` 등 Deep Agents의 핵심 개념 다섯 가지를 소개하고, SDK · Deep Agents Code · ACP 프로토콜의 차이점을 살펴본다. 프레임워크의 전체 구조를 조감함으로써 이후 장에서 다룰 심화 주제들의 기반을 마련한다.
 
 기존 에이전트 프레임워크들이 "LLM + 도구 호출"이라는 최소 단위에 머물렀다면, Deep Agents는 여기에 _계획 수립_, _컨텍스트 압축_, _파일 시스템 추상화_, _서브에이전트 위임_, _장기 메모리_라는 다섯 가지 인프라를 기본 탑재하여, 장기 실행 자율 에이전트를 위한 포괄적 하네스(harness)를 제공한다. `create_deep_agent()` 한 줄이면 이 모든 기능이 조립된 `CompiledStateGraph`가 반환되며, LangGraph의 모든 실행 메서드(`invoke`, `stream`, `batch`)를 그대로 활용할 수 있다.
 
@@ -16,13 +16,19 @@ Deep Agents는 LangChain 팀이 개발한 에이전트 하네스 프레임워크
 == 1. Deep Agents란?
 
 _Deep Agents_는 LangChain 팀이 만든 _에이전트 하네스(Agent Harness)_ 프레임워크입니다.
-복잡한 멀티 스텝 작업을 수행하는 자율 에이전트를 쉽게 구축할 수 있도록, 아래 기능들을 내장하고 있습니다:
+복잡한 멀티 스텝 작업을 수행하는 자율 에이전트를 쉽게 구축할 수 있도록, 아래 _핵심 기능 11종_을 내장하고 있습니다:
 
-- _태스크 플래닝_ — 복잡한 문제를 단계별로 분해
-- _파일 시스템 관리_ — 가상/로컬 파일 읽기·쓰기·검색
-- _서브에이전트 위임_ — 전문 에이전트에게 작업 분배
-- _장기 메모리_ — 대화를 넘어서 지식 유지
-- _컨텍스트 관리_ — 토큰 한도 내에서 효율적 정보 관리
+- _태스크 플래닝_ — `write_todos`로 복잡한 작업을 구조화된 태스크 리스트로 분해
+- _파일 시스템 관리_ — 가상/로컬 파일 읽기·쓰기·검색 (`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`)
+- _파일 시스템 권한(filesystem permissions)_ — `allow_read`/`allow_write`/`deny_read` 등 경로 단위 ACL
+- _서브에이전트 위임_ — `task` 도구로 전문 에이전트에 작업 분배
+- _장기 메모리 + 스킬_ — `AGENTS.md`(`memory`)와 `SKILL.md`(`skills`) 점진 공개
+- _컨텍스트 관리_ — 자동 오프로딩 + 요약으로 토큰 한도 내에서 정보 관리
+- _QuickJS interpreter_ — 샌드박스 JS 인터프리터(`use_interpreter=True`)로 임의 계산 수행
+- _샌드박스 실행 환경_ — Modal · Daytona · Deno · 로컬 가상 파일시스템(VFS) 백엔드
+- _Human-in-the-Loop_ — `interrupt_on={"tool_name": True}`로 도구별 승인 게이트
+- _커스터마이징 훅_ — `before_model` / `after_model` / `wrap_model_call` 미들웨어 훅
+- _Context propagation_ — `context_schema`와 네임스페이스 키(`"agent:key"`)로 서브에이전트별 설정
 
 "에이전트 하네스"라는 이름이 시사하듯, Deep Agents는 LLM을 단순히 감싸는 래퍼가 아니라 장기 실행 자율 에이전트가 안정적으로 동작하기 위한 _운영 인프라 전체_를 포괄합니다. 기존 "LLM + 도구 호출" 패러다임에서는 개발자가 계획 수립, 토큰 관리, 파일 영속성 등을 모두 직접 구현해야 했지만, Deep Agents는 이 반복적인 인프라를 표준화하여 제공합니다.
 
@@ -30,7 +36,7 @@ LangChain의 기본 에이전트 컴포넌트 위에 구축되었으며, _LangGr
 
 #warning-box[Deep Agents는 LangGraph 위에서 동작하므로, LangGraph의 기본 개념(StateGraph, 노드, 엣지, 체크포인터)을 이해하고 있으면 내부 동작을 훨씬 깊이 파악할 수 있습니다. Part 3(LangGraph)를 먼저 학습하는 것을 권장합니다.]
 
-#tip-box[_이 교육 자료의 모델 설정_: 본 과정에서는 _OpenAI gpt-4.1_ 모델을 사용합니다. `OPENAI_API_KEY` 환경 변수를 설정하고, `ChatOpenAI(model="gpt-4.1")`를 사용합니다.]
+#tip-box[_이 교육 자료의 모델 설정_: Deep Agents의 권장 기본 모델은 _Anthropic Claude Sonnet 4.6_ (`anthropic:claude-sonnet-4-6`)입니다. 본 과정에서는 환경에 따라 OpenAI(`openai:gpt-5.4`), Google(`google_genai:gemini-3.5-flash`)도 함께 사용합니다. Provider 접두 포맷(`provider:model`)을 권장하며, 해당 프로바이더의 API 키(`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY`)를 설정해야 합니다.]
 
 === 아키텍처 개요
 
@@ -41,47 +47,54 @@ Deep Agents의 아키텍처는 세 계층으로 구성됩니다. 최하단에는
 아래 다이어그램에서 주목할 점은 _화살표의 방향_입니다. Deep Agents 하네스는 LangGraph와 LangChain을 _의존_하지만, 반대 방향은 성립하지 않습니다. 즉, LangGraph로 직접 그래프를 구축하던 기존 코드도 Deep Agents 없이 독립적으로 동작할 수 있습니다.
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
-== 2. SDK vs CLI
+== 2. SDK vs Code vs ACP
 
-아키텍처를 이해했으니, 이제 Deep Agents를 실제로 사용하는 두 가지 방법을 비교합니다.
+아키텍처를 이해했으니, 이제 Deep Agents를 실제로 사용하는 세 가지 인터페이스를 비교합니다.
 
-Deep Agents는 동일한 핵심 엔진 위에 구축된 두 가지 인터페이스를 제공합니다. 프로그래밍 방식으로 에이전트를 앱에 통합하고 싶다면 SDK를, 터미널에서 즉시 코딩 에이전트를 사용하고 싶다면 CLI를 선택합니다. 두 인터페이스 모두 내부적으로 동일한 `AgentHarness` 엔진을 사용하므로, 한쪽에서 익힌 개념(백엔드, 미들웨어, 서브에이전트 등)은 다른 쪽에서도 그대로 적용됩니다.
+Deep Agents는 동일한 `AgentHarness` 엔진 위에 _세 가지 인터페이스_를 제공합니다. 프로그래밍 방식으로 에이전트를 앱에 통합하고 싶다면 SDK를, 터미널에서 즉시 코딩 에이전트를 사용하고 싶다면 Deep Agents Code(`deepagents-cli`)를, 외부 클라이언트와 ACP(Agent Client Protocol)로 통신하고 싶다면 ACP 서버 모드를 사용합니다. 세 인터페이스 모두 동일한 코어를 공유하므로, 한쪽에서 익힌 개념(백엔드, 미들웨어, 서브에이전트 등)은 그대로 다른 쪽에 적용됩니다.
 
 #table(
-  columns: 3,
+  columns: 4,
   align: left,
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[구분],
   text(weight: "bold")[Deep Agents SDK],
-  text(weight: "bold")[Deep Agents CLI],
+  text(weight: "bold")[Deep Agents Code],
+  text(weight: "bold")[ACP 서버],
   [_패키지_],
   [`deepagents`],
   [`deepagents-cli`],
+  [`deepagents-cli` (`--acp`)],
   [_용도_],
   [프로그래밍 방식으로 에이전트 구축],
   [터미널에서 직접 코딩 에이전트 사용],
+  [Agent Client Protocol로 외부 클라이언트 연결],
   [_설치_],
-  [`pip install deepagents`],
+  [`pip install -qU deepagents langchain-{provider}`],
+  [`uv tool install deepagents-cli`],
   [`uv tool install deepagents-cli`],
   [_사용 방식_],
   [Python 코드에서 `create_deep_agent()` 호출],
-  [터미널에서 `deepagents-cli` 실행],
+  [터미널에서 `deepagents` 실행],
+  [`deepagents --acp` 후 ACP 클라이언트가 stdio로 접속],
   [_커스터마이징_],
   [완전한 API 접근 (도구, 백엔드, 미들웨어)],
-  [설정 파일 + 슬래시 커맨드],
+  [`.deepagents/config.json` + 슬래시 커맨드],
+  [SDK와 동일한 설정 파일을 ACP로 노출],
   [_적합한 경우_],
-  [앱에 에이전트 통합, 자동화 파이프라인],
+  [앱 통합, 자동화 파이프라인, 커스텀 에이전트 서비스],
   [대화형 코딩 어시스턴트],
+  [Zed · 외부 IDE · 사용자 정의 클라이언트 연동],
 )
 
-#tip-box[이 교육 자료에서는 _SDK_를 중심으로 다룹니다.]
+#tip-box[이 교육 자료에서는 _SDK_를 중심으로 다룹니다. Code/ACP는 Part 4의 14·15장에서 별도로 다룹니다. 설치 명령은 프로바이더에 따라 패키지를 함께 지정합니다 — 예: `pip install -qU deepagents langchain-anthropic` 또는 `pip install -qU deepagents langchain-openai`.]
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
-== 3. 핵심 개념 5가지
+== 3. 핵심 개념 5가지 (Planning · Context Management · Backends · Subagents · Memory & Skills)
 
-SDK와 CLI라는 두 인터페이스를 확인했으니, 이제 Deep Agents의 내부를 구성하는 다섯 가지 핵심 축을 하나씩 살펴봅니다. 이 개념들은 이후 장에서 각각 독립된 챕터로 심화되므로, 여기서는 전체적인 역할과 상호 관계를 파악하는 데 집중합니다. 이 다섯 가지 축은 서로 독립적이면서도 상호 보완적입니다. 예를 들어, 서브에이전트가 작업을 위임할 때 파일 시스템 백엔드를 통해 결과를 저장하고, 장기 메모리에서 이전 작업 패턴을 참조하는 식으로 연동됩니다.
+세 인터페이스를 확인했으니, 이제 Deep Agents의 내부를 구성하는 _다섯 가지 핵심 축_을 하나씩 살펴봅니다. 이 개념들은 이후 장에서 각각 독립된 챕터로 심화되므로, 여기서는 전체적인 역할과 상호 관계를 파악하는 데 집중합니다. 다섯 축은 서로 독립적이면서도 상호 보완적입니다. 예를 들어, 서브에이전트가 작업을 위임할 때 백엔드를 통해 결과를 저장하고, 장기 메모리/스킬에서 이전 작업 패턴이나 도메인 지식을 참조합니다.
 
 === 3.1 Planning (태스크 플래닝)
 에이전트는 `write_todos` / `read_todos` 빌트인 도구를 사용하여 복잡한 작업을 _구조화된 태스크 리스트_로 분해합니다.
@@ -98,10 +111,12 @@ SDK와 CLI라는 두 인터페이스를 확인했으니, 이제 Deep Agents의 �
 
 === 3.3 Backends (스토리지 백엔드)
 에이전트의 파일 도구(`write_file`, `read_file`, `ls` 등)가 실제로 데이터를 저장하고 읽는 계층은 _플러거블 백엔드_로 추상화됩니다. 백엔드를 교체하는 것만으로 에이전트의 저장소 전략을 완전히 바꿀 수 있으며, _에이전트 코드 자체는 한 줄도 변경할 필요가 없습니다_. 이것이 백엔드 추상화의 핵심 가치입니다:
-- `StateBackend` — 에이전트 상태(LangGraph state)에 파일 저장. 프로세스 종료 시 소멸하는 에페메럴 스크래치패드입니다. 기본값이며 추가 설정이 필요 없습니다. 프로토타이핑 단계에서 가장 빠르게 시작할 수 있습니다.
-- `FilesystemBackend` — 로컬 디스크에 직접 접근합니다. `DATA_DIR` 환경 변수로 루트 경로를 설정할 수 있습니다. 코딩 에이전트나 데이터 분석 에이전트처럼 실제 파일을 다루는 시나리오에 적합합니다.
-- `StoreBackend` — LangGraph `BaseStore`를 활용하여 크로스 스레드 영속 저장소를 제공합니다. 사용자 선호도나 학습된 패턴을 대화 세션을 넘어 유지해야 할 때 사용합니다.
+- `StateBackend` — 에이전트 상태(LangGraph state)에 파일 저장. 프로세스 종료 시 소멸하는 에페메럴 스크래치패드입니다. 기본값이며 추가 설정이 필요 없습니다.
+- `FilesystemBackend` — 로컬 디스크에 직접 접근합니다. `root_dir` / `DATA_DIR`로 루트를 설정하고 `virtual_mode=True`로 `..`/`~`/외부 절대경로를 차단합니다.
+- `StoreBackend` — LangGraph `BaseStore`를 활용하여 크로스 스레드 영속 저장소를 제공합니다. 사용자 선호도나 학습된 패턴을 세션을 넘어 유지할 때 사용합니다.
 - `CompositeBackend` — 경로 프리픽스에 따라 서로 다른 백엔드로 라우팅합니다(예: `/memories/`는 영속, 나머지는 에페메럴). 실전에서 가장 자주 사용되는 패턴입니다.
+- `ContextHubBackend` — Context Hub에서 _lazy fetch_ + _write-through_ 방식으로 원격 파일을 동기화합니다. `namespace=lambda rt: ...`로 런타임 네임스페이스를 동적으로 결정합니다(`deepagents>=0.5.2`).
+- 샌드박스 백엔드 — _Modal_ · _Daytona_ · _Deno_ · _로컬 VFS_ — 신뢰할 수 없는 코드 실행과 파일 격리를 동시에 제공합니다. QuickJS interpreter(`use_interpreter=True`)는 별도 미들웨어로 JS 코드를 격리 실행합니다.
 
 커스텀 백엔드가 필요하면 `BackendProtocol`을 구현하면 됩니다. 4장에서 각 백엔드를 상세히 다룹니다.
 
@@ -110,7 +125,7 @@ SDK와 CLI라는 두 인터페이스를 확인했으니, 이제 Deep Agents의 �
 
 서브에이전트는 이 문제를 근본적으로 해결합니다. 전문 서브에이전트가 _격리된 컨텍스트_에서 작업을 수행하고, 압축된 최종 결과만 메인 에이전트에 반환합니다. 이는 마치 팀장이 팀원에게 작업을 위임하고 요약 보고서만 받는 것과 같습니다. 서브에이전트는 명시적 정의(`subagents` 파라미터)와 동적 생성(`create_subagent` 도구) 두 가지 방식으로 사용할 수 있습니다. 각 서브에이전트는 독립된 컨텍스트 윈도우, 도구 세트, 시스템 프롬프트를 가지므로, 메인 에이전트의 토큰 예산에 영향을 주지 않습니다.
 
-=== 3.5 Memory (장기 메모리)
+=== 3.5 Memory & Skills (장기 메모리와 스킬)
 기본 에이전트는 대화 스레드가 종료되면 모든 정보를 잊습니다. 이것은 매번 새로운 직원을 고용하는 것과 같습니다. 장기 메모리는 에이전트가 이전 대화에서 학습한 패턴, 사용자 선호도, 프로젝트 규칙 등을 _세션을 넘어_ 유지할 수 있게 합니다. 장기 메모리는 두 가지 메커니즘으로 제공됩니다:
 - *`AGENTS.md`*: `memory` 파라미터로 지정하면, 에이전트 시작 시 해당 파일이 _항상_ 시스템 프롬프트에 주입됩니다. 프로젝트 컨벤션이나 사용자 선호도처럼 모든 대화에 적용되어야 하는 규칙에 적합합니다.
 - *`SKILL.md`*: `skills` 파라미터로 스킬 디렉토리를 지정하면, _Progressive Disclosure_(점진적 공개)를 통해 필요한 전문 지식만 온디맨드로 로드합니다. 처음에는 프론트매터(이름, 설명)만 로드되고, 에이전트가 관련성을 판단한 스킬의 전체 내용을 그때 로드합니다.
@@ -175,7 +190,23 @@ SDK와 CLI라는 두 인터페이스를 확인했으니, 이제 Deep Agents의 �
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 5. 설치 확인
 
-프레임워크의 개념과 차별점을 확인했으니, 실제 개발 환경이 올바르게 구성되었는지 검증합니다. 아래 코드는 `deepagents` 패키지와 주요 의존성의 버전을 출력합니다. 모든 임포트가 성공하면 개발 환경이 정상적으로 설정된 것입니다.
+프레임워크의 개념과 차별점을 확인했으니, 실제 개발 환경이 올바르게 구성되었는지 검증합니다. 설치는 사용할 프로바이더의 LangChain 패키지를 함께 지정합니다.
+
+#code-block(`````bash
+# Anthropic 권장 기본
+pip install -qU deepagents langchain-anthropic
+
+# OpenAI 사용 시
+pip install -qU deepagents langchain-openai
+
+# Google Gemini 사용 시
+pip install -qU deepagents langchain-google-genai
+
+# OpenRouter 등 OpenAI 호환 게이트웨이
+pip install -qU deepagents langchain-openai  # base_url만 교체하여 사용
+`````)
+
+아래 코드는 `deepagents` 패키지와 주요 의존성의 버전을 출력합니다. 모든 임포트가 성공하면 개발 환경이 정상적으로 설정된 것입니다.
 
 #code-block(`````python
 # deepagents 패키지 버전 확인
@@ -262,10 +293,10 @@ create_deep_agent() 파라미터:
   [`create_deep_agent()`],
   [실행 엔진],
   [LangGraph (`CompiledStateGraph` 반환)],
-  [모델 접근],
-  [_OpenAI gpt-4.1_ — `ChatOpenAI(model="gpt-4.1")`],
+  [기본 모델 권장],
+  [_Anthropic Claude Sonnet 4.6_ — `"anthropic:claude-sonnet-4-6"` (OpenAI는 `"openai:gpt-5.4"`)],
   [핵심 개념],
-  [Planning, Context Management, Backends, Subagents, Memory],
+  [Planning, Context Management, Backends, Subagents, Memory & Skills],
   [빌트인 도구],
   [`write_todos`, `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`],
 )

@@ -28,12 +28,12 @@ print("환경 설정 완료")
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 print(f"모델 설정 완료: {model.model_name}")
 `````)
 #output-block(`````
-모델 설정 완료: gpt-4.1
+모델 설정 완료: gpt-5.4
 `````)
 
 환경 설정을 마쳤으므로, 가장 기본적이면서도 중요한 안전장치인 Human-in-the-Loop부터 시작한다.
@@ -43,11 +43,52 @@ print(f"모델 설정 완료: {model.model_name}")
 
 자율 에이전트가 파일을 수정하거나 셸 명령을 실행할 때, 잘못된 판단이 치명적인 결과를 초래할 수 있습니다. 예를 들어 에이전트가 `rm -rf /` 같은 위험한 명령을 생성하거나, 프로덕션 데이터베이스에 잘못된 마이그레이션을 적용할 수 있다.
 
-`interrupt_on` 파라미터를 사용하면, 에이전트가 지정된 도구를 호출하려 할 때 실행을 _중단하고 사람의 승인을 요구_합니다. 사람은 승인(approve), 거부(reject), 또는 수정(edit) 중 하나를 선택할 수 있습니다. 이 메커니즘은 LangGraph의 인터럽트 기능 위에 구축되어 있으며, 체크포인터가 중단 시점의 전체 상태를 보존하므로 승인 후 _정확히 그 지점_에서 실행이 재개된다.
+`interrupt_on` 파라미터를 사용하면, 에이전트가 지정된 도구를 호출하려 할 때 실행을 _중단하고 사람의 승인을 요구_합니다. Deep Agents의 HITL은 _4가지 결정 타입_을 지원하며, 각 결정은 `Command(resume={"decisions": [...]})` 형태의 dict로 재개 시 전달한다. 이 메커니즘은 LangGraph의 인터럽트 기능 위에 구축되어 있으며, 체크포인터가 중단 시점의 전체 상태를 보존하므로 승인 후 _정확히 그 지점_에서 실행이 재개된다.
 
 === 작동 방식
 
 #align(center)[#image("../../assets/diagrams/png/hitl_flow.png", width: 84%, height: 120mm, fit: "contain")]
+
+=== 4가지 결정 타입
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[결정],
+  text(weight: "bold")[동작],
+  [`approve`],
+  [제안된 인자 그대로 도구 실행],
+  [`edit`],
+  [`edited_action.name/args`로 인자를 수정한 뒤 실행],
+  [`reject`],
+  [호출 자체를 건너뜀],
+  [`respond`],
+  [도구 실행 없이 `message`를 도구 결과로 반환],
+)
+
+=== 인터럽트 확인과 재개 (v2 표준)
+
+`invoke(..., version="v2")`로 호출하면, 인터럽트는 `result.interrupts`에 노출된다. 옛 `result["__interrupt__"]` 키가 아니다. 각 인터럽트의 `interrupt_value["action_requests"]` 가 제안된 도구 호출과 `allowed_decisions`를 담는다. 같은 `thread_id`로 `Command(resume={"decisions": [...]})`을 dict 형태로 invoke하면 재개된다.
+
+#code-block(`````python
+from langgraph.types import Command
+
+# 인터럽트 추출
+result = hitl_agent.invoke(inputs, config=config, version="v2")
+for itr in result.interrupts:
+    for req in itr.value["action_requests"]:
+        print(req["action"]["name"], req["allowed_decisions"])
+
+# 재개 — 인터럽트와 동일한 순서의 decisions 배열
+hitl_agent.invoke(
+    Command(resume={"decisions": [{"type": "approve"}]}),
+    config=config,
+    version="v2",
+)
+`````)
 
 === 필수 요구사항
 #warning-box[Human-in-the-Loop을 사용하려면 반드시 `checkpointer`를 설정해야 합니다. 에이전트가 중단된 시점의 상태를 보존하고, 승인 후 정확히 그 지점에서 재개하기 위해 체크포인터가 필수입니다.]
@@ -86,9 +127,23 @@ HITL로 안전장치를 구축했다면, 다음은 에이전트의 실행 과정
 
 Deep Agents는 LangGraph의 스트리밍 인프라 위에서 작동하며, 특히 서브에이전트를 사용할 때 _네임스페이스 기반 이벤트 구분_이 중요합니다. 스트리밍을 통해 에이전트가 어떤 서브에이전트를 호출 중인지, 도구 실행이 어디까지 진행되었는지를 실시간으로 파악할 수 있다.
 
+=== v2 통합 포맷 (표준)
+
+_`agent.stream(..., stream_mode=..., subgraphs=True, version="v2")` 한 경로_가 표준입니다. 옛 v1의 중첩 튜플 포맷은 분기가 복잡하므로 v2를 권장하며, v3·projection 같은 비공식 변형은 사용하지 마세요. 모든 청크는 동일한 3-필드 구조입니다.
+
+#code-block(`````python
+{
+    "type": "updates" | "messages" | "custom",
+    "ns":   tuple,            # 이벤트 발생 위치 (메인/서브에이전트 라우팅)
+    "data": Any,              # type 별 payload
+}
+`````)
+
+#tip-box[`subgraphs=True`가 없으면 서브에이전트 내부 이벤트가 보이지 않는다. UI에서 서브에이전트 진행을 표시하려면 반드시 켜라. 요약(summarization) 토큰을 사용자에게 숨기려면 `metadata.get("lc_source") == "summarization"`로 필터링한다.]
+
 === 스트림 모드
 
-Deep Agents에서 `stream()` 메서드 호출 시 `stream_mode` 파라미터로 스트림 모드를 선택한다. 각 모드는 서로 다른 수준의 정보를 제공하므로, 목적에 맞게 선택해야 한다.
+Deep Agents에서 `stream()` 메서드 호출 시 `stream_mode` 파라미터로 스트림 모드를 선택한다. 각 모드는 서로 다른 수준의 정보를 제공하므로, 목적에 맞게 선택해야 한다. 리스트로 전달하면 한 루프에서 여러 모드를 동시에 받는다.
 
 #table(
   columns: 3,
@@ -158,6 +213,35 @@ print("스트리밍 데모 에이전트 생성 완료")
 
 위 코드로 생성한 에이전트를 `stream()` 호출 시, 메인 에이전트의 이벤트는 빈 네임스페이스 `()`로, researcher 서브에이전트의 이벤트는 `("tools:xxx",)` 형태의 네임스페이스로 전달된다. 클라이언트 측에서 네임스페이스를 필터링하면 "현재 researcher가 작업 중입니다..." 같은 _진행 상황 표시_를 구현할 수 있다.
 
+=== 커스텀 진행률 이벤트 (`get_stream_writer` + `stream_mode="custom"`)
+
+도구 내부에서 임의 구조체를 방출해 UI에 노출한다. 업로드 진행률·처리 건수·중간 상태 등에 활용한다. 도구마다 스키마가 제각각이면 UI 라우팅이 깨지므로, `{"status", "progress", "message"}` 같은 공통 필드를 고정해 두는 편이 좋다.
+
+#code-block(`````python
+from langchain.tools import tool
+from langgraph.config import get_stream_writer
+
+
+@tool
+def analyze_data(topic: str) -> str:
+    """주제 데이터를 분석하고 진행률을 스트리밍한다."""
+    writer = get_stream_writer()
+    writer({"status": "starting", "progress": 0, "topic": topic})
+    # ... 실제 분석 ...
+    writer({"status": "complete", "progress": 100, "topic": topic})
+    return f"분석 완료: {topic}"
+
+
+for chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "..."}]},
+    stream_mode=["updates", "messages", "custom"],
+    subgraphs=True,
+    version="v2",
+):
+    if chunk["type"] == "custom":
+        print(chunk["data"])
+`````)
+
 스트리밍으로 에이전트의 동작을 실시간 관찰할 수 있게 되었다. 다음 단계는 에이전트가 _실제 코드를 실행_할 때의 안전성이다. 샌드박스는 코드 실행을 격리된 환경으로 제한하여 호스트 시스템을 보호한다.
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -204,41 +288,91 @@ _샌드박스를 도구로 사용_ (권장)
 다음은 Modal 샌드박스를 연동하는 코드 예시이다. 다른 프로바이더(Daytona, Runloop)도 유사한 인터페이스를 따른다.
 
 #code-block(`````python
-# 샌드박스 연동 코드 예시 (실제 실행하려면 해당 프로바이더 설정 필요)
+# Modal 샌드박스 연동 — langchain-modal 패키지 사용
+# pip install langchain-modal deepagents
+import modal
+from deepagents import create_deep_agent
+from langchain_anthropic import ChatAnthropic
+from langchain_modal import ModalSandbox
 
-# Modal 샌드박스 예시
-sandbox_example_code = """
-# pip install deepagents-modal
-from deepagents.backends.sandbox import ModalSandbox
-
-agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-6",
-    backend=ModalSandbox(
-        image="python:3.12-slim",
-        gpu="T4",  # GPU 지원
-    ),
-)
-"""
-
-print("샌드박스 연동 코드 예시 (참고용):")
-print(sandbox_example_code)
-`````)
-#output-block(`````
-샌드박스 연동 코드 예시 (참고용):
-
-# pip install deepagents-modal
-from deepagents.backends.sandbox import ModalSandbox
+app = modal.App.lookup("your-app")
+modal_sandbox = modal.Sandbox.create(app=app)
+backend = ModalSandbox(sandbox=modal_sandbox)
 
 agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-6",
-    backend=ModalSandbox(
-        image="python:3.12-slim",
-        gpu="T4",  # GPU 지원
-    ),
+    model=ChatAnthropic(model="claude-sonnet-4-6"),
+    system_prompt="You are a Python coding assistant with sandbox access.",
+    backend=backend,
+)
+
+try:
+    result = agent.invoke({
+        "messages": [{"role": "user", "content": "Create a small Python package and run pytest"}],
+    })
+finally:
+    modal_sandbox.terminate()    # 필수: 리소스 해제
+`````)
+
+#tip-box[샌드박스 프로바이더를 선택할 때는 워크로드 특성을 고려하라. GPU가 필요한 ML 작업에는 Modal이, 빠른 콜드 스타트가 중요한 웹 개발에는 Daytona가, 일회용 격리 실행이 필요한 테스트에는 Runloop이 적합하다. 각 프로바이더는 별도 패키지(`langchain-modal`, `langchain-daytona` 등)로 설치하고, `try/finally`로 반드시 `terminate()`(또는 `stop()`/`shutdown()`)를 호출해 정리한다.]
+
+#line(length: 100%, stroke: 0.5pt + luma(200))
+== 3-1. Interpreters — CodeInterpreterMiddleware
+
+Deep Agents 0.6 계열은 _QuickJS 기반 interpreter_를 `CodeInterpreterMiddleware`로 붙일 수 있다. 샌드박스가 “외부 환경에서 코드를 실행”하는 격리 실행이라면, interpreter는 “에이전트 루프 내부에서 작은 프로그램을 실행”하는 내부 작업 공간이다. 도구 호출 조합, 서브에이전트 fan-out/fan-in, 구조화 데이터 처리에 쓰인다.
+
+=== 설치
+
+#code-block(`````bash
+pip install -U "deepagents[quickjs]"
+# 또는
+uv add "deepagents[quickjs]"
+`````)
+
+=== Programmatic Tool Calling (PTC)
+
+`ptc=["task"]`처럼 allowlist를 지정하면, 도구가 camelCase로 변환되어 `tools.*` async 함수로 노출된다 (예: `web_search` → `tools.webSearch`). interpreter 내부에서 `Promise.all`로 fan-out 가능하다.
+
+#code-block(`````python
+from deepagents import create_deep_agent
+from langchain_quickjs import CodeInterpreterMiddleware
+
+agent = create_deep_agent(
+    model="openai:gpt-5.4",
+    middleware=[
+        CodeInterpreterMiddleware(
+            ptc=["task"],                # allowlist: task만 노출
+            snapshot_between_turns=True, # turn 간 interpreter state 복원
+            timeout=5.0,
+            max_ptc_calls=256,
+        ),
+    ],
 )
 `````)
 
-#tip-box[샌드박스 프로바이더를 선택할 때는 워크로드 특성을 고려하라. GPU가 필요한 ML 작업에는 Modal이, 빠른 콜드 스타트가 중요한 웹 개발에는 Daytona가, 일회용 격리 실행이 필요한 테스트에는 Runloop이 적합하다. 각 프로바이더는 별도 패키지(`deepagents-modal`, `deepagents-daytona` 등)로 설치해야 한다.]
+=== Middleware 옵션 10가지
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[파라미터],
+  text(weight: "bold")[기본값],
+  text(weight: "bold")[용도],
+  [`memory_limit`], [`64*1024*1024`], [QuickJS heap memory limit (bytes)],
+  [`timeout`], [`5.0`], [Per-eval 타임아웃(초)],
+  [`max_ptc_calls`], [`256`], [한 eval에서 허용되는 `tools.*` 호출 수],
+  [`tool_name`], [`"eval"`], [Interpreter 도구 이름],
+  [`max_result_chars`], [`4000`], [반환 결과 최대 문자 수],
+  [`capture_console`], [`True`], [`console.log` 캡처],
+  [`ptc`], [`None`], [PTC allowlist],
+  [`skills_backend`], [`None`], [Interpreter skill 모듈용 backend],
+  [`snapshot_between_turns`], [`True`], [turn 간 상태 보존],
+  [`max_snapshot_bytes`], [`None`], [snapshot 최대 크기],
+)
+
+#warning-box[PTC는 일반 tool-calling 경로와 다르게 동작하므로 도구별 `interrupt_on` 승인 정책이 자동 적용된다고 가정하지 마라. 비용 발생·데이터 변경·네트워크 접근 도구는 interpreter에 노출하지 않거나 별도 승인 래퍼를 둔다.]
 
 샌드박스가 에이전트의 _코드 실행_을 격리한다면, 다음에 다루는 ACP는 에이전트와 _개발자의 작업 환경_을 연결하는 프로토콜이다. 코딩 에이전트가 IDE와 자연스럽게 통합되려면 표준화된 통신 규약이 필요하다.
 
@@ -269,46 +403,58 @@ ACP(Agent Client Protocol)는 코딩 에이전트와 에디터/IDE 간의 통신
 )
 
 #code-block(`````python
-# ACP 서버 구현 예시 (참고용)
-acp_example_code = """
+# ACP 서버 — canonical 패턴 (asyncio + acp.run_agent)
 # pip install deepagents-acp
+import asyncio
+
+from acp import run_agent
 from deepagents import create_deep_agent
-from deepagents_acp import AgentServerACP
 from langgraph.checkpoint.memory import MemorySaver
 
-# 에이전트 생성
-agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-6",
-    system_prompt="당신은 코딩 어시스턴트입니다.",
-    checkpointer=MemorySaver(),
-)
+from deepagents_acp.server import AgentServerACP
 
-# ACP 서버 실행 (stdio 모드)
-server = AgentServerACP(agent)
-server.run()
-"""
 
-print("ACP 서버 구현 예시 (참고용):")
-print(acp_example_code)
+async def main() -> None:
+    agent = create_deep_agent(
+        model="anthropic:claude-sonnet-4-6",
+        system_prompt="You are a helpful coding assistant",
+        checkpointer=MemorySaver(),
+    )
+    server = AgentServerACP(agent)
+    await run_agent(server)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 `````)
-#output-block(`````
-ACP 서버 구현 예시 (참고용):
 
-# pip install deepagents-acp
-from deepagents import create_deep_agent
-from deepagents_acp import AgentServerACP
-from langgraph.checkpoint.memory import MemorySaver
+#tip-box[Toad CLI로 로컬에서 ACP 서버를 띄울 수 있다 — `uv tool install -U batrachian-toad` 설치 후 `toad acp "python path/to/your_server.py" .` 로 실행. 프로세스의 시작·종료·재시작을 자동으로 관리해 준다.]
 
-# 에이전트 생성
-agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-6",
-    system_prompt="당신은 코딩 어시스턴트입니다.",
-    checkpointer=MemorySaver(),
-)
+=== Context Engineering — `@dynamic_prompt`
 
-# ACP 서버 실행 (stdio 모드)
-server = AgentServerACP(agent)
-server.run()
+요청 시점 데이터를 시스템 프롬프트에 주입하려면 `@dynamic_prompt` 미들웨어를 사용한다. `request.runtime.context`와 `request.runtime.store`에 접근할 수 있어, `context_schema`로 선언한 `user_id`/`org_id`가 모든 서브에이전트·도구에 자동 전파된다. 도구는 `ToolRuntime[Context]`를 받아 `runtime.context.user_id`로 런타임 값을 조회한다.
+
+#code-block(`````python
+from deepagents.middleware import dynamic_prompt
+
+@dynamic_prompt
+def inject_user(request):
+    user_id = request.runtime.context.user_id
+    pref = request.runtime.store.get(("prefs", user_id), "lang")
+    return f"\n\nUser: {user_id} / Preferred language: {pref}"
+`````)
+
+=== Permissions (`deepagents>=0.5.2`)
+
+`FilesystemPermission`으로 built-in FS 도구의 읽기/쓰기 권한을 _first-match-wins_ 방식으로 제어한다. 매치가 하나도 없으면 기본 `allow`다. 커스텀 도구·MCP·샌드박스 `execute`는 이 권한을 우회하므로 별도 가드가 필요하다. 서브에이전트의 `permissions`는 부모 규칙을 _전면 대체_(부분 오버라이드 아님).
+
+#code-block(`````python
+from deepagents.permissions import FilesystemPermission
+
+permissions = [
+    FilesystemPermission(operations=["write"], paths=["/policies/**"], mode="deny"),
+    FilesystemPermission(operations=["read", "write"], paths=["/workspace/**"], mode="allow"),
+]
 `````)
 
 #tip-box[MCP(Model Context Protocol)와 ACP의 차이를 기억하세요. MCP는 에이전트가 _외부 서비스_(데이터베이스, API 등)에 접근하기 위한 프로토콜이고, ACP는 에이전트가 _개발 환경_(에디터/IDE)과 상호작용하기 위한 프로토콜입니다. 두 프로토콜은 상호 배타적이 아니라 _보완적_으로 사용된다. 하나의 에이전트가 MCP로 데이터베이스에 접근하면서, ACP로 에디터와 소통하는 것이 일반적인 구성이다.]

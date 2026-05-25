@@ -8,7 +8,7 @@ LLM Agent 개발을 위한 **한국어 교육 자료** 프로젝트. 초급(LLM 
 
 - **대상**: LLM Agent 개발을 배우려는 한국어 사용자
 - **목표**: LangChain, LangGraph, Deep Agents SDK를 실습 중심으로 학습
-- **총 노트북**: 59개 (초급 8 + 중급 36 + 고급 10 + 예제 5)
+- **총 노트북**: 60개 (초급 8 + 중급 36 + 고급 10 + 예제 6)
 
 ## 폴더별 컨텍스트
 
@@ -19,7 +19,7 @@ LLM Agent 개발을 위한 **한국어 교육 자료** 프로젝트. 초급(LLM 
 | `03_langgraph/` | LangGraph 그래프 API, 워크플로, 지속성 | 중급 | 01 완료 | 13 |
 | `04_deepagents/` | Deep Agents SDK 하네스, 백엔드, 스킬 | 중급 | 01 완료 | 10 |
 | `05_advanced/` | 프로덕션 패턴, 멀티에이전트, RAG, SQL | 고급 | 02-04 중 1개 이상 | 10 |
-| `07_examples/` | 실전 응용 예제 (RAG, SQL, 데이터분석, ML, 딥리서치) + SKILL.md 통합 | 중급-고급 | 04 완료 | 5 |
+| `07_examples/` | 실전 응용 예제 (RAG, SQL, 데이터분석, ML, 딥리서치, 멀티모달 PDF RAG) + SKILL.md 통합 | 중급-고급 | 04 완료 | 6 |
 
 ## docs/ 구조
 
@@ -44,7 +44,7 @@ docs/
 1. **제목 + 학습 목표** (markdown) — `# NN. 제목 — 부제` + `## 학습 목표`
 2. **환경 설정** (code) — `load_dotenv()`, `assert`
 3. **Observability** (code) — LangSmith + Langfuse 설정
-4. **모델 설정** (code) — `ChatOpenAI(model="gpt-4.1")`
+4. **모델 설정** (code) — `ChatOpenAI(model="gpt-5.4")`
 5. **본문 섹션** (markdown + code 교대)
 6. **요약 표** (markdown) — 3열 표 형식
 7. **참고 문서** (markdown) — `---` + `**참고 문서:**`
@@ -114,13 +114,14 @@ lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
 | `data-analysis` | `skills/data-analysis/SKILL.md` | 분석 체크리스트, 코드 실행 규칙, 멀티턴 |
 | `ml-pipeline` | `skills/ml-pipeline/SKILL.md` | ML 파이프라인, 모델 비교, 보고 형식 |
 | `deep-research` | `skills/deep-research/SKILL.md` | 5단계 워크플로, 서브에이전트 구성, 인용 규칙 |
+| `multimodal-rag` | `skills/multimodal-rag/SKILL.md` | PDF/PPTX-export 슬라이드 기반 이미지·표 포함 RAG |
 
 에이전트 생성 시 `skills=["/skills/"]`로 전달하면 Progressive Disclosure로 필요 시에만 로드된다.
 
 ## 개발 규칙
 
 1. **문서 기반 작성**: `docs/*.md`와 공식 문서를 근거로 코드 작성
-2. **기본 모델**: `ChatOpenAI(model="gpt-4.1")`
+2. **기본 모델**: `ChatOpenAI(model="gpt-5.4")`
 3. **환경 변수**: `load_dotenv()` → `.env` 파일
 4. **안전 모드**: `FilesystemBackend(virtual_mode=True)`, `LocalShellBackend(virtual_mode=True)`
 5. **참고 문서 명시**: 노트북 마지막 셀에 참조 문서 기재

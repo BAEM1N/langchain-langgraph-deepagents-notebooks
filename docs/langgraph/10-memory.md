@@ -64,6 +64,18 @@ with RedisSaver.from_conn_string(DB_URI) as checkpointer:
     graph = builder.compile(checkpointer=checkpointer)
 ```
 
+#### Oracle
+```python
+from langgraph.checkpoint.oracle import OracleSaver
+
+DB_URI = "oracle://user:password@localhost:1521/?service_name=FREEPDB1"
+with OracleSaver.from_conn_string(DB_URI) as checkpointer:
+    builder = StateGraph(...)
+    graph = builder.compile(checkpointer=checkpointer)
+```
+
+All checkpointers ship with sync and async variants — for example `AsyncPostgresSaver`, `AsyncRedisSaver`.
+
 ### Subgraph Persistence
 
 Provide checkpointer only to parent graphs; LangGraph automatically propagates to subgraphs:
@@ -155,6 +167,17 @@ DB_URI = "redis://localhost:6379"
 with RedisStore.from_conn_string(DB_URI) as store:
     graph = builder.compile(store=store)
 ```
+
+#### Oracle Store
+```python
+from langgraph.store.oracle import OracleStore
+
+DB_URI = "oracle://user:password@localhost:1521/?service_name=FREEPDB1"
+with OracleStore.from_conn_string(DB_URI) as store:
+    graph = builder.compile(store=store)
+```
+
+Oracle Store supports vector search out of the box.
 
 ### Semantic Search
 

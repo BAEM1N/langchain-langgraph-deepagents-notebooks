@@ -40,12 +40,12 @@ print("환경 설정 완료")
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 print(f"모델 설정 완료: {model.model_name}")
 `````)
 #output-block(`````
-모델 설정 완료: gpt-4.1
+모델 설정 완료: gpt-5.4
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -184,18 +184,24 @@ print("                       |-- 코드 실행")
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[프로바이더],
+  text(weight: "bold")[패키지 / 프로바이더],
   text(weight: "bold")[특징],
   text(weight: "bold")[적합한 용도],
-  [_Modal_],
+  [`langchain-modal` / Modal],
   [GPU 지원, ML 워크로드],
   [AI/ML 작업, 데이터 처리],
-  [_Daytona_],
+  [`langchain-daytona` / Daytona],
   [TypeScript/Python, 빠른 콜드 스타트],
   [웹 개발, 빠른 반복],
-  [_Runloop_],
+  [`langchain-runloop` / Runloop],
   [일회용 devbox, 격리 실행],
   [코드 테스트, 일회성 작업],
+  [`langsmith[sandbox]` / LangSmith],
+  [LangSmith Deployments 통합 (private beta)],
+  [LangSmith 위 운영 환경],
+  [`langchain-agentcore-codeinterpreter` / AgentCore],
+  [AWS Bedrock 기반 코드 인터프리터],
+  [AWS 생태계 통합],
 )
 
 프로바이더 선택 기준을 정리하면:
@@ -206,39 +212,29 @@ print("                       |-- 코드 실행")
 다음 코드는 Modal 프로바이더를 사용한 샌드박스 설정 예시입니다.
 
 #code-block(`````python
-# Modal 샌드박스 설정 예시 (참고용)
-modal_config = {
-    "provider": "modal",
-    "image": "python:3.12-slim",
-    "gpu": "T4",
-    "timeout": 300,
-}
+# Modal 샌드박스 연동 — langchain-modal 패키지 (canonical 패턴)
+# pip install langchain-modal deepagents
+import modal
+from deepagents import create_deep_agent
+from langchain_anthropic import ChatAnthropic
+from langchain_modal import ModalSandbox
 
-print("=== Modal 샌드박스 설정 ===")
-for key, value in modal_config.items():
-    print(f"  {key}: {value}")
+app = modal.App.lookup("your-app")
+modal_sandbox = modal.Sandbox.create(app=app)
+backend = ModalSandbox(sandbox=modal_sandbox)
 
-print()
-print("코드 예시 (참고용):")
-print('  from deepagents.backends.sandbox import ModalSandbox')
-print('  agent = create_deep_agent(')
-print('      model="gpt-4.1",')
-print('      backend=ModalSandbox(image="python:3.12-slim", gpu="T4"),')
-print('  )')
-`````)
-#output-block(`````
-=== Modal 샌드박스 설정 ===
-  provider: modal
-  image: python:3.12-slim
-  gpu: T4
-  timeout: 300
+agent = create_deep_agent(
+    model=ChatAnthropic(model="claude-sonnet-4-6"),
+    system_prompt="You are a Python coding assistant with sandbox access.",
+    backend=backend,
+)
 
-코드 예시 (참고용):
-  from deepagents.backends.sandbox import ModalSandbox
-  agent = create_deep_agent(
-      model="gpt-4.1",
-      backend=ModalSandbox(image="python:3.12-slim", gpu="T4"),
-  )
+try:
+    result = agent.invoke({
+        "messages": [{"role": "user", "content": "Create a small Python package and run pytest"}],
+    })
+finally:
+    modal_sandbox.terminate()   # 필수: 리소스 해제
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -283,8 +279,26 @@ print('  )')
 )
 
 === 라이프사이클 관리
-샌드박스는 불필요한 비용을 방지하기 위해 _명시적 종료_가 필요합니다.
-채팅 애플리케이션에서는 대화 스레드별 고유 샌드박스에 TTL(Time-to-Live) 설정을 사용합니다. 샌드박스를 종료하지 않으면 클라우드 프로바이더 비용이 계속 발생하므로, 반드시 타임아웃이나 명시적 종료 메커니즘을 구현해야 합니다.
+샌드박스는 불필요한 비용을 방지하기 위해 _명시적 종료_가 필요합니다. 운영 모드는 두 가지로 갈린다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[모드],
+  text(weight: "bold")[수명],
+  text(weight: "bold")[적합한 용도],
+  [_Thread-scoped (기본)_],
+  [대화 thread 하나당 샌드박스 하나. 첫 run에서 생성, 같은 thread의 다음 turn에서 재사용. idle TTL로 자동 정리],
+  [채팅·대화형 에이전트],
+  [_Assistant-scoped_],
+  [같은 assistant의 모든 thread가 샌드박스 하나를 공유. 파일·패키지·레포지토리가 대화 사이에 누적. 반드시 TTL 또는 주기적 스냅샷 필요],
+  [장기 코드 세션, 누적 작업 공간],
+)
+
+운영 체크리스트: 단발성 스크립트 실행은 `try/finally`로 즉시 종료. 채팅/장기 세션은 thread 당 고유 샌드박스 + TTL 자동 정리. LangSmith Deployments 운영 시 세션 종료 훅에 종료 로직 연결.
 
 #tip-box[대화형 에이전트에서는 대화 스레드마다 고유한 샌드박스를 할당하고, TTL을 30분 정도로 설정하는 것이 일반적입니다. 사용자가 대화를 재개하면 새 샌드박스를 생성하되, 이전 상태를 파일 전송 API로 복원할 수 있습니다.]
 
@@ -358,52 +372,29 @@ ACP의 개념을 이해했으니, 실제 구현을 살펴봅니다. ACP 서버�
 다음 코드는 ACP 서버의 최소 구현 예시입니다. `create_deep_agent()`로 에이전트를 생성하고, `AgentServerACP`로 감싸면 에디터와 통신할 수 있는 ACP 서버가 완성됩니다.
 
 #code-block(`````python
-# ACP 서버 구현 예시 (참고용)
-acp_server_code = """
+# ACP 서버 — canonical 패턴 (asyncio + acp.run_agent)
 # pip install deepagents-acp
+import asyncio
+
+from acp import run_agent
 from deepagents import create_deep_agent
-from deepagents_acp import AgentServerACP
 from langgraph.checkpoint.memory import MemorySaver
 
-# 에이전트 생성
-agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-6",
-    system_prompt="당신은 코딩 어시스턴트입니다.",
-    checkpointer=MemorySaver(),
-)
+from deepagents_acp.server import AgentServerACP
 
-# ACP 서버 실행 (stdio 모드)
-server = AgentServerACP(agent)
-server.run()
-"""
 
-print("=== ACP 서버 구현 예시 ===")
-print(acp_server_code)
+async def main() -> None:
+    agent = create_deep_agent(
+        model="anthropic:claude-sonnet-4-6",
+        system_prompt="You are a helpful coding assistant",
+        checkpointer=MemorySaver(),
+    )
+    server = AgentServerACP(agent)
+    await run_agent(server)
 
-print("설치: pip install deepagents-acp")
-print("실행: python acp_server.py (stdio 모드)")
-`````)
-#output-block(`````
-=== ACP 서버 구현 예시 ===
 
-# pip install deepagents-acp
-from deepagents import create_deep_agent
-from deepagents_acp import AgentServerACP
-from langgraph.checkpoint.memory import MemorySaver
-
-# 에이전트 생성
-agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-6",
-    system_prompt="당신은 코딩 어시스턴트입니다.",
-    checkpointer=MemorySaver(),
-)
-
-# ACP 서버 실행 (stdio 모드)
-server = AgentServerACP(agent)
-server.run()
-
-설치: pip install deepagents-acp
-실행: python acp_server.py (stdio 모드)
+if __name__ == "__main__":
+    asyncio.run(main())
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -446,9 +437,17 @@ ACP 서버를 구현했다면, 이제 어떤 에디터에서 이 서버에 연�
 }
 `````)
 
-=== 추가 도구: Toad
-_Toad_는 ACP 서버를 로컬 개발 도구로 실행하기 위한 프로세스 관리자입니다.
-`uv`를 통해 설치할 수 있습니다. Toad를 사용하면 ACP 서버의 시작, 종료, 재시작을 자동으로 관리할 수 있어, 수동으로 프로세스를 관리하는 번거로움을 줄여줍니다.
+=== Toad CLI
+
+_Toad_는 ACP 서버를 로컬 개발 도구로 실행하기 위한 프로세스 관리자입니다. 시작·종료·재시작을 자동으로 관리해 주므로 수동으로 프로세스를 다룰 필요가 없습니다.
+
+#code-block(`````bash
+# 설치
+uv tool install -U batrachian-toad
+
+# 실행 — ACP 서버 명령과 작업 디렉토리를 인자로 전달
+toad acp "python path/to/your_server.py" .
+`````)
 
 #note-box[에디터별 ACP 통합의 성숙도는 다릅니다. Zed와 JetBrains는 네이티브/빌트인 지원을 제공하여 설정이 간단하지만, VS Code와 Neovim은 별도 플러그인 설치가 필요합니다. 에디터 선택 시 ACP 지원 수준도 함께 고려하세요.]
 
@@ -480,60 +479,38 @@ _Toad_는 ACP 서버를 로컬 개발 도구로 실행하기 위한 프로세스
 다음 코드는 샌드박스 백엔드와 ACP 서버를 결합한 완전한 구성 예시입니다.
 
 #code-block(`````python
-# 샌드박스 + ACP 통합 예시 (참고용)
-integrated_config = """
+# 샌드박스 + ACP 통합 — canonical 패턴
+import asyncio
+
+import modal
+from acp import run_agent
 from deepagents import create_deep_agent
-from deepagents.backends.sandbox import ModalSandbox
-from deepagents_acp import AgentServerACP
+from langchain_anthropic import ChatAnthropic
+from langchain_modal import ModalSandbox
 from langgraph.checkpoint.memory import MemorySaver
 
-# 샌드박스 백엔드 + ACP 서버 통합
-agent = create_deep_agent(
-    model="gpt-4.1",
-    system_prompt="당신은 코딩 어시스턴트입니다.",
-    backend=ModalSandbox(image="python:3.12-slim"),
-    checkpointer=MemorySaver(),
-    interrupt_on={"execute": True},  # 코드 실행 전 승인
-)
+from deepagents_acp.server import AgentServerACP
 
-# ACP로 에디터와 연결
-server = AgentServerACP(agent)
-server.run()
-"""
 
-print("=== 샌드박스 + ACP 통합 예시 ===")
-print(integrated_config)
+async def main() -> None:
+    app = modal.App.lookup("your-app")
+    modal_sandbox = modal.Sandbox.create(app=app)
+    try:
+        agent = create_deep_agent(
+            model=ChatAnthropic(model="claude-sonnet-4-6"),
+            system_prompt="You are a coding assistant.",
+            backend=ModalSandbox(sandbox=modal_sandbox),
+            checkpointer=MemorySaver(),
+            interrupt_on={"execute": True},   # 코드 실행 전 HITL 승인
+        )
+        server = AgentServerACP(agent)
+        await run_agent(server)
+    finally:
+        modal_sandbox.terminate()
 
-print("이 구성의 효과:")
-print("  1. 에디터에서 ACP를 통해 에이전트와 상호작용")
-print("  2. 코드 실행은 Modal 샌드박스에서 안전하게 수행")
-print("  3. execute 호출 시 Human-in-the-Loop 승인 필요")
-`````)
-#output-block(`````
-=== 샌드박스 + ACP 통합 예시 ===
 
-from deepagents import create_deep_agent
-from deepagents.backends.sandbox import ModalSandbox
-from deepagents_acp import AgentServerACP
-from langgraph.checkpoint.memory import MemorySaver
-
-# 샌드박스 백엔드 + ACP 서버 통합
-agent = create_deep_agent(
-    model="gpt-4.1",
-    system_prompt="당신은 코딩 어시스턴트입니다.",
-    backend=ModalSandbox(image="python:3.12-slim"),
-    checkpointer=MemorySaver(),
-    interrupt_on={"execute": True},  # 코드 실행 전 승인
-)
-
-# ACP로 에디터와 연결
-server = AgentServerACP(agent)
-server.run()
-
-이 구성의 효과:
-  1. 에디터에서 ACP를 통해 에이전트와 상호작용
-  2. 코드 실행은 Modal 샌드박스에서 안전하게 수행
-  3. execute 호출 시 Human-in-the-Loop 승인 필요
+if __name__ == "__main__":
+    asyncio.run(main())
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))

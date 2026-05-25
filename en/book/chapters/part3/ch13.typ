@@ -19,7 +19,7 @@
 from dotenv import load_dotenv
 load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == 13.2 Graph API vs Functional API Overview
@@ -287,7 +287,27 @@ print("Pregel Results:", result)
 
 == 13.10 Channel Type
 
-Pregel offers three channel types:
+Pregel offers five channel types that map directly to Graph API state fields and reducers.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Type],
+  text(weight: "bold")[Purpose],
+  [`LastValue`],
+  [Stores the most recent value. Default channel for inputs/outputs],
+  [`EphemeralValue`],
+  [Temporary value scoped to a single execution step],
+  [`Topic`],
+  [Configurable PubSub. Multiple values with optional dedup / accumulation],
+  [`BinaryOperatorAggregate`],
+  [Applies a binary operator to current value and update (running totals, etc.)],
+  [_`DeltaChannel`_ (beta, `langgraph≥1.2`)],
+  [Stores incremental deltas per step. Suitable for fast-growing channels (e.g., message lists)],
+)
 
 #code-block(`````python
 from langgraph.channels import (
@@ -377,6 +397,33 @@ app_agg = Pregel(
 print("BinaryOperatorAggregate:", app_agg.invoke({"a": "foo"}))
 `````)
 
+=== DeltaChannel (beta, `langgraph≥1.2`)
+
+`DeltaChannel` stores _incremental deltas only_ instead of the full accumulated value at each step. It is used to reduce checkpoint cost for high-volume, ever-growing channels such as message lists.
+
+- The reducer must be _associative_ and runs _at reconstruction time, not at write time_.
+- `snapshot_frequency=K` writes a full snapshot every K steps to bound reconstruction cost.
+- The bulk reducer signature is `(current_state, sequence_of_writes) -> new_state`.
+
+#code-block(`````python
+from typing import Annotated, Sequence
+from typing_extensions import TypedDict
+from langgraph.channels import DeltaChannel
+
+def list_reducer(state: list, writes: Sequence[list]) -> list:
+    # (current_state, sequence_of_writes) -> new_state
+    result = list(state)
+    for write in writes:
+        result.extend(write)
+    return result
+
+class State(TypedDict):
+    messages: Annotated[
+        list[str],
+        DeltaChannel(list_reducer, snapshot_frequency=5),
+    ]
+`````)
+
 == 13.11 superstep Execution Model
 
 Pregel runs in *supersteps*.
@@ -432,7 +479,7 @@ _Step 4: Potential for development_
   [Pregel],
   [LangGraph's internal execution engine, actor-channel model],
   [Channel],
-  [LastValue, Topic, BinaryOperatorAggregate 3 types],
+  [`LastValue` / `EphemeralValue` / `Topic` / `BinaryOperatorAggregate` / `DeltaChannel`(beta)],
   [superstep],
   [Parallel execution of same level nodes → Channel update → Next step],
   [Selection criteria],

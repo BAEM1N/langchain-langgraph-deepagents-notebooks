@@ -3,6 +3,8 @@
 > Deep Agents의 built-in 파일시스템 도구(`ls`, `read_file`, `glob`, `grep`, `write_file`, `edit_file`)에 선언적 allow/deny 규칙을 적용해 경로 기반 접근 제어를 강제한다.
 > 프롬프트 인젝션 방어, 읽기 전용 에이전트, 특정 디렉터리만 쓰게 하는 워크스페이스 격리를 구성할 때 읽는다.
 
+> 요구 사항: `deepagents>=0.5.2`.
+
 ## 개요
 
 `permissions`는 **built-in 파일시스템 도구에만** 적용되는 경로 기반 규칙이다. 다음은 우회된다.

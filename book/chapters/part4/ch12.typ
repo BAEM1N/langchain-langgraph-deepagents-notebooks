@@ -129,7 +129,7 @@ from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
 
 agent = create_deep_agent(
-    model="google_genai:gemini-3.1-pro-preview",
+    model="google_genai:gemini-3.5-flash",
     backend=CompositeBackend(
         default=StateBackend(),
         routes={
@@ -180,7 +180,7 @@ async def agent(config: RunnableConfig):
             )
         )
     return create_deep_agent(
-        model="google_genai:gemini-3.1-pro-preview",
+        model="google_genai:gemini-3.5-flash",
         backend=DaytonaSandbox(sandbox=sandbox),
     )
 `````)
@@ -220,7 +220,7 @@ from langchain.agents.middleware import (
 )
 
 agent = create_deep_agent(
-    model="google_genai:gemini-3.1-pro-preview",
+    model="google_genai:gemini-3.5-flash",
     middleware=[
         ModelCallLimitMiddleware(run_limit=50),
         ToolCallLimitMiddleware(run_limit=200),
@@ -264,10 +264,10 @@ from langchain.agents.middleware import (
 )
 
 agent = create_deep_agent(
-    model="google_genai:gemini-3.1-pro-preview",
+    model="google_genai:gemini-3.5-flash",
     middleware=[
         ModelRetryMiddleware(max_retries=3, backoff_factor=2.0, initial_delay=1.0),
-        ModelFallbackMiddleware("gpt-4.1"),
+        ModelFallbackMiddleware("gpt-5.4"),
         ToolRetryMiddleware(
             max_retries=2,
             tools=["search", "fetch_url"],

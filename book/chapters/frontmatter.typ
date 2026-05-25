@@ -187,7 +187,7 @@ AI 에이전트는 단순한 챗봇을 넘어, 도구를 사용하고, 계획을
 #code-block(```python
 # Python 코드 블록 — 민트 좌측 보더
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 result = model.invoke("Hello, Agent!")
 ```)
 

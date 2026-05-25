@@ -71,7 +71,7 @@ async_subagents = [
 ]
 
 agent = create_deep_agent(
-    model="google_genai:gemini-3.1-pro-preview",
+    model="google_genai:gemini-3.5-flash",
     subagents=async_subagents,
 )
 `````)
@@ -197,7 +197,49 @@ langgraph dev --n-jobs-per-worker 10
 
 서브에이전트 3개를 동시에 돌리는 슈퍼바이저는 최소 *4 슬롯*이 필요합니다(슈퍼바이저 1 + 서브에이전트 3). 여유 있게 10~20으로 잡아 두세요.
 
-== 11.9 동기 vs 비동기 선택 기준
+== 11.9 v2 통합 스트리밍으로 라이프사이클 관찰
+
+비동기 서브에이전트의 Pending/Running/Complete 신호는 별도 v3 projection이 아니라 `agent.stream(...)` 한 경로로 받습니다. `subgraphs=True` + `version="v2"`로 메인/서브 이벤트를 통일하고, `async_tasks` 채널 변화는 `updates` 모드의 `data`에 함께 흘러나옵니다.
+
+#code-block(`````python
+async for chunk in agent.astream(
+    {"messages": [{"role": "user", "content": "경쟁사 3개 동시 리서치"}]},
+    stream_mode=["updates", "messages", "custom"],
+    subgraphs=True,
+    version="v2",
+):
+    t = chunk["type"]
+    if t == "updates":
+        # async_tasks 채널 변화, check_async_task / list_async_tasks 결과
+        for node, data in chunk["data"].items():
+            print(f"step={node}")
+    elif t == "messages":
+        # 슈퍼바이저 토큰 + tool_call_chunks
+        ...
+    elif t == "custom":
+        # 도구 내부 get_stream_writer 진행률
+        ...
+`````)
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[신호],
+  text(weight: "bold")[감지 지점],
+  [Pending],
+  [슈퍼바이저가 `start_async_task` tool_call을 방출한 순간],
+  [Running],
+  [`async_tasks[task_id].status`가 `running`으로 바뀐 `updates` 청크],
+  [Complete],
+  [`status`가 `success` / `error` / `cancelled` 중 하나로 종결된 `updates` 청크],
+)
+
+UI 카드 상태를 이 세 신호에 매핑하면 별도 폴링 없이 라이프사이클이 자동으로 흐릅니다. 자세한 스트리밍 분기는 14장(스트리밍)을 참고합니다.
+
+== 11.10 동기 vs 비동기 선택 기준
 
 #table(
   columns: 3,
@@ -238,7 +280,7 @@ langgraph dev --n-jobs-per-worker 10
 - 사용자가 도중에 방향을 바꾸거나 중단시킬 수 있다 → *Async*
 - LangSmith Deployments를 쓰지 않고 Agent Protocol 서버도 띄울 수 없다 → *Sync만 가능*
 
-== 11.10 주의사항
+== 11.11 주의사항
 
 - *Agent Protocol 의존성*: `AsyncSubAgent`를 선언했는데 실행 환경이 Agent Protocol을 지원하지 않으면 초기화 단계에서 실패
 - *`async_tasks` 채널은 보존하라*: 커스텀 state reducer나 middleware로 state를 재구성할 때 이 채널을 덮어쓰면 추적 상실

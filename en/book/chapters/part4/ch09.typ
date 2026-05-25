@@ -27,7 +27,7 @@ print("Environment setup complete")
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 print(f"Model configured: {model.model_name}")
 
@@ -166,6 +166,23 @@ All three frameworks support the following categories:
   [No],
 )
 
+
+#line(length: 100%, stroke: 0.5pt + luma(200))
+== 3-1. Three Core Differentiators
+
+Look past the table cells and Deep Agents diverges from the other two along _three axes_. These are design decisions, not feature checks — figure out which axis matters most for your project and the choice gets easier.
+
+=== Execution Model — graph-based state machine vs single-pass ReAct loop
+
+Deep Agents runs on LangGraph's `StateGraph`. It is assembled from nodes, edges, and subgraphs, with branching, looping, interrupts, and resumes all expressed in the graph itself. _Time travel_ (branching from a past checkpoint), _interrupt/resume_ (the standard HITL path), and _subgraph-scoped streaming_ fall out of that design. OpenCode and Claude Agent SDK are ReAct-loop centric, so state branching and subgraph isolation cost extra integration work.
+
+=== Deployment & Multi-Tenancy — LangSmith Deployments integration
+
+Deep Agents deploys directly to _LangSmith Deployments_ with built-in multi-tenancy via `assistant_id` / `thread_id` / `user_id`. Cron schedules (e.g. consolidation agents), the Store (persistent memory), and the Checkpointer are provisioned automatically at deploy time. OpenCode is a local terminal tool; Claude Agent SDK is closer to a model-calling SDK — both require you to build the surrounding infrastructure yourself.
+
+=== Per-Model Configuration — `HarnessProfile` / `ProviderProfile`
+
+Deep Agents 0.5+ packages provider/model defaults as _profiles_. The same codebase can switch between `openai:gpt-5.4` and `anthropic:claude-sonnet-4-6` without touching call sites. Claude Agent SDK is Claude-only with no model abstraction layer, and OpenCode supports 75+ providers but lacks a _profile_ concept that captures the differences between them.
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 4. Architecture Comparison

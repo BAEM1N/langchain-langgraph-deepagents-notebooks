@@ -17,6 +17,31 @@ The `create_deep_agent()` function accepts:
 - **Skills**: Progressive disclosure of detailed capabilities
 - **Memory**: Context persistence via AGENTS.md files
 
+### Full signature
+
+```python
+create_deep_agent(
+    model: str | BaseChatModel | None = None,
+    tools: Sequence[BaseTool | Callable | dict[str, Any]] | None = None,
+    *,
+    system_prompt: str | SystemMessage | None = None,
+    middleware: Sequence[AgentMiddleware] = (),
+    subagents: Sequence[SubAgent | CompiledSubAgent | AsyncSubAgent] | None = None,
+    skills: list[str] | None = None,
+    memory: list[str] | None = None,
+    permissions: list[FilesystemPermission] | None = None,
+    backend: BackendProtocol | BackendFactory | None = None,
+    interrupt_on: dict[str, bool | InterruptOnConfig] | None = None,
+    response_format: ResponseFormat[ResponseT] | type[ResponseT] | dict[str, Any] | None = None,
+    context_schema: type[ContextT] | None = None,
+    checkpointer: Checkpointer | None = None,
+    store: BaseStore | None = None,
+    debug: bool = False,
+    name: str | None = None,
+    cache: BaseCache | None = None,
+) -> CompiledStateGraph
+```
+
 ## Model Selection
 
 Supports multiple LLM providers through standardized `provider:model` format:
@@ -37,6 +62,8 @@ Beyond built-in capabilities, agents accept custom tools as functions with docst
 ## System Prompts
 
 Each agent should include domain-specific instructions. Default prompts contain detailed guidance for planning, filesystem operations, and subagent coordination.
+
+The framework assembles the final prompt in a fixed precedence: **USER** (your prompt) → **BASE/CUSTOM** (SDK default or profile) → **SUFFIX** (model-specific tuning). Caller intent always precedes framework guidance.
 
 ## Middleware Architecture
 
@@ -67,8 +94,9 @@ Enable task isolation by delegating to specialized agents with their own:
 - **FilesystemBackend**: Local machine access (requires caution)
 - **LocalShellBackend**: Filesystem plus shell execution (extreme caution)
 - **StoreBackend**: Persisted across threads for long-term storage
+- **ContextHubBackend**: LangSmith Hub repository integration
 - **CompositeBackend**: Route different paths to different backend implementations
-- **Sandboxes**: Isolated environments (Modal, Runloop, Daytona)
+- **Sandboxes**: Isolated environments (Modal, Daytona, Deno, local VFS)
 
 ## Human-in-the-Loop
 

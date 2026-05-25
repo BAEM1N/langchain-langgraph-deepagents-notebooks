@@ -90,6 +90,55 @@ for chunk in graph.stream(
 
 v2에서 `stream_mode="values"`는 그래프 state의 Pydantic 모델 / dataclass 타입으로 자동 강제된다. (invoke와 동일한 강제 규칙)
 
+
+## Event Streaming v3 (`stream_events`) — LangGraph 1.2+
+
+LangGraph 1.2부터는 raw `stream_mode`를 직접 파싱하는 방식 위에 **event streaming projection** 레이어가 추가되었다. `graph.stream_events(..., version="v3")`는 하나의 run stream 객체를 만들고, 호출자는 필요한 projection만 독립적으로 소비한다.
+
+```python
+stream = graph.stream_events(
+    {"messages": [{"role": "user", "content": "42 * 17은?"}]},
+    version="v3",
+)
+
+for message in stream.messages:
+    for token in message.text:
+        print(token, end="", flush=True)
+
+for snapshot in stream.values:
+    print(snapshot)
+
+final_state = stream.output
+```
+
+### v2 raw streaming vs v3 event streaming
+
+| 구분 | `stream(..., stream_mode=..., version="v2")` | `stream_events(..., version="v3")` |
+|------|-----------------------------------------------|---------------------------------------|
+| 레이어 | Pregel raw stream | projection stream |
+| 반환 | `StreamPart` dict | run stream object |
+| 소비 방식 | `chunk["type"]`, `chunk["ns"]`, `chunk["data"]` 직접 분기 | `stream.messages`, `stream.values`, `stream.subgraphs`, `stream.output` |
+| 추천 용도 | 런타임 디버깅, custom mode 직접 처리 | 애플리케이션/UI 코드, typed projection |
+
+### interrupt 이후 재개
+
+checkpointer와 `thread_id`가 있는 그래프는 interrupt로 멈춘 뒤 다시 `stream_events(..., version="v3")`를 호출해 재개할 수 있다.
+
+```python
+from langgraph.types import Command
+
+stream = graph.stream_events(input_data, version="v3")
+for message in stream.messages:
+    print(message.text)
+
+if stream.interrupted:
+    print(stream.interrupts)
+    stream = graph.stream_events(
+        Command(resume={"decisions": [{"type": "approve"}]}),
+        version="v3",
+    )
+```
+
 ## State Streaming
 
 **Updates mode** -- receive only state modifications:
@@ -132,14 +181,18 @@ for message_chunk, metadata in graph.stream(
 Associate tags with LLM invocations for selective streaming:
 
 ```python
-model = init_chat_model(model="gpt-4.1-mini", tags=['joke'])
+joke_model = init_chat_model(model="gpt-5.4-mini", tags=['joke'])
+poem_model = init_chat_model(model="gpt-5.4-mini", tags=['poem'])
 
-async for msg, metadata in graph.astream(
+async for chunk in graph.astream(
     {"topic": "cats"},
-    stream_mode="messages"
+    stream_mode="messages",
+    version="v2",
 ):
-    if metadata["tags"] == ["joke"]:
-        print(msg.content, end="|", flush=True)
+    if chunk["type"] == "messages":
+        msg, metadata = chunk["data"]
+        if metadata["tags"] == ["joke"]:
+            print(msg.content, end="|", flush=True)
 ```
 
 ### Filtering by Node
@@ -199,6 +252,34 @@ For models that don't support streaming:
 model = init_chat_model("claude-sonnet-4-6", streaming=False)
 # Or use: disable_streaming=True
 ```
+
+### `nostream` 태그로 특정 모델 출력 제외
+
+내부용 LLM 호출을 messages 스트림에서 제외하려면 `nostream` 태그를 부여한다. 동일 그래프에서 사용자에게 보여줄 모델과 백그라운드 보조 모델을 분리할 때 유용하다.
+
+```python
+from langchain_anthropic import ChatAnthropic
+
+internal_model = ChatAnthropic(model_name="claude-haiku-4-5-20251001").with_config(
+    {"tags": ["nostream"]}
+)
+
+# internal_model의 토큰은 messages 스트림에 노출되지 않는다
+```
+
+## `GraphOutput` (v2 invoke 반환 타입)
+
+`invoke()`를 `version="v2"`로 호출하면 결과가 `GraphOutput`으로 감싸여 반환된다. interrupt 여부를 명시 필드로 확인할 수 있다.
+
+```python
+result = graph.invoke(inputs, version="v2")
+
+assert isinstance(result, GraphOutput)
+result.value        # 그래프 state (dict / Pydantic / dataclass)
+result.interrupts   # tuple[Interrupt, ...], interrupt 없으면 빈 튜플
+```
+
+기존 dict 접근(`result["key"]`)도 동작하지만 deprecated 경로다. 새 코드는 `result.value` / `result.interrupts`를 사용한다.
 
 ## Async Considerations (Python < 3.11)
 
