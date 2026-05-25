@@ -28,7 +28,7 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 from langchain_community.utilities import SQLDatabase
 
-llm = ChatOpenAI(model="gpt-4.1")
+llm = ChatOpenAI(model="gpt-5.4")
 db = SQLDatabase.from_uri("sqlite:///Chinook.db")
 print(f"Dialect: {db.dialect}")
 `````)
@@ -192,16 +192,18 @@ When an agent attempts to call `sql_db_query`, execution is suspended and the hu
   text(weight: "bold")[Options],
   text(weight: "bold")[`Command(resume=...)` value],
   text(weight: "bold")[Description],
-  [_Approved_],
-  [`"approve"`],
-  [Execute the generated query as is],
+  [_Approve_],
+  [`{"decisions": [{"type": "approve"}]}`],
+  [Execute the generated query as-is],
   [_Edit_],
-  [`{"type": "edit", "args": {"query": "..."}}`],
-  [After modifying the query, run],
+  [`{"decisions": [{"type": "edit", "args": {...}}]}`],
+  [Execute the modified query],
   [_Reject_],
-  [`{"type": "reject", "reason": "..."}`],
-  [Passing reason without executing query],
+  [`{"decisions": [{"type": "reject", "message": "..."}]}`],
+  [Skip execution and return the reason],
 )
+
+#tip-box[The v1 `HumanInTheLoopMiddleware` accepts a `decisions` array so multiple tool calls in the same interrupt can be reviewed together. Each entry maps 1:1 to a queued tool call, and `type` is one of `approve`/`edit`/`reject`.]
 
 === Why is HITL important?
 
@@ -221,6 +223,30 @@ sql_agent_hitl = create_agent(
     system_prompt=system_prompt, middleware=[hitl],
 )
 print("Created SQL Agent with HITL applied.")
+`````)
+
+=== Resume pattern for destructive queries (DELETE / UPDATE)
+
+A read-only SELECT can be released with a plain `approve`, but destructive statements (DELETE/UPDATE/INSERT) are typically `edit`-ed first to add stricter `WHERE` clauses or `LIMIT` guards before execution. When the agent interrupts, deliver the reviewer's decision through the `decisions` array in `Command(resume=...)`.
+
+#code-block(`````python
+from langgraph.types import Command
+
+# Dangerous query — reviewer adds LIMIT and approves the edited statement
+result = sql_agent_hitl.invoke(
+    Command(resume={
+        "decisions": [{
+            "type": "edit",
+            "args": {
+                "query": (
+                    "UPDATE invoices SET status='void' "
+                    "WHERE customer_id=42 AND total < 1 LIMIT 10"
+                )
+            },
+        }],
+    }),
+    config={"configurable": {"thread_id": "sql-session-1"}},
+)
 `````)
 
 == 6.7 LangGraph Custom SQL Agent -- StateGraph
@@ -390,12 +416,12 @@ print("LangGraph SQL Agent compiled.")
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[action],
   text(weight: "bold")[`Command(resume=...)`],
-  [Accept],
-  [`{"action": "accept"}`],
+  [Approve],
+  [`{"decisions": [{"type": "approve"}]}`],
   [Edit],
-  [`{"action": "edit", "edited_query": "..."}`],
+  [`{"decisions": [{"type": "edit", "args": {...}}]}`],
   [Reject],
-  [`{"action": "reject", "reason": "..."}`],
+  [`{"decisions": [{"type": "reject", "message": "..."}]}`],
 )
 
 === 4 SQLDatabaseToolkits tool

@@ -120,7 +120,48 @@ agent = create_agent(
 )
 `````)
 
-== 5.5 Deep Agents `StoreBackend`와의 관계
+== 5.5 영속 체크포인터로 확장
+
+`MemorySaver`는 프로세스 내 사전(dict) 저장이므로 재시작 시 휘발됩니다. 운영 환경에서는 `langgraph-checkpoint-postgres` 또는 `-sqlite`의 컨텍스트 매니저 패턴을 씁니다 — `from_conn_string()`으로 풀을 얻고, 처음 한 번 `setup()`을 호출해 스키마를 생성합니다.
+
+#code-block(`````python
+from langgraph.checkpoint.postgres import PostgresSaver
+
+DB = "postgresql://user:pass@localhost/agent"
+
+with PostgresSaver.from_conn_string(DB) as checkpointer:
+    checkpointer.setup()  # 최초 1회 — 테이블/인덱스 생성
+
+    agent = create_agent(
+        model="anthropic:claude-sonnet-4-6",
+        checkpointer=checkpointer,
+        middleware=[StateClaudeMemoryMiddleware()],
+    )
+`````)
+
+#tip-box[비동기 그래프는 `AsyncPostgresSaver.from_conn_string(DB)`를 `async with`로 받습니다. `setup()`도 `await`이 필요합니다. SQLite도 동일한 컨텍스트 매니저 API(`SqliteSaver` / `AsyncSqliteSaver`)를 따릅니다.]
+
+== 5.6 `runtime.context.user_id`로 멀티 테넌트 분리
+
+같은 디스크 디렉터리(또는 같은 Store)를 여러 사용자가 공유할 때는 _네임스페이스_로 격리해야 합니다. LangGraph 1.2부터 `runtime.context.user_id`를 직접 읽어 Store의 namespace 키로 쓰는 패턴이 표준입니다.
+
+#code-block(`````python
+from langgraph.store.postgres import PostgresStore
+from langgraph.runtime import get_runtime
+
+with PostgresStore.from_conn_string(DB) as store:
+    store.setup()
+
+    def upsert_profile(profile: dict) -> str:
+        rt = get_runtime()
+        ns = ("profiles", rt.context.user_id)  # 사용자별 네임스페이스
+        store.put(ns, "self", profile)
+        return "ok"
+`````)
+
+#tip-box[Claude Memory Middleware의 `/memories/*` 경로 계약과 LangGraph Store의 `(namespace, key)` 계약은 _층위가 다릅니다_. 전자는 Claude가 자율적으로 메모를 관리, 후자는 코드가 명시적으로 키를 부여 — 멀티 테넌트 격리는 Store 쪽이 자연스럽습니다.]
+
+== 5.7 Deep Agents `StoreBackend`와의 관계
 
 Deep Agents 0.5는 영구 메모리를 위한 `StoreBackend`를 별도로 제공합니다. 역할은 비슷하지만 적용 범위가 다릅니다.
 

@@ -125,7 +125,46 @@ agent = create_agent(
 )
 `````)
 
-== 6.7 vectorstore와의 선택 기준
+== 6.7 Retrieval 5단계 building block에서의 위치
+
+LangChain RAG는 _Document Loaders → Text Splitters → Embeddings → Vector Stores → Retrievers_ 다섯 단계로 표준화되어 있습니다(08_integration의 04~05 카테고리). `StateFileSearchMiddleware`는 이 다섯 단계를 우회하는 _lite 경로_입니다 — 임베딩 비용 없이 _현재 상태에 있는 파일_을 리터럴 grep으로 뒤집니다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[축],
+  text(weight: "bold")[State File Search],
+  text(weight: "bold")[5단계 RAG 파이프라인],
+  [전처리],
+  [없음 — 상태에 들어온 그대로],
+  [Loader + Splitter + Embed + Index],
+  [검색 방식],
+  [literal glob + grep],
+  [vector similarity + filter],
+  [지연],
+  [밀리초 단위],
+  [임베딩 호출 + ANN],
+  [적합한 규모],
+  [수십~수백 파일],
+  [수만~수백만 청크],
+)
+
+#code-block(`````python
+# 5단계 RAG로 확장할 때
+from langchain.embeddings import init_embeddings
+from langchain_chroma import Chroma
+
+embeddings = init_embeddings("openai:text-embedding-3-small")
+vectorstore = Chroma(collection_name="docs", embedding_function=embeddings)
+retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+`````)
+
+#tip-box[`init_embeddings("provider:model")` 헬퍼는 `init_chat_model`과 같은 패턴 — provider prefix 문자열로 임베딩 백엔드를 한 줄로 교체합니다. State File Search에서 벡터스토어 RAG로 넘어갈 때 코드 변경이 최소화됩니다.]
+
+== 6.8 vectorstore와의 선택 기준
 
 - *정확한 파일명/패턴*이 중요하고 _리터럴 grep_으로 충분할 때
 - 문서 수가 _수십~수백 개_ 수준이고 매 턴 임베딩을 다시 돌릴 비용이 아까울 때

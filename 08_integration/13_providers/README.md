@@ -8,15 +8,15 @@
 
 | # | 공급자 | 패키지 | 주요 integration | 상태 |
 |---|-------|-------|------|------|
-| 01 | Anthropic | `langchain-anthropic` | ChatAnthropic · prompt caching · Claude native tools (bash/text editor/memory/file search) | ⬜ |
-| 02 | OpenAI / Azure | `langchain-openai` | ChatOpenAI · Embeddings · Moderation · Azure OpenAI · DALL-E | ⬜ |
-| 03 | Google | `langchain-google-genai` · `langchain-google-community` | Gemini · Vertex AI · GCS loader · Drive loader · Vertex AI Search | ⬜ |
-| 04 | AWS | `langchain-aws` | Bedrock · Bedrock prompt caching · Kendra · Knowledge Bases · S3 · DynamoDB · Neptune | ⬜ |
-| 05 | Microsoft / Azure | `langchain-microsoft` · `langchain-azure-ai` | Azure OpenAI · Azure AI Search · Cosmos DB · Blob Storage | ⬜ |
-| 06 | Groq | `langchain-groq` | ChatGroq (Llama · Mixtral 고속 추론) | ⬜ |
-| 07 | Hugging Face | `langchain-huggingface` | ChatHuggingFace · HuggingFaceEmbeddings · Transformers · TGI | ⬜ |
-| 08 | NVIDIA | `langchain-nvidia-ai-endpoints` | ChatNVIDIA · NVIDIA NIM · reranker · embedding | ⬜ |
-| 09 | Ollama | `langchain-ollama` | ChatOllama · OllamaEmbeddings (로컬 모델) | ⬜ |
+| 01 | Anthropic | `langchain-anthropic` | ChatAnthropic · prompt caching · Claude native tools (bash/text editor/memory/file search) | ✅ ipynb 생성됨 |
+| 02 | OpenAI / Azure | `langchain-openai` | ChatOpenAI · Embeddings · Moderation · Azure OpenAI · DALL-E | ✅ ipynb 생성됨 |
+| 03 | Google | `langchain-google-genai` · `langchain-google-community` | Gemini · Vertex AI · GCS loader · Drive loader · Vertex AI Search | ✅ ipynb 생성됨 |
+| 04 | AWS | `langchain-aws` | Bedrock · Bedrock prompt caching · Kendra · Knowledge Bases · S3 · DynamoDB · Neptune | ✅ ipynb 생성됨 |
+| 05 | Microsoft / Azure | `langchain-microsoft` · `langchain-azure-ai` | Azure OpenAI · Azure AI Search · Cosmos DB · Blob Storage | ✅ ipynb 생성됨 |
+| 06 | Groq | `langchain-groq` | ChatGroq (Llama · Mixtral 고속 추론) | ✅ ipynb 생성됨 |
+| 07 | Hugging Face | `langchain-huggingface` | ChatHuggingFace · HuggingFaceEmbeddings · Transformers · TGI | ✅ ipynb 생성됨 |
+| 08 | NVIDIA | `langchain-nvidia-ai-endpoints` | ChatNVIDIA · NVIDIA NIM · reranker · embedding | ✅ ipynb 생성됨 |
+| 09 | Ollama | `langchain-ollama` | ChatOllama · OllamaEmbeddings (로컬 모델) | ✅ ipynb 생성됨 |
 
 ## 언제 기능별 카테고리 vs. 공급자 카테고리?
 

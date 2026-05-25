@@ -16,7 +16,7 @@ Prompts are effectively _code_, yet non-engineers often edit them and the cadenc
   [Pin a specific commit hash in CI tests to prevent regression],
 )
 
-== 4.1 Creating and pushing a prompt
+== 4.1 Creating and pushing a prompt — `Client.push_prompt(...)`
 
 The simplest flow is to build a `ChatPromptTemplate` and upload it with `client.push_prompt("name", object=prompt)`. The first push creates a new prompt; subsequent pushes add commits. The returned URL opens the prompt directly in the UI.
 
@@ -30,9 +30,23 @@ prompt = ChatPromptTemplate.from_messages([
     ("user", "{question}"),
 ])
 
-url = client.push_prompt("weather-bot", object=prompt)
+url = client.push_prompt(
+    "weather-bot",
+    object=prompt,
+    description="System prompt that extracts the city from a question",
+    tags=["weather", "extraction"],
+    is_public=False,                   # Public-hub visibility
+)
 print(url)  # https://smith.langchain.com/hub/...
 `````)
+
+The main arguments to `Client.push_prompt(...)`:
+
+- `object` — a LangChain prompt object such as `ChatPromptTemplate` / `PromptTemplate`
+- `description` — one-line caption shown on the UI card
+- `tags` — search / filter tags (prompt metadata, not commit tags)
+- `is_public` — whether to publish to the public hub (default False)
+- `parent_commit_hash` — create the new commit from a specific commit (default is latest)
 
 #figure(image("../../../../assets/images/langsmith/04_prompt_hub/01_prompt_hub_list.png", width: 95%), caption: [Prompts hub listing — `city-list` (1 commit), `weather-bot` (2 commits). Visibility and short-SHA Last Commit shown])
 
@@ -114,21 +128,30 @@ All runs started from Playground flow into the Experiments view and connect dire
 
 #figure(image("../../../../assets/images/langsmith/04_prompt_hub/03_playground.png", width: 95%), caption: [Playground — SYSTEM/HUMAN message editing, `{question}` variable input, and output generation with an f-string↔mustache switcher])
 
-== 4.5 Runtime injection — `pull_prompt` → `create_agent`
+== 4.5 Runtime injection — `Client.pull_prompt(...)` → `create_agent`
 
-In the application, fetch the deployment-slot tag with `pull_prompt` and _wire it straight into the LLM / agent_. Editing the prompt takes effect on the next request without redeployment.
+In the application, fetch the deployment-slot tag with `client.pull_prompt(...)` and _wire it straight into the LLM / agent_. Editing the prompt takes effect on the next request without redeployment.
 
 #code-block(`````python
 from langchain.agents import create_agent
 
-prompt = client.pull_prompt("weather-bot:prod")
+# 1) Reference by tag or commit SHA
+prompt = client.pull_prompt("weather-bot:prod")              # tag
+# prompt = client.pull_prompt("weather-bot:12344e88")        # commit SHA
+# prompt = client.pull_prompt("weather-bot", include_model=True)  # also include saved model config
 
 agent = create_agent(
-    model="openai:gpt-4.1",
+    model="openai:gpt-5.4",
     system_prompt=prompt.format_messages()[0].content,
     tools=[],
 )
 `````)
+
+The main options on `Client.pull_prompt(...)`:
+
+- `prompt_identifier` — three reference forms: `"name"`, `"name:tag"`, `"name:SHA"`
+- `include_model` — when True, returns a `RunnableSequence` that also includes the model / temperature saved in Playground
+- Caching — the Python SDK keeps an ETag cache keyed by commit, so repeated pulls of the same SHA cost nothing
 
 == 4.6 Pinning a specific commit hash in CI
 

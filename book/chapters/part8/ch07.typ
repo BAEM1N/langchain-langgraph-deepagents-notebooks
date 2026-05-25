@@ -111,7 +111,25 @@ agent = create_agent(
 )
 `````)
 
-== 7.7 Amazon Nova 제약
+== 7.7 Reasoning · Profiling
+
+Claude 4.6/4.7 모델은 Bedrock에서도 _extended thinking_(reasoning)이 지원됩니다. 캐싱은 reasoning이 켜진 호출에도 적용되지만, _reasoning 블록 자체는 캐시 미스로 매번 새로 계산_되니 토큰 절감 효과가 무 reasoning 케이스보다 작습니다.
+
+#code-block(`````python
+from langchain_aws import ChatBedrockConverse
+
+model = ChatBedrockConverse(
+    model_id="anthropic.claude-sonnet-4-20250514-v2:0",
+    additional_model_request_fields={
+        "reasoning_config": {"type": "enabled", "budget_tokens": 4096},
+    },
+)
+print(model.profile.reasoning_output)  # True → 응답에 reasoning 블록 포함
+`````)
+
+#tip-box[`ChatBedrockConverse(...).profile`(LangChain 1.1+)에서 `tool_calling`, `reasoning_output`, `max_input_tokens` 같은 모델 능력치를 확인할 수 있습니다 — 멀티 모델 라우팅 로직에서 capability check로 쓰면 깨끗합니다.]
+
+== 7.8 Amazon Nova 제약
 
 #table(
   columns: 3,

@@ -63,7 +63,7 @@ from langchain_openai import ChatOpenAI
 
 load_dotenv()
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == 8.2 Voice Agent Architecture Overview
@@ -247,7 +247,7 @@ def calendar_tool(action: str, details: str) -> str:
 
 #code-block(`````python
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, calendar_tool],
     system_prompt=(
         "You are a useful voice assistant."
@@ -290,6 +290,31 @@ async def stream_agent_response(user_text: str):
                 if hasattr(msg, "content") and msg.content:
                     yield msg.content
 `````)
+
+=== Multimodal content blocks and `output_version="v1"`
+
+A voice agent's input is not always pure text — a user may attach a photo, or a tool may return a chart image. LangChain v1 messages accept a _content blocks_ array, so a single message can mix text, image, and audio. Creating the model with `output_version="v1"` also normalizes responses into the `AIMessage.content_blocks` schema, which is safe to serialize between STT, Agent, and TTS processes.
+
+#code-block(`````python
+from langchain.chat_models import init_chat_model
+
+llm_v1 = init_chat_model("gpt-5.4", output_version="v1")
+
+response = llm_v1.invoke([
+    {"role": "user", "content": [
+        {"type": "text", "text": "Explain any anomalies in this chart by voice."},
+        {"type": "image", "source_type": "base64",
+         "mime_type": "image/png", "data": "..."},
+    ]},
+])
+
+# v1 schema — content_blocks survives JSON round-trips between services
+for block in response.content_blocks:
+    if block["type"] == "text":
+        tts_input_queue.put_nowait(block["text"])
+`````)
+
+#tip-box[`output_version="v1"` normalizes responses into the `content_blocks` schema. When messages cross process boundaries via WebSocket (a TTS server, for example), this prevents JSON (de)serialization from corrupting the payload — practically mandatory for boundary-heavy systems like voice pipelines.]
 
 == 8.6 TTS Steps -- Cartesia Streaming Speech Synthesis
 
@@ -511,7 +536,7 @@ def reminder_tool(time: str, message: str) -> str:
 
 #code-block(`````python
 voice_agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, calendar_tool,
            weather_tool, reminder_tool],
     system_prompt=(

@@ -25,7 +25,17 @@ LANGSMITH_TRACING=true
 LANGSMITH_PROJECT=langsmith-quickstart
 `````)
 
-`LANGSMITH_PROJECT`는 UI 좌측 _Projects_ 메뉴에서 구분되는 네임스페이스입니다. 설정하지 않으면 `default` 프로젝트에 기록됩니다. API 키 발급은 한 번만 표시되므로, 생성 직후 바로 `.env`에 복사해야 합니다.
+`LANGSMITH_PROJECT`는 UI 좌측 _Projects_ 메뉴에서 구분되는 네임스페이스입니다. 설정하지 않으면 모든 트레이스가 `default` 프로젝트에 기록됩니다. API 키 발급은 한 번만 표시되므로, 생성 직후 바로 `.env`에 복사해야 합니다.
+
+#tip-box[
+  레거시 `LANGCHAIN_API_KEY` / `LANGCHAIN_TRACING_V2` / `LANGCHAIN_PROJECT` 환경 변수도 여전히 shim으로 인식됩니다. 신규 프로젝트는 `LANGSMITH_*` 접두사로 통일하는 것을 권장합니다.
+]
+
+`langsmith>=0.3` 패키지만 추가하면 `langchain` · `langgraph` · `deepagents`의 자동 계측이 모두 이 환경 변수를 공유합니다.
+
+#code-block(`````bash
+pip install -U langsmith
+`````)
 
 === 온보딩 플로우 (최초 1회)
 
@@ -58,7 +68,7 @@ def get_weather(city: str) -> str:
     return f"{city} 맑음"
 
 agent = create_agent(
-    model="openai:gpt-4.1",
+    model="openai:gpt-5.4",
     tools=[get_weather],
 )
 
@@ -120,6 +130,19 @@ run_weather("부산시")
 
 UI에서 `weather-pipeline`이 루트, 그 아래 `normalize_city`와 `AgentExecutor`가 자식으로 묶인 하나의 트리로 보입니다.
 
+=== `tracing_context`로 환경 변수 없이 켜기
+
+환경 변수 없이 일시적으로 트레이싱을 켜고 끄려면 `langsmith as ls`의 `tracing_context`를 컨텍스트 매니저로 씁니다. 노트북·테스트 코드에서 특정 블록만 기록하고 싶을 때 유용합니다.
+
+#code-block(`````python
+import langsmith as ls
+
+with ls.tracing_context(enabled=True, project_name="langsmith-quickstart"):
+    agent.invoke({"messages": [{"role": "user", "content": "서울 날씨"}]})
+`````)
+
+`enabled=False`로 호출하면 전역 설정이 켜져 있어도 해당 블록만 트레이스가 비활성화됩니다 — 민감 데이터 처리 블록을 격리할 때 씁니다.
+
 == 1.5 트레이스를 코드에서 다시 조회
 
 `langsmith.Client`로 UI 없이도 트레이스를 프로그램적으로 꺼냅니다. 회귀 테스트 입력, 야간 배치 리포트 원천, 데이터셋 시드로 씁니다.
@@ -155,8 +178,10 @@ UI 프로젝트 페이지 우상단의 _Analytics_ 탭에서 프로젝트 단위
 
 == 핵심 정리
 
-- 환경변수 세 줄(`LANGSMITH_API_KEY`, `LANGSMITH_TRACING=true`, `LANGSMITH_PROJECT`)로 기존 에이전트가 자동 트레이싱된다
+- 환경변수 세 줄(`LANGSMITH_API_KEY`, `LANGSMITH_TRACING=true`, `LANGSMITH_PROJECT`)로 기존 에이전트가 자동 트레이싱된다 — 미설정 시 `default` 프로젝트로 기록
+- 레거시 `LANGCHAIN_*` 환경 변수도 shim으로 인식되지만 신규 코드는 `LANGSMITH_*`로 통일
 - `run_name` · `tags` · `metadata`로 UI 필터와 `client.list_runs(filter=...)` 질의에 걸리게 한다
 - `@traceable`로 LangChain 외부 함수도 같은 트레이스 트리에 편입한다
+- `import langsmith as ls` + `ls.tracing_context(enabled=...)`로 환경 변수 없이 블록 단위 토글
 - `langsmith.Client`로 UI 없이 프로그램적으로 트레이스를 꺼내 평가·회귀 테스트의 시드로 쓴다
 - UI의 Projects/Runs/Trace 트리 3단계로 "어떤 호출이 왜 이렇게 나왔는가"를 재현한다

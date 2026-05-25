@@ -131,7 +131,95 @@ runs = client.list_runs(
 
 #figure(image("../../../../assets/images/langsmith/02_tracing_agents/06_add_filter_menu.png", width: 95%), caption: [Add filter menu — Tag and Metadata exist as separate fields, enabling conditions such as `tags contains env:dev`])
 
-== 2.7 The 400-day retention limit → persist to datasets
+== 2.7 The `@traceable` decorator — run_type variants
+
+`@traceable` brings non-LangChain functions into the trace tree; the `run_type` argument decides the UI icon and filter category. The common values:
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[run_type],
+  text(weight: "bold")[Use case],
+  text(weight: "bold")[UI rendering],
+  [`chain`],
+  [Default — any function / pipeline step],
+  [Chain icon, `chain` filter],
+  [`llm`],
+  [Manual LLM call (provider SDK used directly, etc.)],
+  [LLM icon, tokens / cost auto-aggregated],
+  [`tool`],
+  [External system calls (search · DB · API)],
+  [Tool icon, `tool` filter],
+  [`retriever`],
+  [Vector store / retrieval step],
+  [Retriever icon with document count],
+  [`embedding`],
+  [Embedding computation],
+  [Embedding icon],
+  [`parser`],
+  [Output parsing / post-processing],
+  [Parser icon],
+)
+
+#code-block(`````python
+from langsmith import traceable
+
+@traceable(run_type="retriever", name="vector-search")
+def search(query: str) -> list[dict]:
+    return vectorstore.similarity_search_with_score(query, k=4)
+
+@traceable(run_type="tool", name="lookup-order")
+def lookup_order(order_id: str) -> dict:
+    return db.fetch_order(order_id)
+`````)
+
+== 2.8 PII masking — `LangChainTracer` + `Client(anonymizer=...)`
+
+To regex-mask inputs/outputs _just before_ they reach LangSmith, build a pattern list with `create_anonymizer` and inject it into `Client(anonymizer=...)`. A `LangChainTracer` created from that client and passed via `config={"callbacks": [...]}` records only that invocation with PII redacted.
+
+#code-block(`````python
+from langsmith import Client
+from langsmith.anonymizer import create_anonymizer
+from langchain.callbacks.tracers import LangChainTracer
+
+anonymizer = create_anonymizer([
+    {"pattern": r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", "replace": "<email>"},
+    {"pattern": r"\b\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{4}\b",            "replace": "<card>"},
+    {"pattern": r"\+?\d{2,3}[ -]?\d{3,4}[ -]?\d{4}",                    "replace": "<phone>"},
+])
+masked_client = Client(anonymizer=anonymizer)
+tracer = LangChainTracer(client=masked_client, project_name="prod-masked")
+
+agent.invoke(
+    {"messages": [{"role": "user", "content": "My email a@b.com, phone +1-555-1234"}]},
+    config={"callbacks": [tracer]},
+)
+`````)
+
+To block inputs/outputs entirely, use `Client(hide_inputs=lambda _: {}, hide_outputs=lambda _: {})` or set `LANGSMITH_HIDE_INPUTS=true`. Chapter 5 revisits this as a defense-in-depth pattern alongside `PIIMiddleware`.
+
+== 2.9 Selective tracing — record only specific calls
+
+With global tracing on, it is often necessary to _exclude specific calls_ or _route specific calls to a different project_.
+
+#code-block(`````python
+import langsmith as ls
+
+# 1) Disable only this block even if env vars enable tracing
+with ls.tracing_context(enabled=False):
+    agent.invoke({"messages": [{"role": "user", "content": "Sensitive data..."}]})
+
+# 2) Route debugging calls to a separate project
+with ls.tracing_context(project_name="langsmith-debug", tags=["mode:debug"]):
+    agent.invoke({"messages": [{"role": "user", "content": "test case"}]})
+`````)
+
+`tracing_context` is thread-local so it is safe in async environments. The precedence among environment variable, context manager, and `config={"callbacks": [...]}` is _nearest scope wins_.
+
+== 2.10 The 400-day retention limit → persist to datasets
 
 SaaS LangSmith deletes traces _400 days after ingestion_. Runs you want to keep for evaluation regression must be _persisted as a Dataset_. We cover datasets in depth in chapter 3; here, just the pattern.
 
@@ -159,4 +247,7 @@ client.create_examples(
 - Deep Agents sync subagents are a single trace; async are separate traces — tracked via the `async_tasks` channel
 - `thread_id` / `session_id` metadata triggers Thread-view grouping
 - Feedback API + `list_runs(filter=...)` programmatically connect the evaluation loop
+- `@traceable`'s `run_type` (`chain`/`llm`/`tool`/`retriever`/`embedding`/`parser`) decides UI icon and filter category
+- Mask PII just before transmission with `create_anonymizer` + `Client(anonymizer=...)` + `LangChainTracer`
+- Toggle selective tracing per block via `ls.tracing_context(enabled=...)` — thread-local
 - Push traces into a Dataset to outlive the 400-day retention limit

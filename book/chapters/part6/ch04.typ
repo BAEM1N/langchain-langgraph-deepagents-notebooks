@@ -16,7 +16,7 @@
   [CI 테스트에서 _특정 커밋 해시를 고정_해 회귀를 방지한다],
 )
 
-== 4.1 Prompt 생성 · 푸시
+== 4.1 Prompt 생성 · 푸시 — `Client.push_prompt(...)`
 
 가장 단순한 형태는 `ChatPromptTemplate`을 만든 뒤 `client.push_prompt("이름", object=prompt)`로 올리는 것입니다. 첫 push에서 새 prompt가 생기고, 이후 push마다 새 commit이 쌓입니다. 반환 URL로 UI에서 바로 열립니다.
 
@@ -30,9 +30,23 @@ prompt = ChatPromptTemplate.from_messages([
     ("user", "{question}"),
 ])
 
-url = client.push_prompt("weather-bot", object=prompt)
+url = client.push_prompt(
+    "weather-bot",
+    object=prompt,
+    description="질문에서 도시명을 뽑는 시스템 프롬프트",
+    tags=["weather", "extraction"],
+    is_public=False,                   # 조직 외부 공개 여부
+)
 print(url)  # https://smith.langchain.com/hub/...
 `````)
+
+`Client.push_prompt(...)`의 주요 인자는 다음과 같습니다.
+
+- `object` — `ChatPromptTemplate` / `PromptTemplate` 등 LangChain 프롬프트 객체
+- `description` — UI 카드에 노출되는 한 줄 설명
+- `tags` — 검색·필터용 태그 (commit 태그가 아닌 prompt 메타데이터)
+- `is_public` — public hub에 공개할지 여부 (기본 False)
+- `parent_commit_hash` — 특정 커밋 기준으로 새 커밋 생성 (기본은 최신)
 
 #figure(image("../../../assets/images/langsmith/04_prompt_hub/01_prompt_hub_list.png", width: 95%), caption: [Prompts 허브 목록 — `city-list`(1 commit), `weather-bot`(2 commits). Visibility, Last Commit 짧은 SHA 표시])
 
@@ -114,21 +128,30 @@ Playground에서 돌린 모든 run은 Experiments 뷰로 넘어가 3장의 데�
 
 #figure(image("../../../assets/images/langsmith/04_prompt_hub/03_playground.png", width: 95%), caption: [Playground — SYSTEM/HUMAN 메시지 편집 + `{question}` 변수 입력 + Output 생성. f-string↔mustache 스위처 제공])
 
-== 4.5 런타임 주입 — `pull_prompt` → `create_agent`
+== 4.5 런타임 주입 — `Client.pull_prompt(...)` → `create_agent`
 
-애플리케이션에서는 배포 슬롯 태그를 `pull_prompt`로 당겨 _LLM/에이전트에 바로 꽂습니다_. 프롬프트를 고치면 재배포 없이 다음 요청부터 반영됩니다.
+애플리케이션에서는 배포 슬롯 태그를 `client.pull_prompt(...)`로 당겨 _LLM/에이전트에 바로 꽂습니다_. 프롬프트를 고치면 재배포 없이 다음 요청부터 반영됩니다.
 
 #code-block(`````python
 from langchain.agents import create_agent
 
-prompt = client.pull_prompt("weather-bot:prod")
+# 1) tag 또는 commit SHA 로 참조
+prompt = client.pull_prompt("weather-bot:prod")              # 태그
+# prompt = client.pull_prompt("weather-bot:12344e88")        # commit SHA
+# prompt = client.pull_prompt("weather-bot", include_model=True)  # 저장된 모델 설정까지
 
 agent = create_agent(
-    model="openai:gpt-4.1",
+    model="openai:gpt-5.4",
     system_prompt=prompt.format_messages()[0].content,
     tools=[],
 )
 `````)
+
+`Client.pull_prompt(...)`의 주요 옵션은 다음과 같습니다.
+
+- `prompt_identifier` — `"name"`, `"name:tag"`, `"name:SHA"` 세 가지 참조 방식
+- `include_model` — True로 두면 Playground에서 저장한 모델·temperature까지 함께 반환되는 `RunnableSequence`
+- 캐싱 — Python SDK가 commit 기준으로 ETag 캐싱을 하므로 같은 SHA를 반복해 받을 때 비용이 들지 않음
 
 == 4.6 CI에서 특정 커밋 해시 고정
 

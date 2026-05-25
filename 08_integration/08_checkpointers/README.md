@@ -7,10 +7,10 @@
 
 | # | 백엔드 | 클래스 | 패키지 | 용도 | 상태 |
 |---|--------|--------|--------|------|------|
-| 01 | In-Memory | `InMemorySaver` | `langgraph` (포함) | 개발·단위 테스트 | ⬜ |
-| 02 | SQLite | `SqliteSaver` · `AsyncSqliteSaver` | `langgraph-checkpoint-sqlite` | 로컬 워크플로 | ⬜ |
-| 03 | Postgres | `PostgresSaver` · `AsyncPostgresSaver` | `langgraph-checkpoint-postgres` | 프로덕션 | ⬜ |
-| 04 | Cosmos DB | `CosmosDBSaver` · `AsyncCosmosDBSaver` | `langgraph-checkpoint-cosmosdb` | Azure 환경 | ⬜ |
+| 01 | In-Memory | `InMemorySaver` | `langgraph` (포함) | 개발·단위 테스트 | ✅ ipynb 생성됨 |
+| 02 | SQLite | `SqliteSaver` · `AsyncSqliteSaver` | `langgraph-checkpoint-sqlite` | 로컬 워크플로 | ✅ ipynb 생성됨 |
+| 03 | Postgres | `PostgresSaver` · `AsyncPostgresSaver` | `langgraph-checkpoint-postgres` | 프로덕션 | ✅ ipynb 생성됨 |
+| 04 | Cosmos DB | `CosmosDBSaver` · `AsyncCosmosDBSaver` | `langgraph-checkpoint-cosmosdb` | Azure 환경 | ✅ ipynb 생성됨 |
 
 ## 학습 포인트
 

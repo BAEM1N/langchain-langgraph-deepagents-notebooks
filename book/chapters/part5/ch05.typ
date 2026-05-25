@@ -30,7 +30,7 @@ load_dotenv(override=True)
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
-llm = ChatOpenAI(model="gpt-4.1")
+llm = ChatOpenAI(model="gpt-5.4")
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 print("환경 준비 완료.")
 `````)

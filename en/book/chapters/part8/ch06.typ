@@ -125,7 +125,46 @@ agent = create_agent(
 )
 `````)
 
-== 6.7 When to pick this over a vector store
+== 6.7 Position in the five-step retrieval building blocks
+
+LangChain RAG is standardized into five stages — _Document Loaders → Text Splitters → Embeddings → Vector Stores → Retrievers_ (categories 04–05 in 08_integration). `StateFileSearchMiddleware` is a _lite path_ that bypasses these five stages, scanning _files already in state_ with literal grep and zero embedding cost.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Axis],
+  text(weight: "bold")[State File Search],
+  text(weight: "bold")[Five-step RAG pipeline],
+  [Preprocessing],
+  [None — files as they arrive in state],
+  [Loader + Splitter + Embed + Index],
+  [Retrieval],
+  [literal glob + grep],
+  [vector similarity + filter],
+  [Latency],
+  [Milliseconds],
+  [Embedding call + ANN],
+  [Suitable scale],
+  [Tens to hundreds of files],
+  [Tens of thousands to millions of chunks],
+)
+
+#code-block(`````python
+# Scaling out to a five-step RAG pipeline
+from langchain.embeddings import init_embeddings
+from langchain_chroma import Chroma
+
+embeddings = init_embeddings("openai:text-embedding-3-small")
+vectorstore = Chroma(collection_name="docs", embedding_function=embeddings)
+retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+`````)
+
+#tip-box[`init_embeddings("provider:model")` mirrors the `init_chat_model` pattern — swap the embedding backend in a single line using a provider-prefixed string. Moving from State File Search to a vector-store RAG keeps code changes minimal.]
+
+== 6.8 When to pick this over a vector store
 
 - Exact filename/patterns matter, and _literal grep_ is enough — no semantic search needed
 - Document count is _tens to hundreds_ and you would rather not pay to re-embed each turn

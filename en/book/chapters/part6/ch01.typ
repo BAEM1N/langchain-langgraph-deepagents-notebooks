@@ -25,7 +25,17 @@ LANGSMITH_TRACING=true
 LANGSMITH_PROJECT=langsmith-quickstart
 `````)
 
-`LANGSMITH_PROJECT` is the namespace shown in the UI's left sidebar under _Projects_. If you leave it unset, runs are recorded in the `default` project. API keys are shown only once on creation, so copy the key into `.env` immediately.
+`LANGSMITH_PROJECT` is the namespace shown in the UI's left sidebar under _Projects_. If you leave it unset, every trace lands in the `default` project. API keys are shown only once on creation, so copy the key into `.env` immediately.
+
+#tip-box[
+  Legacy `LANGCHAIN_API_KEY` / `LANGCHAIN_TRACING_V2` / `LANGCHAIN_PROJECT` environment variables are still honored as a shim. Standardize on the `LANGSMITH_*` prefix for new projects.
+]
+
+Add the `langsmith>=0.3` package alone and `langchain` · `langgraph` · `deepagents` auto-instrumentation all share these environment variables.
+
+#code-block(`````bash
+pip install -U langsmith
+`````)
 
 === Onboarding flow (first time only)
 
@@ -58,7 +68,7 @@ def get_weather(city: str) -> str:
     return f"{city} is sunny"
 
 agent = create_agent(
-    model="openai:gpt-4.1",
+    model="openai:gpt-5.4",
     tools=[get_weather],
 )
 
@@ -120,6 +130,19 @@ run_weather("Busan City")
 
 In the UI, `weather-pipeline` is the root with `normalize_city` and `AgentExecutor` grouped beneath it as a single tree.
 
+=== Enable tracing without env vars via `tracing_context`
+
+To toggle tracing on and off temporarily without environment variables, use `langsmith as ls`'s `tracing_context` as a context manager. Useful for capturing only a specific block from a notebook or test.
+
+#code-block(`````python
+import langsmith as ls
+
+with ls.tracing_context(enabled=True, project_name="langsmith-quickstart"):
+    agent.invoke({"messages": [{"role": "user", "content": "Weather in Seoul"}]})
+`````)
+
+Calling it with `enabled=False` disables tracing for that block alone, even when the global setting is on — useful for isolating blocks that handle sensitive data.
+
 == 1.5 Re-querying traces from code
 
 `langsmith.Client` lets you pull traces programmatically without the UI. Use it as inputs for regression tests, source data for nightly batch reports, or seeds for building datasets.
@@ -155,8 +178,10 @@ To re-issue or revoke a key after onboarding, go to _Settings → Access and Sec
 
 == Key Takeaways
 
-- Three environment variables (`LANGSMITH_API_KEY`, `LANGSMITH_TRACING=true`, `LANGSMITH_PROJECT`) auto-trace existing agents
+- Three environment variables (`LANGSMITH_API_KEY`, `LANGSMITH_TRACING=true`, `LANGSMITH_PROJECT`) auto-trace existing agents — runs land in the `default` project when unset
+- Legacy `LANGCHAIN_*` environment variables remain as a shim; standardize new code on `LANGSMITH_*`
 - `run_name` · `tags` · `metadata` surface runs in UI filters and `client.list_runs(filter=...)` queries
 - `@traceable` pulls non-LangChain functions into the same trace tree
+- `import langsmith as ls` + `ls.tracing_context(enabled=...)` toggle tracing per block without environment variables
 - `langsmith.Client` fetches traces programmatically to seed evaluation and regression tests
 - The three UI levels — Projects / Runs / Trace tree — reproduce "which call produced what"

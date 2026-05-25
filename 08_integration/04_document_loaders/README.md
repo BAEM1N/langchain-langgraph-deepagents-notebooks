@@ -6,11 +6,11 @@
 
 | # | 유형 | 대표 로더 | 패키지 | 상태 |
 |---|------|----------|--------|------|
-| 01 | PDF | `PyPDFLoader` · `PyMuPDFLoader` · `PyMuPDF4LLMLoader` · `PDFPlumberLoader` · `PDFMinerLoader` · `PyPDFDirectoryLoader` | `langchain-community` | ⬜ |
-| 02 | Web crawl | `WebBaseLoader` · `RecursiveURLLoader` · `SitemapLoader` · `FirecrawlLoader` · `SpiderLoader` | `langchain-community` | ⬜ |
-| 03 | Cloud storage | `S3FileLoader` · `S3DirectoryLoader` · `AzureBlobStorageLoader` · `GCSFileLoader` · `GCSDirectoryLoader` · `GoogleDriveLoader` | `langchain-community` / 공급자 패키지 | ⬜ |
-| 04 | Productivity | `NotionDirectoryLoader` · `SlackDirectoryLoader` · `GithubFileLoader` · `ConfluenceLoader` · `FigmaFileLoader` | `langchain-community` | ⬜ |
-| 05 | Structured / code | `CSVLoader` · `JSONLoader` · `BSHTMLLoader` · `DoclingLoader` · `GitLoader` · `UnstructuredFileLoader` | `langchain-community` | ⬜ |
+| 01 | PDF | `PyPDFLoader` · `PyMuPDFLoader` · `PyMuPDF4LLMLoader` · `PDFPlumberLoader` · `PDFMinerLoader` · `PyPDFDirectoryLoader` | `langchain-community` | ✅ ipynb 생성됨 |
+| 02 | Web crawl | `WebBaseLoader` · `RecursiveURLLoader` · `SitemapLoader` · `FirecrawlLoader` · `SpiderLoader` | `langchain-community` | ✅ ipynb 생성됨 |
+| 03 | Cloud storage | `S3FileLoader` · `S3DirectoryLoader` · `AzureBlobStorageLoader` · `GCSFileLoader` · `GCSDirectoryLoader` · `GoogleDriveLoader` | `langchain-community` / 공급자 패키지 | ✅ ipynb 생성됨 |
+| 04 | Productivity | `NotionDirectoryLoader` · `SlackDirectoryLoader` · `GithubFileLoader` · `ConfluenceLoader` · `FigmaFileLoader` | `langchain-community` | ✅ ipynb 생성됨 |
+| 05 | Structured / code | `CSVLoader` · `JSONLoader` · `BSHTMLLoader` · `DoclingLoader` · `GitLoader` · `UnstructuredFileLoader` | `langchain-community` | ✅ ipynb 생성됨 |
 
 ## 학습 포인트
 

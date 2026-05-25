@@ -119,7 +119,24 @@ AnthropicPromptCachingMiddleware(unsupported_model_behavior="ignore")
 AnthropicPromptCachingMiddleware(unsupported_model_behavior="raise")
 `````)
 
-== 2.7 Differences from Bedrock
+== 2.7 Aggregating with `UsageMetadataCallbackHandler`
+
+To aggregate cache-hit rate across a whole thread, attach `langchain.callbacks.UsageMetadataCallbackHandler`. Every LLM call's `usage_metadata` accumulates, with `cache_creation` / `cache_read` preserved as-is.
+
+#code-block(`````python
+from langchain.callbacks import UsageMetadataCallbackHandler
+
+handler = UsageMetadataCallbackHandler()
+agent.invoke(
+    {"messages": [{"role": "user", "content": "..."}]},
+    config={"callbacks": [handler]},
+)
+print(handler.usage_metadata)  # {model_name: {input/output/cache_creation/cache_read}}
+`````)
+
+#tip-box[Receiving Anthropic responses with `output_version="v1"` (`ChatAnthropic(..., output_version="v1")`) places `cache_creation` / `cache_read` inside the _standardized `usage_metadata.input_token_details`_ rather than the message body — multi-provider aggregation code becomes much simpler.]
+
+== 2.8 Differences from Bedrock
 
 When calling Claude via AWS Bedrock, use `BedrockPromptCachingMiddleware` (ch7). The two middleware share parameter names and semantics, but they target _different packages_ and have different TTL constraints (Nova supports only 5m, no tool-definition cache).
 

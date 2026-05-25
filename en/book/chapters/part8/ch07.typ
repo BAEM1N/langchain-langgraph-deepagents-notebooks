@@ -111,7 +111,25 @@ agent = create_agent(
 )
 `````)
 
-== 7.7 Amazon Nova constraints
+== 7.7 Reasoning · profiling
+
+Claude 4.6/4.7 models support _extended thinking_ (reasoning) on Bedrock too. Caching still applies to reasoning-enabled calls, but the _reasoning block itself is always a cache miss and recomputed each time_ — so token savings are smaller than the non-reasoning case.
+
+#code-block(`````python
+from langchain_aws import ChatBedrockConverse
+
+model = ChatBedrockConverse(
+    model_id="anthropic.claude-sonnet-4-20250514-v2:0",
+    additional_model_request_fields={
+        "reasoning_config": {"type": "enabled", "budget_tokens": 4096},
+    },
+)
+print(model.profile.reasoning_output)  # True → response includes a reasoning block
+`````)
+
+#tip-box[`ChatBedrockConverse(...).profile` (LangChain 1.1+) exposes capabilities such as `tool_calling`, `reasoning_output`, and `max_input_tokens` — using it as a capability check in multi-model routing logic keeps the code clean.]
+
+== 7.8 Amazon Nova constraints
 
 #table(
   columns: 3,

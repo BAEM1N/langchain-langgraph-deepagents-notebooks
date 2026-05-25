@@ -24,7 +24,7 @@ from langchain_openai import ChatOpenAI
 
 load_dotenv()
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 환경 설정이 완료되었으므로, 미들웨어가 에이전트 루프의 어느 지점에 개입하는지 전체 아키텍처를 살펴보겠습니다.
@@ -87,9 +87,9 @@ from langchain.agents.middleware import (
 )
 
 agent = create_agent(
-    model="gpt-4.1", tools=[],
+    model="gpt-5.4", tools=[],
     middleware=[
-        SummarizationMiddleware(model="gpt-4.1-mini", trigger=("messages", 50)),
+        SummarizationMiddleware(model="gpt-5.4-mini", trigger=("messages", 50)),
         HumanInTheLoopMiddleware(interrupt_on={}),
     ],
 )
@@ -114,7 +114,7 @@ agent = create_agent(
   text(weight: "bold")[예시],
   [`model`],
   [요약 생성에 사용할 경량 모델 (비용 절감)],
-  [`"gpt-4.1-mini"`],
+  [`"gpt-5.4-mini"`],
   [`trigger`],
   [요약 트리거 조건],
   [`("tokens", 4000)`, `("messages", 50)`, `("fraction", 0.8)`],
@@ -131,13 +131,13 @@ agent = create_agent(
 
 `trigger`는 토큰 수, 메시지 수, 윈도우 비율 중 하나를 기준으로 설정할 수 있으며, 조건에 도달하면 `keep`에 지정된 최근 메시지를 제외한 나머지를 요약문으로 교체합니다.
 
-#tip-box[요약 모델로 `gpt-4.1-mini` 같은 경량 모델을 사용하면 비용을 절감할 수 있습니다. 요약의 목적은 핵심 맥락 보존이므로 메인 모델만큼의 추론 능력은 필요하지 않습니다.]
+#tip-box[요약 모델로 `gpt-5.4-mini` 같은 경량 모델을 사용하면 비용을 절감할 수 있습니다. 요약의 목적은 핵심 맥락 보존이므로 메인 모델만큼의 추론 능력은 필요하지 않습니다.]
 
 #code-block(`````python
 from langchain.agents.middleware import SummarizationMiddleware
 
 summarizer = SummarizationMiddleware(
-    model="gpt-4.1-mini",
+    model="gpt-5.4-mini",
     trigger=("tokens", 4000),
     keep=("messages", 20),
 )
@@ -191,7 +191,7 @@ hitl = HumanInTheLoopMiddleware(
 
 #code-block(`````python
 agent = create_agent(
-    model="gpt-4.1", tools=[],
+    model="gpt-5.4", tools=[],
     checkpointer=InMemorySaver(),
     middleware=[hitl],
 )
@@ -272,10 +272,10 @@ search_limit = ToolCallLimitMiddleware(
 #code-block(`````python
 from langchain.agents.middleware import ModelFallbackMiddleware
 
-# gpt-4.1 실패 -> gpt-4.1-mini -> claude
+# gpt-5.4 실패 -> gpt-5.4-mini -> claude
 fallback = ModelFallbackMiddleware(
-    "gpt-4.1-mini",
-    "claude-3-5-sonnet-20241022",
+    "gpt-5.4-mini",
+    "claude-sonnet-4-6",
 )
 `````)
 
@@ -401,19 +401,59 @@ PII 미들웨어로 데이터 보안을 확보했다면, 마지막 빌트인 미
   [`[]`],
 )
 
-선택 모델로 `gpt-4.1-mini` 같은 경량 모델을 사용하면 비용을 절감하면서도 효과적인 도구 필터링이 가능합니다.
+선택 모델로 `gpt-5.4-mini` 같은 경량 모델을 사용하면 비용을 절감하면서도 효과적인 도구 필터링이 가능합니다.
 
 #code-block(`````python
 from langchain.agents.middleware import LLMToolSelectorMiddleware
 
 tool_selector = LLMToolSelectorMiddleware(
-    model="gpt-4.1-mini",
+    model="gpt-5.4-mini",
     max_tools=3,
     always_include=["search"],
 )
 `````)
 
-7가지 빌트인 미들웨어만으로 대부분의 프로덕션 요구사항을 충족할 수 있지만, 비즈니스 고유의 로직이 필요한 경우 커스텀 미들웨어를 작성해야 합니다.
+7가지 빌트인 미들웨어만으로 대부분의 프로덕션 요구사항을 충족할 수 있지만, 컨텍스트 누적과 도구 호출 안정성 문제를 해결하는 두 가지 신규 빌트인 미들웨어도 살펴볼 가치가 있습니다.
+
+=== ContextEditingMiddleware
+긴 멀티턴 대화에서 누적된 도구 결과는 빠르게 컨텍스트 윈도우를 잠식합니다. `ContextEditingMiddleware`는 누적 토큰이 임계치를 넘으면 _오래된 도구 결과만_ 잘라내고 최근 N개를 보존합니다. `SummarizationMiddleware`가 _전체 요약_을 수행한다면, 이 미들웨어는 _도구 결과 단위로_ 청소합니다.
+
+#code-block(`````python
+from langchain.agents.middleware import ContextEditingMiddleware, ClearToolUsesEdit
+
+agent = create_agent(
+    model="gpt-5.4",
+    tools=[search_tool],
+    middleware=[
+        ContextEditingMiddleware(
+            edits=[
+                ClearToolUsesEdit(
+                    trigger=100_000,   # 100K 토큰 누적 시 동작
+                    keep=3,            # 가장 최근 도구 결과 3건만 보존
+                    placeholder="[cleared]",
+                ),
+            ],
+        ),
+    ],
+)
+`````)
+
+`ClearToolUsesEdit`의 주요 파라미터는 `trigger`(토큰 임계치), `keep`(보존 개수), `clear_at_least`(최소 회수 토큰), `clear_tool_inputs`(도구 인자도 비울지 여부), `exclude_tools`(정리에서 제외할 도구), `placeholder`(자리 표시 문자열)입니다.
+
+=== PatchToolCallsMiddleware (Deep Agents)
+일부 모델은 도구 호출 JSON에 사소한 결함(따옴표 누락, 잘못된 인자 타입 등)을 자주 만듭니다. `PatchToolCallsMiddleware`는 이러한 결함을 자동으로 보정하여 도구 호출이 그대로 실패하지 않도록 합니다. Deep Agents에서 멀티턴 도구 사용 안정성을 높이기 위해 자주 사용됩니다.
+
+#code-block(`````python
+from deepagents.middleware.patch_tool_calls import PatchToolCallsMiddleware
+
+agent = create_agent(
+    model="claude-sonnet-4-6",
+    tools=[search_tool, write_file],
+    middleware=[PatchToolCallsMiddleware()],
+)
+`````)
+
+#tip-box[`PatchToolCallsMiddleware`는 `deepagents` 패키지에서 제공되며, `wrap_model_call` 단계에서 도구 호출 페이로드를 후처리합니다. 도구 인자 검증 실패가 빈번한 모델에 우선 적용하세요.]
 
 7가지 빌트인 미들웨어만으로 대부분의 프로덕션 요구사항을 충족할 수 있지만, 비즈니스 고유의 로직이 필요한 경우 커스텀 미들웨어를 작성해야 합니다. 예를 들어, 도메인 특화 감사 로그, 커스텀 메트릭 수집, 비즈니스 규칙 기반 가드레일 등은 커스텀 미들웨어로 구현합니다.
 
@@ -435,6 +475,88 @@ tool_selector = LLMToolSelectorMiddleware(
 - `{"jump_to": "end"}` — 에이전트 즉시 종료 (가드레일 위반 시 강제 중단)
 - `{"jump_to": "tools"}` — 도구 실행 단계로 이동 (모델 응답을 무시하고 특정 도구 강제 실행)
 - `{"jump_to": "model"}` — 모델 호출 단계로 이동 (도구 결과를 바탕으로 재추론 요청)
+
+v1.2부터는 점프 가능 노드를 정적으로 선언하는 `@hook_config(can_jump_to=[...])` 데코레이터가 추가되었습니다. 컴파일 타임에 점프 대상이 검증되므로, 그래프에 존재하지 않는 노드로 점프하는 실수를 방지할 수 있습니다.
+
+#code-block(`````python
+from langchain.agents.middleware import after_model, hook_config, AgentState
+from langgraph.runtime import Runtime
+from langchain.messages import AIMessage
+
+@after_model
+@hook_config(can_jump_to=["end"])
+def block_unsafe(state: AgentState, runtime: Runtime) -> dict | None:
+    last = state["messages"][-1]
+    if "BLOCKED" in last.content:
+        return {
+            "messages": [AIMessage("응답할 수 없는 요청입니다.")],
+            "jump_to": "end",
+        }
+    return None
+`````)
+
+=== 타입 어노테이션 — `ModelRequest`/`ToolCallRequest`/`ModelResponse`
+`wrap_model_call`/`wrap_tool_call`에 정확한 타입을 부여하면 IDE 자동완성과 정적 분석 도구의 도움을 받을 수 있습니다. v1은 다음 데이터 타입을 제공합니다.
+
+- `ModelRequest` — `wrap_model_call` 입력. `messages`, `tools`, `model`, `system_message`, `response_format`, `state`, `runtime` 필드 보유.
+- `ToolCallRequest` — `wrap_tool_call` 입력. `tool_call`, `state`, `runtime` 필드 보유.
+- `ModelResponse` — 내부 핸들러의 반환 타입.
+- `ExtendedModelResponse` — `ModelResponse` + `Command`를 묶어 상태 업데이트를 영속화.
+
+#code-block(`````python
+from typing import Callable
+from langchain.agents.middleware import (
+    wrap_model_call, wrap_tool_call,
+    ModelRequest, ModelResponse, ToolCallRequest,
+)
+from langchain.messages import ToolMessage
+from langgraph.types import Command
+
+@wrap_model_call
+def add_cache_marker(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ModelResponse:
+    cached = request.override(system_message=f"{request.system_message}\n[CACHE]")
+    return handler(cached)
+
+@wrap_tool_call
+def audit_tool(
+    request: ToolCallRequest,
+    handler: Callable[[ToolCallRequest], ToolMessage | Command],
+) -> ToolMessage | Command:
+    print(f"[audit] {request.tool_call['name']}")
+    return handler(request)
+`````)
+
+=== `request.override(...)` — 불변 요청 복사본
+`ModelRequest.override(...)`는 원본을 변경하지 않고 수정된 사본을 반환합니다. 같은 `wrap_model_call` 안에서 여러 미들웨어가 안전하게 협력하도록 _불변성을 보장_하는 패턴입니다. `messages`, `tools`, `model`, `system_message`, `system_prompt`, `response_format` 등이 모두 override 가능합니다.
+
+#code-block(`````python
+new_request = (
+    request
+    .override(system_prompt="새 시스템 프롬프트")
+    .override(tools=[restricted_tool])
+    .override(response_format=Weather)
+)
+return handler(new_request)
+`````)
+
+=== `ExtendedModelResponse` — 상태 업데이트 영속화
+`wrap_model_call`이 `Command` 기반 상태 업데이트를 영속적으로 적용해야 할 때 `ExtendedModelResponse`를 반환합니다. 일반 `ModelResponse`만 반환하면 모델 결과는 반영되지만 사이드 상태 변경은 누락될 수 있습니다.
+
+#code-block(`````python
+from langchain.agents.middleware import ExtendedModelResponse
+
+@wrap_model_call
+def track_tokens(request, handler) -> ExtendedModelResponse:
+    response = handler(request)
+    tokens = response.message.usage_metadata.get("total_tokens", 0)
+    return ExtendedModelResponse(
+        model_response=response,
+        command=Command(update={"total_tokens": tokens}),
+    )
+`````)
 
 다음 코드들은 데코레이터 방식과 클래스 방식의 커스텀 미들웨어 구현 예시를 보여줍니다.
 
@@ -543,13 +665,13 @@ from langgraph.checkpoint.memory import InMemorySaver
 #code-block(`````python
 middleware_stack = [
     PIIMiddleware("email", strategy="redact", apply_to_input=True),
-    ModelFallbackMiddleware("gpt-4.1-mini", "claude-3-5-sonnet-20241022"),
+    ModelFallbackMiddleware("gpt-5.4-mini", "claude-sonnet-4-6"),
     ModelCallLimitMiddleware(thread_limit=50, run_limit=10),
-    SummarizationMiddleware(model="gpt-4.1-mini", trigger=("tokens", 4000)),
+    SummarizationMiddleware(model="gpt-5.4-mini", trigger=("tokens", 4000)),
 ]
 
 production_agent = create_agent(
-    model="gpt-4.1", tools=[], checkpointer=InMemorySaver(), middleware=middleware_stack,
+    model="gpt-5.4", tools=[], checkpointer=InMemorySaver(), middleware=middleware_stack,
 )
 `````)
 
@@ -667,7 +789,7 @@ AWS Bedrock 경유로 Claude/Nova를 호출하는 기업 환경에서는 `langch
 from langchain_aws.middleware import BedrockPromptCachingMiddleware
 
 agent = create_agent(
-    model="bedrock_converse:anthropic.claude-sonnet-4-20250514-v2:0",
+    model="bedrock_converse:anthropic.claude-sonnet-4-v6:0",
     tools=[],
     middleware=[
         BedrockPromptCachingMiddleware(
@@ -719,7 +841,7 @@ agent = create_agent(
 from langchain_openai.middleware import OpenAIModerationMiddleware
 
 agent = create_agent(
-    model="openai:gpt-4.1",
+    model="openai:gpt-5.4",
     tools=[search_tool],
     middleware=[
         OpenAIModerationMiddleware(

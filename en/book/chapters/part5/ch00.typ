@@ -48,6 +48,14 @@ In v1, the `langchain` namespace has been significantly reduced to five core mod
 
 Chains, Retrievers, Hub, and Indexing API, which were previously used in the `langchain` package, have all been separated into a separate package called `langchain-classic`. If you need to keep your existing code, change the import path after installation to `pip install langchain-classic`:
 
+Note that message and tool imports also moved: v0 used `langchain_core.messages` and `langchain_core.tools`, but v1 re-exports the same symbols under `langchain.messages` and `langchain.tools`. Both paths still work, but new v1 code should prefer the shorter form.
+
+#code-block(`````python
+# v1 preferred imports
+from langchain.messages import HumanMessage, AIMessage, ToolMessage
+from langchain.tools import tool, ToolRuntime, BaseTool
+`````)
+
 The 
 == v0 — Legacy approach
 from langchain.chains import LLMChain
@@ -73,7 +81,7 @@ from langchain_openai import ChatOpenAI
 from langchain.tools import tool
 from langchain.agents import create_agent
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 @tool
 def add(a: int, b: int) -> int:
@@ -168,6 +176,32 @@ print("✓ Application of error handling middleware")
 
 In v1, messages support provider-agnostic `content_blocks`.
 structured output was split into two branches: `ToolStrategy` (based on tool calling) and `ProviderStrategy` (native).
+
+#code-block(`````python
+from pydantic import BaseModel
+from langchain.agents.structured_output import ToolStrategy, ProviderStrategy
+
+class Weather(BaseModel):
+    location: str
+    temperature_c: float
+
+# Tool-call based — works on any model
+agent_tool = create_agent(model=model, tools=[add],
+                          response_format=ToolStrategy(schema=Weather))
+
+# Provider-native — uses OpenAI JSON mode / Anthropic tool_use etc.
+agent_provider = create_agent(model=model, tools=[add],
+                              response_format=ProviderStrategy(schema=Weather))
+`````)
+
+v1 models default to `output_version="v1"`, which enables standard content blocks and the `content_blocks` property automatically. Set `output_version="v0"` to restore legacy behaviour.
+
+#code-block(`````python
+from langchain_openai import ChatOpenAI
+
+model_v1 = ChatOpenAI(model="gpt-5.4", output_version="v1")
+model_v0 = ChatOpenAI(model="gpt-5.4", output_version="v0")
+`````)
 
 == 0.8 Streaming changes
 

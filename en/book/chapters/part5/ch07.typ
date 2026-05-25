@@ -201,6 +201,56 @@ def tavily_search(query: str) -> str:
     )
 `````)
 
+=== pandas / scikit-learn `@tool` integration
+
+Data analysis agents often treat _each tool as a tiny analysis cell_. The `@tool` decorator runs pandas / scikit-learn code on demand and returns the result back to the model as text. Keeping these tools separate from filesystem access (`read_file`) makes input validation, caching, and unit testing far easier.
+
+#code-block(`````python
+import pandas as pd
+from sklearn.cluster import KMeans
+from langchain_core.tools import tool
+
+@tool
+def summarize_csv(path: str, top_n: int = 5) -> str:
+    """Return shape, dtypes, and the top-N rows of a CSV file."""
+    df = pd.read_csv(path)
+    return (
+        f"shape={df.shape}\n"
+        f"dtypes={df.dtypes.to_dict()}\n"
+        f"head=\n{df.head(top_n).to_string()}"
+    )
+
+@tool
+def cluster_customers(path: str, k: int = 3) -> str:
+    """KMeans clustering over numeric columns only."""
+    df = pd.read_csv(path).select_dtypes("number").dropna()
+    labels = KMeans(n_clusters=k, n_init="auto").fit_predict(df)
+    return f"cluster_sizes={pd.Series(labels).value_counts().to_dict()}"
+`````)
+
+=== `CodeInterpreterMiddleware` and the Skills pattern
+
+For free-form analysis that does not fit a fixed `@tool` signature — "draw a boxplot of this column", for example — `CodeInterpreterMiddleware` lets the agent execute arbitrary code in its own sandbox. Repeatable procedures, on the other hand, are best captured in a `skills/` directory as markdown + code snippets and loaded as _Skills_ the agent can invoke by name.
+
+#code-block(`````python
+from deepagents.middleware import CodeInterpreterMiddleware
+from deepagents.skills import load_skills
+
+skills = load_skills("./skills/data-analysis")  # markdown + snippets
+
+agent = create_deep_agent(
+    model="gpt-5.4",
+    tools=[summarize_csv, cluster_customers, slack_send_message],
+    middleware=[CodeInterpreterMiddleware(backend=backend)],
+    skills=skills,
+    backend=backend,
+    checkpointer=checkpointer,
+    system_prompt="You are a data analyst.",
+)
+`````)
+
+#tip-box[Keep _reproducible analysis recipes_ inside the Skills directory and let `CodeInterpreterMiddleware` handle one-off exploration. This prevents validated procedures from blending with throwaway code.]
+
 == 7.6 Creating an agent
 
 `create_deep_agent()` creates an agent by combining the model, tool, backend, checkpointer, and system prompts.
@@ -242,7 +292,7 @@ checkpointer = InMemorySaver()
 
 #code-block(`````python
 agent = create_deep_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[tavily_search, slack_send_message],
     backend=backend,
     checkpointer=checkpointer,
@@ -290,23 +340,23 @@ Streaming events contain a namespace that identifies their source:
 
 By setting `subgraphs=True`, you can trace the execution of subagent as well, and you can also use multiple stream modes simultaneously:
 
-Done when the 
-for namespace, chunk in agent.stream(
-{"messages": [...]},
-stream_mode=["updates", "messages", "custom"],
-subgraphs=True,
-):
-mode, data = chunk
-== Handle each mode differently
 #code-block(`````python
+for namespace, chunk in agent.stream(
+    {"messages": [...]},
+    stream_mode=["updates", "messages", "custom"],
+    subgraphs=True,
+):
+    mode, data = chunk
+    # Handle each mode differently
+`````)
 
-### Tracking the Subagent Lifecycle
+=== Tracking the subagent lifecycle
 
 A subagent goes through three stages:
-1. *Pending* — detected when the main agent includes a delegated task in its `model_request`
-2. *Running* -- `tools:UUID` starts when events appear under the namespace
-3. *Complete* -- finishes when the main agent's `tools` node returns its result.
-`````)
+
++ _Pending_ — detected when the main agent includes a delegated task in its `model_request`
++ _Running_ — `tools:UUID` starts when events appear under the namespace
++ _Complete_ — finishes when the main agent's `tools` node returns its result
 
 == 7.9 Utilizing built-in tool
 
@@ -401,7 +451,7 @@ checkpointer = InMemorySaver()
 config = {"configurable": {"thread_id": "analysis-session-1"}}
 
 agent_with_memory = create_deep_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[tavily_search, slack_send_message],
     backend=LocalShellBackend(virtual_mode=True),
     checkpointer=checkpointer,

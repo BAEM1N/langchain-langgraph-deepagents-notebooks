@@ -18,7 +18,7 @@ load_dotenv(override=True)
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 print("환경 준비 완료.")
 `````)
@@ -124,7 +124,7 @@ LangChain은 _미들웨어(middleware)_ 메커니즘으로 컨텍스트 엔지�
 
 에이전트 실행 중 _변하지 않는_ 정보를 `context_schema`로 주입합니다. "변하지 않는다"는 것은 `invoke()` 호출 시 설정된 값이 해당 실행 전체에 걸쳐 고정된다는 의미입니다. 동일한 에이전트를 다른 사용자에 대해 호출할 때는 다른 컨텍스트를 전달합니다. `@dataclass`로 스키마를 정의하고, 도구에서 `ToolRuntime[Context]`로 접근합니다.
 
-다음 코드는 사용자 정보를 정적 컨텍스트로 정의하고, 도구에서 이를 활용하는 패턴입니다.
+다음 코드는 사용자 정보를 정적 컨텍스트로 정의하고, 도구에서 이를 활용하는 패턴입니다. `create_agent(context_schema=...)`로 스키마를 등록하고, 도구는 `ToolRuntime[Context]` 타입 어노테이션으로 `runtime.context.user_id` 같이 _도트 접근_합니다.
 
 #code-block(`````python
 from dataclasses import dataclass
@@ -132,7 +132,7 @@ from langchain.tools import tool, ToolRuntime
 from langchain.agents import create_agent
 
 @dataclass
-class UserContext:
+class Context:
     user_id: str
     role: str
     department: str
@@ -140,11 +140,35 @@ class UserContext:
 
 #code-block(`````python
 @tool
-def get_permissions(runtime: ToolRuntime[UserContext]) -> str:
+def get_permissions(runtime: ToolRuntime[Context]) -> str:
     """현재 사용자의 역할에 따른 권한을 조회합니다."""
     ctx = runtime.context
     perms = {"admin": "read,write,delete", "editor": "read,write"}
     return f"사용자 {ctx.user_id} ({ctx.department}): {perms.get(ctx.role, 'read')}"
+
+agent = create_agent(
+    model=model,
+    tools=[get_permissions],
+    context_schema=Context,  # 스키마 등록
+)
+# invoke 시 context= 파라미터로 인스턴스 전달
+agent.invoke(
+    {"messages": [{"role": "user", "content": "내 권한은?"}]},
+    context=Context(user_id="u42", role="admin", department="eng"),
+)
+`````)
+
+=== `runtime.execution_info` / `runtime.server_info`
+`runtime`은 컨텍스트 외에도 _실행 메타데이터_를 제공합니다. `runtime.execution_info`는 현재 invoke의 thread_id/run_id/step을 포함하고, `runtime.server_info`는 LangGraph 서버 환경 정보(deployment id, host 등)를 제공합니다. 감사 로그나 분산 추적에 유용합니다.
+
+#code-block(`````python
+@tool
+def audited_action(action: str, runtime: ToolRuntime[Context]) -> str:
+    """도구 호출 시점의 실행 정보를 함께 기록합니다."""
+    info = runtime.execution_info  # thread_id, run_id 등
+    print(f"[audit] user={runtime.context.user_id} "
+          f"thread={info.thread_id} run={info.run_id} action={action}")
+    return f"실행됨: {action}"
 `````)
 
 === 핵심 포인트
@@ -240,6 +264,34 @@ Cross-conversation 컨텍스트를 위해 `InMemoryStore`를 사용합니다. �
 )
 
 #warning-box[`InMemoryStore`는 프로세스 메모리에 데이터를 저장하므로, 서버 재시작 시 모든 데이터가 유실됩니다. 프로덕션 환경에서는 반드시 _DB 기반 Store_ (예: PostgreSQL)를 사용해야 합니다. `InMemoryStore`는 개발과 테스트 용도로만 사용하세요.]
+
+=== PostgreSQL Store — 프로덕션 영속 백엔드
+`langgraph-checkpoint-postgres` 패키지의 `PostgresStore`는 `InMemoryStore`와 동일한 `put`/`get`/`search` API를 제공하면서 PostgreSQL에 영속화합니다. `pgvector` 확장과 결합하면 시맨틱 검색도 그대로 지원됩니다. 프로세스 재시작이나 멀티 워커 환경에서도 메모리가 유지되므로 프로덕션의 기본 선택지입니다.
+
+#code-block(`````python
+# pip install langgraph-checkpoint-postgres
+from langgraph.store.postgres import PostgresStore
+
+DB_URI = "postgresql://user:pass@localhost:5432/langgraph?sslmode=disable"
+
+with PostgresStore.from_conn_string(DB_URI) as store:
+    store.setup()  # 최초 1회 — 테이블 생성
+
+    # 시맨틱 검색 활성화
+    store_with_index = PostgresStore.from_conn_string(
+        DB_URI,
+        index={"embed": embeddings, "dims": 1536},
+    )
+
+    agent = create_agent(
+        model=model,
+        tools=[get_user_info, save_preference],
+        store=store_with_index,
+        context_schema=Context,
+    )
+`````)
+
+#tip-box[`PostgresStore`는 동기 컨텍스트 매니저이고, 비동기 환경에서는 `AsyncPostgresStore`를 사용합니다. 둘 다 동일한 API를 제공하므로 `await store.aput(...)` / `await store.asearch(...)` 형태로 호출하면 됩니다.]
 
 다음 코드는 `InMemoryStore`의 기본 CRUD 작업(put, get, search)을 보여줍니다.
 
@@ -367,21 +419,25 @@ for r in results2:
 
 #code-block(`````python
 @tool
-def get_user_info(runtime: ToolRuntime[UserContext]) -> str:
+def get_user_info(runtime: ToolRuntime[Context]) -> str:
     """현재 사용자의 저장된 정보를 조회합니다."""
     store = runtime.store
     user_id = runtime.context.user_id
-    info = store.get(("users",), user_id)
-    return str(info.value) if info else "사용자 정보를 찾을 수 없습니다."
+    info = store.get((user_id, "memories"), "profile")
+    # info.value는 dict-like 객체이므로 dict()로 명시적 캐스트
+    return str(dict(info.value)) if info else "사용자 정보 없음."
 `````)
+
+#tip-box[`store.get(...)`이 반환하는 `Item.value`는 외부 백엔드(PostgreSQL/Redis 등)에 따라 dict 서브클래스이거나 lazy 객체일 수 있습니다. JSON 직렬화나 키 순회 전에 `dict(info.value)`로 명시적으로 캐스트하는 것이 안전합니다.]
 
 #code-block(`````python
 @tool
-def save_preference(key: str, value: str, runtime: ToolRuntime[UserContext]) -> str:
+def save_preference(key: str, value: str, runtime: ToolRuntime[Context]) -> str:
     """사용자 선호도를 저장합니다."""
     store = runtime.store
     user_id = runtime.context.user_id
-    store.put((user_id, "preferences"), key, {"value": value})
+    # 권장 네임스페이스: (user_id, "memories") — 시맨틱 검색 활성 store와 호환
+    store.put((user_id, "memories"), key, {"value": value})
     return f"선호도 저장됨: {key}={value}"
 `````)
 

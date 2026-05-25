@@ -7,15 +7,15 @@ OpenAI / Anthropic 외에도 LangChain은 25+ chat 모델 공급자와 1:1 통�
 
 | # | 공급자 | 주요 클래스 | 패키지 | 상태 |
 |---|--------|------------|--------|------|
-| 01 | OpenAI / Azure OpenAI | `ChatOpenAI`, `AzureChatOpenAI` | `langchain-openai` | ⬜ |
-| 02 | Anthropic | `ChatAnthropic` | `langchain-anthropic` | ⬜ |
-| 03 | Google (Gemini + Vertex AI) | `ChatGoogleGenerativeAI` | `langchain-google-genai` (4.0.0, 통합 SDK) | ⬜ |
-| 04 | Ollama (로컬) | `ChatOllama` | `langchain-ollama` | ⬜ |
-| 05 | AWS Bedrock / Amazon Nova | `ChatBedrock`, `ChatAmazonNova` | `langchain-aws` | ⬜ |
-| 06 | Groq | `ChatGroq` | `langchain-groq` | ⬜ |
-| 07 | Mistral AI | `ChatMistralAI` | `langchain-mistralai` | ⬜ |
-| 08 | Cohere | `ChatCohere` | `langchain-cohere` | ⬜ |
-| 09 | Routers & 기타 | `ChatOpenRouter` · `ChatLiteLLM` · `ChatTogether` · `ChatFireworks` · `ChatDeepSeek` · `ChatXAI` · `ChatPerplexity` | 각 공급자 | ⬜ |
+| 01 | OpenAI / Azure OpenAI | `ChatOpenAI`, `AzureChatOpenAI` | `langchain-openai` | ✅ ipynb 생성됨 |
+| 02 | Anthropic | `ChatAnthropic` | `langchain-anthropic` | ✅ ipynb 생성됨 |
+| 03 | Google (Gemini + Vertex AI) | `ChatGoogleGenerativeAI` | `langchain-google-genai` (4.0.0, 통합 SDK) | ✅ ipynb 생성됨 |
+| 04 | Ollama (로컬) | `ChatOllama` | `langchain-ollama` | ✅ ipynb 생성됨 |
+| 05 | AWS Bedrock / Amazon Nova | `ChatBedrock`, `ChatAmazonNova` | `langchain-aws` | ✅ ipynb 생성됨 |
+| 06 | Groq | `ChatGroq` | `langchain-groq` | ✅ ipynb 생성됨 |
+| 07 | Mistral AI | `ChatMistralAI` | `langchain-mistralai` | ✅ ipynb 생성됨 |
+| 08 | Cohere | `ChatCohere` | `langchain-cohere` | ✅ ipynb 생성됨 |
+| 09 | Routers & 기타 | `ChatOpenRouter` · `ChatLiteLLM` · `ChatTogether` · `ChatFireworks` · `ChatDeepSeek` · `ChatXAI` · `ChatPerplexity` | 각 공급자 | ✅ ipynb 생성됨 |
 
 ## 학습 포인트
 

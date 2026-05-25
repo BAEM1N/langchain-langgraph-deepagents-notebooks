@@ -108,7 +108,22 @@ agent = create_agent(
 )
 `````)
 
-== 3.7 Native vs generic comparison
+== 3.7 Falling back to a generic `@tool`
+
+To carry the same flow to non-Claude models, define the shell function directly with LangChain 1.3's `@tool` decorator. Injecting Anthropic programmatic tool-calling metadata via the `extras` field (introduced in LangChain 1.2) lets the same function be called with _the same shape_ as the Claude-native version.
+
+#code-block(`````python
+from langchain_core.tools import tool
+
+@tool(extras={"anthropic_cache_control": {"type": "ephemeral"}})
+def run_bash(command: str) -> str:
+    """Run a bash command in an isolated container and return stdout/stderr."""
+    return run_in_container(command)  # your own implementation
+`````)
+
+#tip-box[`@tool(extras=...)` is handy for _partial caching_ in multi-provider pipelines. Claude interprets `cache_control`; other providers ignore it — so the same codebase is exposed to both sides unchanged.]
+
+== 3.8 Native vs generic comparison
 
 #table(
   columns: 3,

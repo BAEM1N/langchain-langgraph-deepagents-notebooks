@@ -18,6 +18,17 @@ v0의 `langchain` 패키지는 Chains, Retrievers, Hub, 인덱싱 등 수십 개
 
 v1에서는 이를 해결하기 위해 `langchain` 네임스페이스를 에이전트 구축에 필수적인 5개 핵심 모듈로 대폭 축소하고, 나머지는 `langchain-classic`으로 분리했습니다. 이러한 분리는 _"에이전트 퍼스트"_ 철학을 반영한 것으로, LangChain이 범용 LLM 프레임워크에서 에이전트 전용 프레임워크로 방향을 전환했음을 의미합니다.
 
+특히 메시지·도구 import 경로가 바뀐 점을 주의해야 합니다. v0에서는 `langchain_core.messages` · `langchain_core.tools`에서 가져왔지만, v1에서는 동일한 심볼을 `langchain.messages` · `langchain.tools`로 재노출합니다. 코어 모듈은 그대로 유지되지만, v1 코드 베이스에서는 단축 경로를 표준으로 사용하는 것이 권장됩니다.
+
+#code-block(`````python
+# v1 표준 import
+from langchain.messages import HumanMessage, AIMessage, ToolMessage
+from langchain.tools import tool, ToolRuntime, BaseTool
+
+# v0 호환 import (`langchain_core.*`)도 계속 동작하지만 v1 코드에서는 위 경로를 선호
+from langchain_core.messages import HumanMessage as _LegacyHumanMessage
+`````)
+
 #table(
   columns: 3,
   align: left,
@@ -84,7 +95,7 @@ from langchain_openai import ChatOpenAI
 from langchain.tools import tool
 from langchain.agents import create_agent
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 @tool
 def add(a: int, b: int) -> int:
@@ -168,6 +179,8 @@ v0에서는 `system_prompt`가 에이전트 생성 시점에 고정되어, 런�
 
 v1의 `@dynamic_prompt` 미들웨어는 매 모델 호출 직전에 상태와 컨텍스트를 분석하여 시스템 프롬프트를 동적으로 생성합니다. 이를 통해 사용자 역할, 시간대, 이전 도구 호출 결과 등에 따라 에이전트의 행동 지침을 실시간으로 조정할 수 있습니다. 예를 들어, 관리자 사용자에게는 삭제 권한에 대한 지침을 추가하고, 일반 사용자에게는 읽기 전용 지침만 포함하는 식입니다.
 
+미들웨어는 에이전트 실행 루프의 6개 지점에 훅을 노출합니다. `before_agent`(루프 시작), `before_model`(매 모델 호출 직전), `wrap_model_call`(모델 호출 감싸기), `after_model`(매 모델 응답 직후), `wrap_tool_call`(도구 호출 감싸기), `after_agent`(루프 종료) 순으로 실행되며, 6개 훅 모두 동기/비동기(`a` 프리픽스) 두 형태로 작성할 수 있습니다. 자세한 동작은 Chapter 1에서 다룹니다.
+
 #tip-box[동적 프롬프트 미들웨어는 Chapter 1에서 상세히 다룹니다. 여기서는 v0에서 고정 프롬프트를 사용하던 코드가 v1에서 어떻게 유연해졌는지만 이해하면 충분합니다.]
 
 동적 프롬프트와 마찬가지로, 도구 에러 처리도 v1에서는 미들웨어 패턴으로 통합되었습니다.
@@ -212,6 +225,41 @@ print("\u2713 에러 핸들링 미들웨어 적용")
 v1에서 메시지는 프로바이더 무관한 `content_blocks`를 지원합니다. 이전에는 OpenAI와 Anthropic의 응답 형식이 달라서 프로바이더 전환 시 파싱 로직을 수정해야 했지만, `content_blocks`는 텍스트, 이미지, 도구 호출 등을 표준화된 블록으로 표현하여 프로바이더 간 이식성을 보장합니다. 이는 멀티 프로바이더 전략(예: OpenAI를 주 모델로, Anthropic을 폴백으로 사용)을 채택할 때 특히 중요합니다.
 
 구조화된 출력은 `ToolStrategy`(도구 호출 기반)와 `ProviderStrategy`(네이티브) 두 가지로 분리되었습니다. `ToolStrategy`는 모든 모델에서 동작하는 범용 방식이고, `ProviderStrategy`는 OpenAI의 JSON mode나 Anthropic의 tool_use 같은 네이티브 기능을 활용하여 더 높은 정확도를 제공합니다.
+
+#code-block(`````python
+from pydantic import BaseModel
+from langchain.agents.structured_output import ToolStrategy, ProviderStrategy
+
+class Weather(BaseModel):
+    location: str
+    temperature_c: float
+
+# 1) 도구 호출 기반 — 모든 모델에서 동작
+agent_tool = create_agent(
+    model=model,
+    tools=[add],
+    response_format=ToolStrategy(schema=Weather),
+)
+
+# 2) 프로바이더 네이티브 — OpenAI JSON mode, Anthropic tool_use 등 활용
+agent_provider = create_agent(
+    model=model,
+    tools=[add],
+    response_format=ProviderStrategy(schema=Weather),
+)
+`````)
+
+기존 OpenAI Responses API 동작이 필요하면 `output_version="v0"`으로 명시적으로 옵트아웃합니다. v1 신규 모델은 기본값이 `output_version="v1"`로, 표준 콘텐츠 블록과 `content_blocks` 프로퍼티가 자동 활성화됩니다.
+
+#code-block(`````python
+from langchain_openai import ChatOpenAI
+
+# 표준 블록 형식 (v1 기본값) — content_blocks / .text 프로퍼티 활성화
+model_v1 = ChatOpenAI(model="gpt-5.4", output_version="v1")
+
+# 레거시 호환 — v0 동작 복구
+model_v0 = ChatOpenAI(model="gpt-5.4", output_version="v0")
+`````)
 
 #warning-box[`content_blocks`를 사용할 때, 기존에 `message.content`를 문자열로 가정하던 코드는 수정이 필요합니다. v1에서 `content`는 문자열 또는 블록 리스트일 수 있으므로, `.text` 프로퍼티를 사용하여 텍스트를 추출하는 것이 안전합니다.]
 

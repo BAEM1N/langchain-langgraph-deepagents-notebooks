@@ -6,11 +6,11 @@
 
 | # | 주제 | 클래스 | 패키지 | 상태 |
 |---|------|--------|--------|------|
-| 01 | BM25 + Ensemble | `BM25Retriever` · `EnsembleRetriever` | `langchain-community` · `langchain` | ⬜ |
-| 02 | Multi-Vector / Parent-Document | `MultiVectorRetriever` · `ParentDocumentRetriever` | `langchain` | ⬜ |
-| 03 | Self-Query | `SelfQueryRetriever` | `langchain` | ⬜ |
-| 04 | Web / Knowledge | `TavilySearchAPIRetriever` · `WikipediaRetriever` · `ArxivRetriever` · `PubMedRetriever` | `langchain-community` | ⬜ |
-| 05 | Vendor-managed | `AmazonKnowledgeBasesRetriever` · `AzureAISearchRetriever` · `VertexAISearchRetriever` · `ElasticsearchRetriever` | 공급자 패키지 | ⬜ |
+| 01 | BM25 + Ensemble | `BM25Retriever` · `EnsembleRetriever` | `langchain-community` · `langchain` | ✅ ipynb 생성됨 |
+| 02 | Multi-Vector / Parent-Document | `MultiVectorRetriever` · `ParentDocumentRetriever` | `langchain` | ✅ ipynb 생성됨 |
+| 03 | Self-Query | `SelfQueryRetriever` | `langchain` | ✅ ipynb 생성됨 |
+| 04 | Web / Knowledge | `TavilySearchAPIRetriever` · `WikipediaRetriever` · `ArxivRetriever` · `PubMedRetriever` | `langchain-community` | ✅ ipynb 생성됨 |
+| 05 | Vendor-managed | `AmazonKnowledgeBasesRetriever` · `AzureAISearchRetriever` · `VertexAISearchRetriever` · `ElasticsearchRetriever` | 공급자 패키지 | ✅ ipynb 생성됨 |
 
 ## 학습 포인트
 

@@ -6,12 +6,12 @@
 
 | # | 공급자 | 주요 클래스 | 패키지 | 상태 |
 |---|--------|------------|--------|------|
-| 01 | OpenAI / Azure | `OpenAIEmbeddings`, `AzureOpenAIEmbeddings` | `langchain-openai` | ⬜ |
-| 02 | Google | `GoogleGenerativeAIEmbeddings` | `langchain-google-genai` | ⬜ |
-| 03 | Cohere | `CohereEmbeddings` | `langchain-cohere` | ⬜ |
-| 04 | Voyage AI | `VoyageAIEmbeddings` | `langchain-voyageai` | ⬜ |
-| 05 | Ollama (로컬) | `OllamaEmbeddings` | `langchain-ollama` | ⬜ |
-| 06 | HuggingFace / Sentence Transformers | `HuggingFaceEmbeddings` | `langchain-huggingface` | ⬜ |
+| 01 | OpenAI / Azure | `OpenAIEmbeddings`, `AzureOpenAIEmbeddings` | `langchain-openai` | ✅ ipynb 생성됨 |
+| 02 | Google | `GoogleGenerativeAIEmbeddings` | `langchain-google-genai` | ✅ ipynb 생성됨 |
+| 03 | Cohere | `CohereEmbeddings` | `langchain-cohere` | ✅ ipynb 생성됨 |
+| 04 | Voyage AI | `VoyageAIEmbeddings` | `langchain-voyageai` | ✅ ipynb 생성됨 |
+| 05 | Ollama (로컬) | `OllamaEmbeddings` | `langchain-ollama` | ✅ ipynb 생성됨 |
+| 06 | HuggingFace / Sentence Transformers | `HuggingFaceEmbeddings` | `langchain-huggingface` | ✅ ipynb 생성됨 |
 
 ## 학습 포인트
 

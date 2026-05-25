@@ -185,7 +185,43 @@ async def on_alert(req: Request):
 
 Register this endpoint URL as a webhook target in the UI's Rules and set the filter to `and(has(tags, "env:prod"), eq(status, "error"))` to Slack only production errors.
 
-== 5.8 Insights Agent (paid)
+== 5.8 LangSmith Deployments — observability bundled with deployment
+
+When you deploy a LangGraph graph on _LangGraph Platform_, a LangSmith project is created and linked automatically. With no extra environment variables, every graph invocation lands as a trace in that organization's LangSmith project.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Deployment screen],
+  text(weight: "bold")[Linked LangSmith resource],
+  text(weight: "bold")[Operational action],
+  [*Deployments → Traces*],
+  [Project of the same name],
+  [Confirm executions in real time],
+  [*Deployments → Threads*],
+  [The project's Threads view],
+  [Debug multi-turn conversations],
+  [*Deployments → Monitoring*],
+  [Same metrics as the project's Monitor tab],
+  [Alarms on latency · cost · error rate],
+  [*Deployments → Settings*],
+  [Per-environment secrets · `LANGSMITH_PROJECT` override],
+  [Separate staging vs prod projects],
+)
+
+Typical operational pattern:
+
+- LangGraph Platform owns deployment — `langgraph deploy` rolls out by commit with zero downtime
+- LangSmith owns observability — traces from that deployment flow into the project automatically
+- Alerts go through the Rules of section 5.4 — filter by `metadata.deployment_id == "..."` to scope alerts per deployment
+- Evaluation attaches the chapter-3 online evaluator to prod traffic and surfaces the score trend on the dashboard
+
+The `langsmith.Client` exposes deployment metadata through the same API key, so an external in-house dashboard (Grafana etc.) can track SLOs keyed by LangGraph deployment ID.
+
+== 5.9 Insights Agent (paid)
 
 Project > Insights tab — the LangSmith *Insights Agent* automatically extracts usage patterns / common failure modes from production traces. The free plan requires an upgrade.
 
@@ -199,3 +235,4 @@ Project > Insights tab — the LangSmith *Insights Agent* automatically extracts
 - Sampling combines global (env var) + per-request (`tracing_context`) layers
 - PII is protected in two layers: `PIIMiddleware` (model) + `anonymizer`/`hide_inputs` (trace)
 - A webhook receiver routes to Slack / PagerDuty — the default filter is `env:prod` + `status=error`
+- LangGraph Platform deployments auto-link to a same-named LangSmith project — separate SLOs per environment via deployment-ID metadata

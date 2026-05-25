@@ -6,8 +6,8 @@
 
 | # | 벤더 | 연동 방식 | 상태 |
 |---|------|----------|------|
-| 01 | LangSmith | 환경변수 `LANGSMITH_API_KEY` + 자동 계측 | ⬜ |
-| 02 | Langfuse + OpenTelemetry | `langfuse` SDK · OTel exporter · `CallbackHandler` | ⬜ |
+| 01 | LangSmith | 환경변수 `LANGSMITH_API_KEY` + 자동 계측 | ✅ ipynb 생성됨 |
+| 02 | Langfuse + OpenTelemetry | `langfuse` SDK · OTel exporter · `CallbackHandler` | ✅ ipynb 생성됨 |
 
 ## 학습 포인트
 

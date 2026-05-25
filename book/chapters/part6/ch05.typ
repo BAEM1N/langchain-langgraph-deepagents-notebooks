@@ -185,7 +185,43 @@ async def on_alert(req: Request):
 
 UI Rules에서 이 엔드포인트 URL을 webhook 대상으로 등록하고, 필터를 `and(has(tags, "env:prod"), eq(status, "error"))`로 잡으면 프로덕션 에러만 Slack으로 뜹니다.
 
-== 5.8 Insights Agent (유료)
+== 5.8 LangSmith Deployments — 배포와 관측의 통합
+
+LangGraph 그래프를 _LangGraph Platform_ 으로 배포하면 LangSmith 프로젝트가 자동으로 생성·연결됩니다. 별도 환경 변수를 주입하지 않아도 그래프 실행이 곧바로 같은 조직의 LangSmith 프로젝트에 트레이스로 기록됩니다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Deployment 화면],
+  text(weight: "bold")[연결되는 LangSmith 자원],
+  text(weight: "bold")[운영 행동],
+  [*Deployments → Traces*],
+  [같은 이름의 Project],
+  [실행 즉시 trace 확인],
+  [*Deployments → Threads*],
+  [Project의 Threads 뷰],
+  [멀티턴 대화 디버깅],
+  [*Deployments → Monitoring*],
+  [Project Monitor 탭과 동일 지표],
+  [latency · cost · 에러율 알람],
+  [*Deployments → Settings*],
+  [환경별 secret · `LANGSMITH_PROJECT` override],
+  [staging vs prod 프로젝트 분리],
+)
+
+운영 패턴은 보통 다음과 같이 묶입니다.
+
+- 배포는 LangGraph Platform이 담당 — `langgraph deploy`로 commit 단위 무중단 롤아웃
+- 관측은 LangSmith가 담당 — 같은 배포의 trace가 자동으로 프로젝트에 흘러 들어옴
+- 알림은 5.4의 Rules로 — `metadata.deployment_id == "..."` 같은 필터로 배포 단위 분리
+- 평가는 3장의 online evaluator를 prod 트래픽에 부착해 score 추세를 대시보드에 노출
+
+`langsmith.Client`는 동일 키로 배포 메타데이터까지 조회할 수 있어, 외부 사내 대시보드(Grafana 등)에서 LangGraph 배포 ID 기준으로 SLO를 따로 추적할 수 있습니다.
+
+== 5.9 Insights Agent (유료)
 
 프로젝트 > Insights 탭 — LangSmith의 *Insights Agent*로 production trace에서 usage pattern / common failure mode를 자동 추출합니다. 무료 플랜은 upgrade가 필요합니다.
 
@@ -199,3 +235,4 @@ UI Rules에서 이 엔드포인트 URL을 webhook 대상으로 등록하고, 필
 - 샘플링은 전역(환경 변수) + 요청별(`tracing_context`) 두 층 조합
 - PII는 `PIIMiddleware`(모델) + `anonymizer`/`hide_inputs`(트레이스) 이중 방어
 - Webhook 수신 서비스가 Slack/PagerDuty로 라우팅 — 필터는 `env:prod` + `status=error` 조합이 기본
+- LangGraph Platform 배포는 같은 이름의 LangSmith 프로젝트로 자동 연결 — 배포 ID 메타데이터로 SLO를 환경별로 분리

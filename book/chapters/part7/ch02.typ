@@ -25,7 +25,7 @@
   [_에이전트 패턴_],
   [AGENTS.md 안전 규칙 + Skills 기반 워크플로],
   [_HITL_],
-  [`interrupt_on` + `Command(resume="approve")`],
+  [`interrupt_on={"sql_db_query": {"allowed_decisions":[...]}}` + `Command(resume={"decisions":[...]})`],
   [_데이터베이스_],
   [Chinook (SQLite)],
   [_스킬_],
@@ -44,7 +44,7 @@ assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY를 .env에 설정하세
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 `````)
 
@@ -182,7 +182,7 @@ agent = create_deep_agent(
 
 == 6단계: HITL 에이전트 (interrupt_on)
 
-`create_deep_agent`의 `interrupt_on` 파라미터로 도구별 승인 정책을 설정합니다. `sql_db_query` 호출 전에 실행이 중단되고, `Command(resume=...)`로 재개합니다.
+`create_deep_agent`의 `interrupt_on` 파라미터로 도구별 승인 정책을 설정합니다. `sql_db_query` 호출 전에 실행이 중단되고, `Command(resume={"decisions":[...]})`로 재개합니다. v1에서는 도구별로 허용할 결정 종류를 `allowed_decisions`로 명시할 수 있습니다.
 
 #table(
   columns: 2,
@@ -192,8 +192,8 @@ agent = create_deep_agent(
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[파라미터],
   text(weight: "bold")[역할],
-  [`interrupt_on={"sql_db_query": True}`],
-  [`sql_db_query` 호출 전 실행 중단, 사람 승인 대기],
+  [`interrupt_on={"sql_db_query": {"allowed_decisions": [...]}}`],
+  [`sql_db_query` 호출 전 실행 중단 + 허용 결정 종류 지정],
   [`ModelCallLimitMiddleware`],
   [무한 루프 방지 — 최대 15회 모델 호출 제한],
   [`InMemorySaver`],
@@ -211,16 +211,20 @@ hitl_agent = create_deep_agent(
     backend=FilesystemBackend(root_dir=".", virtual_mode=True),
     skills=["/skills/"],
     checkpointer=InMemorySaver(),
-    interrupt_on={"sql_db_query": True},
+    interrupt_on={
+        "sql_db_query": {
+            "allowed_decisions": ["approve", "edit", "reject", "respond"],
+        },
+    },
     middleware=[
         ModelCallLimitMiddleware(run_limit=15),
     ],
 )
 `````)
 
-== 7단계: 승인 후 재개
+== 7단계: 승인 후 재개 — 4가지 결정 유형
 
-`Command(resume={"decisions": [{"type": "approve"}]})`로 중단된 실행을 재개합니다. v1에서는 `HITLResponse` 형식으로 결정을 전달합니다.
+`Command(resume={"decisions": [...]})`로 중단된 실행을 재개합니다. v1 `HITLResponse`는 네 가지 결정 유형을 지원합니다.
 
 #table(
   columns: 2,
@@ -232,11 +236,23 @@ hitl_agent = create_deep_agent(
   text(weight: "bold")[설명],
   [`{"type": "approve"}`],
   [도구 호출 승인 — 그대로 실행],
-  [`{"type": "edit", "edited_action": {...}}`],
-  [도구 호출 수정 후 실행],
+  [`{"type": "edit", "edited_action": {"name": "...", "args": {...}}}`],
+  [도구 호출 수정 후 실행 (예: LIMIT 추가, WHERE 조건 보강)],
   [`{"type": "reject", "message": "..."}`],
-  [도구 호출 거부 — 에이전트에 피드백],
+  [도구 호출 거부 — 에이전트에게 피드백 메시지 전달],
+  [`{"type": "respond", "message": "..."}`],
+  [도구 실행을 건너뛰고 사람의 답변을 도구 결과로 사용 — "ask user" 패턴],
 )
+
+#code-block(`````python
+from langgraph.types import Command
+
+response = hitl_agent.invoke(
+    Command(resume={"decisions": [{"type": "approve"}]}),
+    config={**thread, **lf_config},
+    version="v2",
+)
+`````)
 
 #chapter-summary-header()
 
@@ -255,7 +271,7 @@ hitl_agent = create_deep_agent(
   [_Skills_],
   [query-writing, schema-exploration 워크플로 가이드],
   [_HITL_],
-  [`interrupt_on={"sql_db_query": True}` → `Command(resume="approve")`],
+  [`interrupt_on={"sql_db_query": {"allowed_decisions":[...]}}` → 4-decision (`approve` / `edit` / `reject` / `respond`)],
 )
 
 

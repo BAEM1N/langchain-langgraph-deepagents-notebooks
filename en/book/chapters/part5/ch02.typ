@@ -21,7 +21,7 @@ from langchain_openai import ChatOpenAI
 
 load_dotenv()
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == 2.2 Subagents Architecture Overview
@@ -122,7 +122,7 @@ The recommended granularity of subagent is domain-level (calendar, email, etc.).
 from langchain.agents import create_agent
 
 calendar_agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[create_calendar_event, read_calendar_events],
     system_prompt="You are a calendar assistant. Use ISO 8601 date format.",
     name="calendar_agent",
@@ -131,7 +131,7 @@ calendar_agent = create_agent(
 
 #code-block(`````python
 email_agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[send_email, read_emails, search_emails],
     system_prompt="You are an email assistant. Write your message professionally.",
     name="email_agent",
@@ -160,7 +160,7 @@ Supervisor design considerations:
 
 #code-block(`````python
 supervisor = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[call_calendar, call_email],
     system_prompt=(
         "You are a personal assistant. complex request"
@@ -218,7 +218,7 @@ hitl = HumanInTheLoopMiddleware(interrupt_on={
 
 #code-block(`````python
 supervisor_hitl = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[call_calendar, call_email],
     checkpointer=InMemorySaver(),
     middleware=[hitl],
@@ -257,7 +257,7 @@ runtime = ToolRuntime(context={
 
 #code-block(`````python
 supervisor_ctx = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[call_calendar, call_email],
     system_prompt="You are a personal assistant.",
 )
@@ -340,9 +340,82 @@ There are two approaches to the tool pattern:
 
 The single dispatch pattern specifies the target of the call with the `agent_name` parameter. Because subagent registered in the agent registry is called by looking up its name, subagent can be added or removed independently in distributed teams, providing excellent scalability.
 
+=== Three ways to expose a single dispatch tool
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Style],
+  text(weight: "bold")[How],
+  text(weight: "bold")[When to use],
+  [_Literal enum_],
+  [`agent_name: Literal["calendar", "email"]`],
+  [≤ 5 domains, stable routing],
+  [_Dict registry_],
+  [Add/remove via dict without code change],
+  [6-20 domains, frequent changes],
+  [_Vector search routing_],
+  [Embed descriptions, match against user query],
+  [20+ domains, semantic routing],
+)
+
+=== `SubAgentMiddleware` — Deep Agents integration
+Instead of wrapping each subagent with `@tool`, `deepagents.SubAgentMiddleware` registers the dispatch tool automatically and merges subagent results into the supervisor state.
+
+#code-block(`````python
+from deepagents.middleware import SubAgentMiddleware
+
+supervisor = create_agent(
+    model="gpt-5.4",
+    tools=[],  # middleware adds the dispatch tool
+    middleware=[SubAgentMiddleware(subagents=[
+        {"name": "calendar", "description": "schedule", "agent": calendar_agent},
+        {"name": "email", "description": "send/read email", "agent": email_agent},
+    ])],
+    system_prompt="You are a personal assistant.",
+)
+`````)
+
+=== `checkpointer=True` — inherit the parent checkpointer
+Since v1.2, `create_agent(checkpointer=True)` automatically inherits the parent graph's checkpointer, so subagents resume under the same `thread_id` without passing an explicit instance. Useful when HITL middleware is applied at the subagent level.
+
+#code-block(`````python
+calendar_agent = create_agent(
+    model="gpt-5.4",
+    tools=[create_calendar_event],
+    checkpointer=True,  # inherit from parent graph
+    middleware=[HumanInTheLoopMiddleware(interrupt_on={
+        "create_calendar_event": {"allowed_decisions": ["approve", "reject"]},
+    })],
+    name="calendar_agent",
+)
+`````)
+
+=== `ToolRuntime[None, CustomState]`
+When you need _custom state_ in tools but no context, parametrise `ToolRuntime` with `None` as the first type and the state schema as the second.
+
+#code-block(`````python
+from typing import NotRequired
+from langchain.tools import tool, ToolRuntime
+from langchain.agents import AgentState
+
+class JobState(AgentState):
+    pending_jobs: NotRequired[list[str]]
+
+@tool
+def list_pending(runtime: ToolRuntime[None, JobState]) -> str:
+    return ", ".join(runtime.state.get("pending_jobs", []))
+`````)
+
+=== Async 5-tool dispatch pattern
+A production-ready async subagent pattern exposes five tools, one responsibility each: `start_job`, `check_job`, `cancel_job`, `list_jobs`, `wait_for`. Pair these with an external queue (Celery, Redis Streams, Cloud Tasks) so job state survives process restarts.
+
 #code-block(`````python
 supervisor_dispatch = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[dispatch],
     system_prompt=(
         "Use delegate tool to route work."

@@ -42,9 +42,18 @@
 from langchain.chat_models import init_chat_model
 from langchain.agents import create_agent
 
-model = init_chat_model("openai:gpt-4.1")
+model = init_chat_model("openai:gpt-5.4")
 agent = create_agent(model, tools=[...], system_prompt="...")
 ```
+
+권장 import 경로:
+
+- `from langchain.agents import create_agent`
+- `from langchain.agents.middleware import before_agent, before_model, wrap_model_call, wrap_tool_call, after_model, after_agent`
+- `from langchain.tools import tool`
+- `from langchain.messages import SystemMessage, ToolMessage, AIMessage`
+
+`langchain_core.*` 경로는 v1 에서 보조 모듈로만 남는다.
 
 ### 2) 단계형 파이프라인, 분기, 루프, HITL이 필요할 때
 **기본값은 LangGraph `StateGraph`** 이다.
@@ -74,6 +83,21 @@ agent = create_agent(model, tools=[...], system_prompt="...")
 - `docs/langchain/11-middleware-builtin.md`
 - `docs/langchain/12-middleware-custom.md`
 - `docs/skills/langchain-middleware.md`
+
+v1 미들웨어는 6단계 훅으로 구성된다. node-style 4개와 wrap-style 2개:
+
+| 훅 | 호출 시점 | 용도 |
+|----|----------|------|
+| `before_agent` | invocation 시작 시 1회 | 초기화, 사용자 인증 |
+| `before_model` | 모델 호출 직전(매 루프) | 프롬프트 보강, 게이트 |
+| `wrap_model_call` | 모델 호출을 감싸 0~N 회 실행 | 재시도, 캐싱, 모델 라우팅 |
+| `wrap_tool_call` | 도구 호출을 감싸 0~N 회 실행 | 예외 → ToolMessage 변환, 모니터링 |
+| `after_model` | 모델 응답 직후(매 루프) | 출력 검증, 차단 판정 |
+| `after_agent` | invocation 종료 시 1회 | 정리, 텔레메트리 |
+
+`wrap_model_call` 내부에서는 `request.override(messages=..., tools=..., model=..., system_message=..., response_format=...)` 로 호출을 변형한다. 영구적인 상태 업데이트를 같이 내보내야 한다면 `ExtendedModelResponse(model_response=..., command=Command(update={...}))` 를 반환한다.
+
+런타임 진단은 `runtime.execution_info` (`thread_id`/`run_id`/`attempt`) 와 LangGraph Server 환경에서만 채워지는 `runtime.server_info` (`assistant_id`/`graph_id`/`user`) 로 조회한다. 두 API 모두 `deepagents>=0.5.0` 또는 `langgraph>=1.1.5` 가 필요하다.
 
 ## 피해야 할 패턴
 

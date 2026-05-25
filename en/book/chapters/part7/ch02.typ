@@ -30,7 +30,7 @@
   [_Agent pattern_],
   [AGENTS.md safety rules + skills-based workflow],
   [_HITL_],
-  [`interrupt_on` + `Command(resume={...})`],
+  [`interrupt_on={"sql_db_query": {"allowed_decisions":[...]}}` + `Command(resume={"decisions":[...]})`],
   [_Database_],
   [Chinook (SQLite)],
   [_Skill_],
@@ -50,7 +50,7 @@ assert os.environ.get("OPENAI_API_KEY"), "Set OPENAI_API_KEY in .env"
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 `````)
 
@@ -157,7 +157,7 @@ agent = create_deep_agent(
 
 == Step 6: A HITL Agent (`interrupt_on`)
 
-Use the `interrupt_on` parameter of `create_deep_agent` to define approval policies for specific tools. Execution stops before `sql_db_query` runs, and then resumes with `Command(resume=...)`.
+Use the `interrupt_on` parameter of `create_deep_agent` to define approval policies for specific tools. Execution stops before `sql_db_query` runs, and then resumes with `Command(resume={"decisions": [...]})`. In v1 you can spell out the allowed decision types per tool with `allowed_decisions`.
 
 #table(
   columns: 2,
@@ -167,8 +167,8 @@ Use the `interrupt_on` parameter of `create_deep_agent` to define approval polic
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[Parameter],
   text(weight: "bold")[Role],
-  [`interrupt_on={"sql_db_query": True}`],
-  [Pause before `sql_db_query` runs and wait for human approval],
+  [`interrupt_on={"sql_db_query": {"allowed_decisions": [...]}}`],
+  [Pause before `sql_db_query` runs and declare which decision types are valid],
   [`ModelCallLimitMiddleware`],
   [Prevent infinite loops by limiting the run to 15 model calls],
   [`InMemorySaver`],
@@ -187,7 +187,11 @@ hitl_agent = create_deep_agent(
     backend=FilesystemBackend(root_dir=".", virtual_mode=True),
     skills=["/skills/"],
     checkpointer=InMemorySaver(),
-    interrupt_on={"sql_db_query": True},
+    interrupt_on={
+        "sql_db_query": {
+            "allowed_decisions": ["approve", "edit", "reject", "respond"],
+        },
+    },
     middleware=[
         ModelCallLimitMiddleware(run_limit=15),
     ],
@@ -195,9 +199,9 @@ hitl_agent = create_deep_agent(
 
 `````)
 
-== Step 7: Resume After Approval
+== Step 7: Resume After Approval — Four Decision Types
 
-Use `Command(resume={"decisions": [{"type": "approve"}]})` to continue a paused run. In v1, decisions are passed in a `HITLResponse`-style structure.
+Use `Command(resume={"decisions": [...]})` to continue a paused run. The v1 `HITLResponse` supports four decision types.
 
 #table(
   columns: 2,
@@ -209,11 +213,23 @@ Use `Command(resume={"decisions": [{"type": "approve"}]})` to continue a paused 
   text(weight: "bold")[Description],
   [`{"type": "approve"}`],
   [Approve the tool call and run it unchanged],
-  [`{"type": "edit", "edited_action": {...}}`],
-  [Modify the tool call before running it],
+  [`{"type": "edit", "edited_action": {"name": "...", "args": {...}}}`],
+  [Modify the tool call before running it (e.g. add a `LIMIT`, tighten a `WHERE` clause)],
   [`{"type": "reject", "message": "..."}`],
   [Reject the tool call and return feedback to the agent],
+  [`{"type": "respond", "message": "..."}`],
+  [Skip tool execution and feed the human's reply back as the tool result — the "ask user" pattern],
 )
+
+#code-block(`````python
+from langgraph.types import Command
+
+response = hitl_agent.invoke(
+    Command(resume={"decisions": [{"type": "approve"}]}),
+    config={**thread, **lf_config},
+    version="v2",
+)
+`````)
 
 
 == Summary
@@ -233,7 +249,7 @@ Use `Command(resume={"decisions": [{"type": "approve"}]})` to continue a paused 
   [_Skills_],
   [Workflow guides for query writing and schema exploration],
   [_HITL_],
-  [`interrupt_on={"sql_db_query": True}` → `Command(resume={...})`],
+  [`interrupt_on={"sql_db_query": {"allowed_decisions":[...]}}` → 4-decision (`approve` / `edit` / `reject` / `respond`)],
 )
 
 #line(length: 100%, stroke: 0.5pt + luma(200))

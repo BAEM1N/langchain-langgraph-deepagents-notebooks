@@ -4,11 +4,11 @@
 
 #chapter(1, "통합 카테고리 개요", subtitle: "LangChain 생태계 지도")
 
-LangChain·LangGraph·Deep Agents는 공통 에이전트 인터페이스 아래 _프로바이더별 구현_을 플러그인 형태로 연결합니다. Part II~Part IV가 "에이전트를 어떻게 쓰는가"를 다뤘다면, 이 Part는 "에이전트를 _무엇과_ 연결하는가"를 살핍니다. 12개 카테고리의 통합 표면을 한눈에 파악하고, 각 카테고리의 대표 패키지와 선택 기준을 정리합니다.
+LangChain·LangGraph·Deep Agents는 공통 에이전트 인터페이스 아래 _프로바이더별 구현_을 플러그인 형태로 연결합니다. Part II~Part IV가 "에이전트를 어떻게 쓰는가"를 다뤘다면, 이 Part는 "에이전트를 _무엇과_ 연결하는가"를 살핍니다. 13개 카테고리의 통합 표면을 한눈에 파악하고, 각 카테고리의 대표 패키지와 선택 기준을 정리합니다.
 
 #learning-header()
 #learning-objectives(
-  [LangChain 생태계의 12개 통합 카테고리를 조감한다],
+  [LangChain 생태계의 13개 통합 카테고리를 조감한다],
   [Provider Middleware가 왜 별도 카테고리로 분리되는지 이해한다],
   [벤더 선택이 필요한 영역(Chat Models, Vector Stores)과 표준화된 영역(Middleware, Checkpointers)을 구분한다],
   [이 Part에서 다루는 7개 Provider Middleware 장의 맵을 그린다],
@@ -18,13 +18,13 @@ LangChain·LangGraph·Deep Agents는 공통 에이전트 인터페이스 아래 
 
 이 Part의 코드는 다음 버전을 전제로 합니다. 최신 릴리스는 `docs/skills/langchain-dependencies.md`로 확인하세요.
 
-- `langchain` 1.2
-- `langgraph` 1.1
-- `deepagents` 0.5.0
+- `langchain` 1.3+ (event streaming v3)
+- `langgraph` 1.2+ (per-node timeout · `DeltaChannel` · graceful shutdown)
+- `deepagents` 0.6.1+ (`CodeInterpreterMiddleware`, async subagents, interpreter snapshots)
 
 #warning-box[LangChain 1.2 `create_agent`는 같은 미들웨어 클래스의 _중복 인스턴스_를 거부합니다. `AssertionError: Please remove duplicate middleware instances.`가 발생하면 서브클래싱으로 두 인스턴스를 서로 다른 타입으로 분리하세요.]
 
-== 1.2 12개 통합 카테고리
+== 1.2 13개 통합 카테고리
 
 #table(
   columns: 3,
@@ -71,6 +71,9 @@ LangChain·LangGraph·Deep Agents는 공통 에이전트 인터페이스 아래 
   [Observability],
   [`langsmith`, `langfuse`, OpenTelemetry],
   [SaaS vs 자체 호스팅·PII 정책],
+  [Providers (Hosted Runtime)],
+  [LangGraph Platform, Anthropic Skills, OpenAI Agents],
+  [관리형 런타임 vs 자체 호스팅·SDK 호환성],
 )
 
 Provider Middleware는 _프로바이더 서버 측_에서 활성화되는 기능(프롬프트 캐시, 네이티브 도구, 컨텐츠 정책)을 LangChain 미들웨어 포맷으로 감싼 것입니다. 공식 문서에는 한 줄 정도만 언급되는 경우가 많아 실행 가능한 코드로 정리해 두는 편이 실용적입니다. 이 Part의 ch2~ch8에서 7개 미들웨어를 각각 1장씩 다룹니다.
@@ -118,6 +121,33 @@ Provider Middleware는 _프로바이더 서버 측_에서 활성화되는 기능
 + *검증* — `usage_metadata`, `tool_calls`, 또는 Moderation 응답을 읽어 기능이 실제로 동작하는지 확인합니다.
 
 #tip-box[프로바이더 특화 미들웨어는 _모델을 같이 정해야_ 합니다. Anthropic 미들웨어를 OpenAI 모델에 붙이면 `unsupported_model_behavior` 설정에 따라 경고만 나오거나 예외가 발생합니다. 멀티 프로바이더 파이프라인에서는 `ModelFallbackMiddleware`와 조합할 때 순서에 주의하세요.]
+
+== 1.5 Observability 환경변수 표준화
+
+LangChain 1.1부터 트레이싱 관련 환경변수는 `LANGCHAIN_*` → `LANGSMITH_*`로 표준화되었습니다. 옛 변수도 호환을 위해 일정 기간 동작하지만, _신규 코드는 새 이름만 씁니다_.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[변수],
+  text(weight: "bold")[역할],
+  text(weight: "bold")[비고],
+  [`LANGSMITH_TRACING`],
+  [트레이스 활성화 (`true` / `false`)],
+  [모든 `create_agent` 실행 자동 계측],
+  [`LANGSMITH_API_KEY`],
+  [LangSmith 계정 키],
+  [`ls__` 접두사],
+  [`LANGSMITH_PROJECT`],
+  [트레이스 분류 프로젝트 이름],
+  [`tracing_context`로 호출 구간별 override 가능],
+  [`LANGSMITH_ENDPOINT`],
+  [self-host LangSmith용 엔드포인트],
+  [선택 — SaaS 사용 시 불필요],
+)
 
 == 핵심 정리
 

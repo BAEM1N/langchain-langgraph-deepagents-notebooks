@@ -48,7 +48,7 @@ assert os.environ.get("OPENAI_API_KEY"), "Set OPENAI_API_KEY in .env"
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 `````)
 
@@ -275,6 +275,36 @@ If you reuse the same `thread_id`, the agent keeps the conversation context and 
 4. [Iteration]   continue analysis through follow-up questions
 5. [Delivery]    summarize findings and report results
 `````)
+
+== `@tool` + pandas vs. CodeInterpreterMiddleware
+
+There are two main ways a data analysis agent can run code. The `run_pandas` tool in this chapter is the _@tool + pandas_ pattern; it can be swapped for the built-in `execute` of `LocalShellBackend` or for `CodeInterpreterMiddleware`.
+
+#table(
+  columns: 4,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Pattern],
+  text(weight: "bold")[Isolation],
+  text(weight: "bold")[State],
+  text(weight: "bold")[Use Case],
+  [`@tool` + inline Python],
+  [None (same process)],
+  [New namespace per call],
+  [Notebooks, demos, small analyses],
+  [`LocalShellBackend` `execute`],
+  [None (host shell)],
+  [Filesystem only],
+  [Letting the agent shell out],
+  [`CodeInterpreterMiddleware` (QuickJS)],
+  [Inside the interpreter],
+  [Auto-restored between turns via snapshots],
+  [Safer code execution on Deep Agents 0.6+],
+)
+
+#tip-box[Put your analysis checklist and code-execution rules in `skills/data-analysis/SKILL.md`. The agent loads them progressively when needed instead of cramming everything into the system prompt — that's the Skills pattern.]
 
 
 == Summary

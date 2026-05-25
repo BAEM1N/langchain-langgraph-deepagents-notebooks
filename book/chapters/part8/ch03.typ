@@ -108,7 +108,22 @@ agent = create_agent(
 )
 `````)
 
-== 3.7 네이티브 vs 범용 비교
+== 3.7 일반 `@tool`로 대체할 때
+
+Claude 외 모델에서도 같은 흐름을 쓰려면 LangChain 1.3의 `@tool` 데코레이터로 직접 쉘 함수를 정의합니다. `extras` 필드(LangChain 1.2부터 도입)에 Anthropic programmatic tool calling 메타데이터를 주입하면 동일 함수를 Claude 전용 도구와 _같은 톤_으로 호출할 수 있습니다.
+
+#code-block(`````python
+from langchain_core.tools import tool
+
+@tool(extras={"anthropic_cache_control": {"type": "ephemeral"}})
+def run_bash(command: str) -> str:
+    """격리된 컨테이너에서 bash 명령을 실행하고 stdout/stderr를 반환합니다."""
+    return run_in_container(command)  # 자체 구현체
+`````)
+
+#tip-box[`@tool(extras=...)`은 멀티 프로바이더 파이프라인의 _부분 캐싱_에 유용합니다. Claude는 `cache_control`을 해석하고, 다른 프로바이더는 무시하므로 한 코드베이스를 그대로 양쪽에 노출할 수 있습니다.]
+
+== 3.8 네이티브 vs 범용 비교
 
 #table(
   columns: 3,

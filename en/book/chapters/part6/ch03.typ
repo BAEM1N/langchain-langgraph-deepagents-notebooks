@@ -100,7 +100,7 @@ class Judgement(BaseModel):
     score: float   # 0.0 ~ 1.0
     reason: str
 
-judge_llm = ChatOpenAI(model="gpt-4.1-mini").with_structured_output(Judgement)
+judge_llm = ChatOpenAI(model="gpt-5.4").with_structured_output(Judgement)
 
 def semantic_city_match(inputs, outputs, reference_outputs):
     j = judge_llm.invoke(
@@ -114,17 +114,26 @@ def semantic_city_match(inputs, outputs, reference_outputs):
 
 == 3.5 The `evaluate` runner + experiment name
 
-`from langsmith.evaluation import evaluate` is the standard runner. Give a meaningful `experiment_prefix` and it shows up directly in the UI's Experiments view for comparison.
+Both import paths point at the same runner — new code should prefer the shorter `from langsmith import evaluate`. If you already have a `Client` instance, `client.evaluate(...)` works the same. Give a meaningful `experiment_prefix` and it shows up directly in the UI's Experiments view for comparison.
 
 #code-block(`````python
-from langsmith.evaluation import evaluate
+from langsmith import Client, evaluate     # recommended (langsmith ≥ 0.3)
+# from langsmith.evaluation import evaluate  # legacy path, still works
 
 result = evaluate(
     target=city_extractor,
     data="weather-bot-qa",
     evaluators=[city_exact_match, city_non_empty, semantic_city_match],
-    experiment_prefix="city-extractor:gpt-4.1-mini",
+    experiment_prefix="city-extractor:gpt-5.4",
     metadata={"prompt_commit": "12344e88"},
+)
+
+# Client.evaluate(...) shares the same signature
+client = Client()
+result = client.evaluate(
+    city_extractor,
+    data="weather-bot-qa",
+    evaluators=[city_exact_match],
 )
 `````)
 
@@ -151,7 +160,67 @@ evaluate(
 )
 `````)
 
-== 3.7 Online evaluator — automatic evaluation on production traces
+== 3.7 `agentevals` — evaluating agent trajectories
+
+City extraction can be graded by looking only at the _final output_, but with agents the _sequence in which tools are called_ matters too. The `agentevals` package (`pip install agentevals`) provides evaluators that compare a reference trajectory against the actual trajectory recorded as LangChain messages.
+
+There are four comparison modes.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Mode],
+  text(weight: "bold")[Match rule],
+  text(weight: "bold")[When to use],
+  [`strict`],
+  [Tool names, order, and arguments must all match],
+  [Regression tests on a fixed workflow],
+  [`unordered`],
+  [Tool set must match; call order is irrelevant],
+  [Parallel tool use, pipelines where order is not material],
+  [`subset`],
+  [Actual ⊆ reference (allowed actions)],
+  [Acceptable when the agent calls _fewer_ tools than expected],
+  [`superset`],
+  [Reference ⊆ actual (required actions)],
+  [When certain tools _must_ be called],
+)
+
+#code-block(`````python
+from agentevals.trajectory.match import create_trajectory_match_evaluator
+
+trajectory_strict = create_trajectory_match_evaluator(
+    trajectory_match_mode="strict",
+)
+
+# Pass straight to the evaluators kwarg to aggregate as an experiment score
+evaluate(
+    target=run_agent,
+    data="agent-golden-trajectories",
+    evaluators=[trajectory_strict],
+    experiment_prefix="agent:trajectory-strict",
+)
+`````)
+
+To grade trajectories with an LLM judge in free-form fashion, use `create_trajectory_llm_as_judge`. Instead of comparing tool names it asks the judge to assess _the appropriateness of the whole reasoning chain_.
+
+#code-block(`````python
+from agentevals.trajectory.llm import create_trajectory_llm_as_judge
+
+trajectory_judge = create_trajectory_llm_as_judge(
+    model="openai:gpt-5.4",
+    prompt="Did the agent's tool-call sequence efficiently fulfill the user's intent?",
+)
+`````)
+
+#tip-box[
+  `agentevals` is paired with `openevals` (generic LLM evaluation). The recommended pattern is to grade _final answer quality_ with `openevals` and _process appropriateness_ with `agentevals`, attaching both scores to the same experiment.
+]
+
+== 3.8 Online evaluator — automatic evaluation on production traces
 
 Offline experiments are for pre-deploy regression testing; in production you attach *online evaluators* to emit real-time feedback. UI flow:
 
@@ -169,6 +238,7 @@ To apply retroactively, turn on *Apply to past runs* and specify the time range.
 
 - Accumulate datasets as a mix of manual seeds and production-trace ingestion
 - Four evaluator types: Code (deterministic, low-cost) / LLM-as-judge (natural-language quality) / Pairwise (A/B comparison) / Summary (dataset level)
-- `evaluate` runner + `experiment_prefix` makes experiment names visible in the UI
+- `from langsmith import evaluate` and `Client.evaluate(...)` share the same signature
+- `agentevals` provides four trajectory-match modes (strict / unordered / subset / superset) plus LLM-as-judge for grading _process appropriateness_
 - Online evaluators attach feedback keys automatically — they become triggers for dashboards and alerts
 - Attaching metadata such as `prompt_commit` to an experiment makes "which version produced this number" reproducible

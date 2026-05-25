@@ -44,7 +44,7 @@ assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY를 .env에 설정하세
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 `````)
 
@@ -90,7 +90,7 @@ def web_search(query: str) -> str:
 
 == 3단계: 5단계 리서치 워크플로 프롬프트
 
-의 가 프롬프트를 로드합니다 (LangSmith Hub -\> Langfuse -\> 기본값).
+`prompts.load_prompt` 가 프롬프트를 로드합니다 (LangSmith Hub → Langfuse → 기본값).
 
 #table(
   columns: 3,
@@ -103,7 +103,7 @@ def web_search(query: str) -> str:
   text(weight: "bold")[설명],
   [1],
   [_Plan_],
-  [로 리서치 계획 작성],
+  [`write_todos`로 리서치 계획 작성],
   [2],
   [_Delegate_],
   [서브에이전트에게 병렬 조사 위임 (최대 3개 동시)],
@@ -207,7 +207,7 @@ fact_checker = {
 
 == 5단계: 딥 리서치 에이전트 생성 (v1 미들웨어)
 
-모든 도구와 서브에이전트를 조합하여 최종 에이전트를 생성합니다. v1 미들웨어로 안정성과 신뢰성을 높입니다:
+모든 도구와 서브에이전트를 조합해 최종 에이전트를 생성합니다. v1 미들웨어로 안정성과 신뢰성을 끌어올립니다.
 
 #table(
   columns: 2,
@@ -217,9 +217,15 @@ fact_checker = {
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[미들웨어],
   text(weight: "bold")[역할],
+  [`SummarizationMiddleware`],
+  [긴 리서치 대화를 자동 요약해 컨텍스트 절약],
+  [`ModelCallLimitMiddleware`],
+  [리서치 루프 방지 — 최대 30회 모델 호출 제한],
+  [`ModelFallbackMiddleware`],
+  [주 모델 실패 시 백업 모델로 자동 전환],
 )
 
-로 체크포인팅을 활성화하여 중단된 리서치를 재개할 수 있습니다.
+`InMemorySaver`로 체크포인팅을 활성화하면 중단된 리서치를 재개할 수 있습니다.
 
 #code-block(`````python
 from deepagents import create_deep_agent
@@ -242,10 +248,32 @@ research_agent = create_deep_agent(
     middleware=[
         SummarizationMiddleware(model=model, trigger=("messages", 15)),
         ModelCallLimitMiddleware(run_limit=30),
-        ModelFallbackMiddleware("gpt-4.1-mini"),
+        ModelFallbackMiddleware("gpt-5.4-mini"),
     ],
 )
 `````)
+
+== DeepAgents 패턴 — TodoList + dispatch + 5-tool async
+
+본 챕터의 딥 리서치 에이전트는 DeepAgents의 핵심 세 가지 패턴을 모두 사용합니다.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[패턴],
+  text(weight: "bold")[설명],
+  [_TodoList_],
+  [빌트인 `write_todos`로 Plan 단계에서 작업 목록을 명시 — 진행 상태가 메시지 히스토리에 박힘],
+  [_dispatch_],
+  [`task` 빌트인으로 서브에이전트에 위임 — 메인 에이전트는 결과 요약만 받아 컨텍스트 분리],
+  [_5-tool async_],
+  [`web_search` · `think_tool` · `write_todos` · `task` · `read/write_file` 다섯 도구로 비동기 워크플로 구성],
+)
+
+#tip-box[`AsyncSubAgent` 스펙을 `subagents`에 넘기면 `create_deep_agent`가 `AsyncSubAgentMiddleware`를 자동 부착해 서브에이전트를 병렬 비동기로 실행합니다 (`docs/deepagents/12-async-subagents.md`).]
 
 == 6단계: 리서치 실행
 

@@ -42,7 +42,7 @@ assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY를 .env에 설정하세
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 `````)
 
@@ -275,6 +275,36 @@ Prompt 'deep-research-agent-label:production' not found during refresh, evicting
 4. [Iteration]   추가 분석, 후속 질문
 5. [Delivery]    결과 정리 및 보고
 `````)
+
+== `@tool` + pandas 패턴 vs CodeInterpreterMiddleware
+
+데이터 분석 에이전트가 코드를 실행하는 방법은 크게 두 가지입니다. 본 예제의 `run_pandas`는 _@tool + pandas_ 패턴이며, `LocalShellBackend`의 `execute` 빌트인이나 `CodeInterpreterMiddleware`로 대체할 수 있습니다.
+
+#table(
+  columns: 4,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[패턴],
+  text(weight: "bold")[격리],
+  text(weight: "bold")[상태 유지],
+  text(weight: "bold")[용도],
+  [`@tool` + Python 인라인 실행],
+  [없음 (현재 프로세스)],
+  [네임스페이스 매 호출 새로 생성],
+  [노트북·데모·소규모 분석],
+  [`LocalShellBackend` `execute`],
+  [없음 (호스트 셸)],
+  [파일 시스템에만 유지],
+  [에이전트가 외부 명령 호출],
+  [`CodeInterpreterMiddleware` (QuickJS)],
+  [interpreter 내부],
+  [turn 사이 snapshot으로 자동 복원],
+  [Deep Agents 0.6+ 의 안전한 코드 실행],
+)
+
+#tip-box[Skills 패턴은 `skills/data-analysis/SKILL.md` 에 분석 체크리스트와 코드 실행 규칙을 적어두고, 에이전트가 필요할 때 점진적으로 로드합니다. 모델 호출마다 전체 프롬프트에 욱여넣지 않아 토큰을 절약합니다.]
 
 
 #chapter-summary-header()

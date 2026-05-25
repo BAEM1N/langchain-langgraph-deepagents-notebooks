@@ -70,7 +70,7 @@ load_dotenv()
 
 #code-block(`````python
 agent = create_agent(
-    model="openai:gpt-4.1",
+    model="openai:gpt-5.4",
     tools=[],
     middleware=[OpenAIModerationMiddleware()],
 )
@@ -88,7 +88,7 @@ agent = create_agent(
 from langchain_openai.middleware import OpenAIModerationError
 
 agent = create_agent(
-    model="openai:gpt-4.1",
+    model="openai:gpt-5.4",
     tools=[],
     middleware=[OpenAIModerationMiddleware(exit_behavior="error")],
 )
@@ -106,7 +106,7 @@ except OpenAIModerationError as e:
 
 #code-block(`````python
 agent = create_agent(
-    model="openai:gpt-4.1",
+    model="openai:gpt-5.4",
     tools=[],
     middleware=[
         OpenAIModerationMiddleware(
@@ -128,7 +128,7 @@ agent = create_agent(
 
 #code-block(`````python
 agent = create_agent(
-    model="openai:gpt-4.1",
+    model="openai:gpt-5.4",
     tools=[web_search_tool, fetch_url_tool],
     middleware=[
         OpenAIModerationMiddleware(
@@ -140,7 +140,29 @@ agent = create_agent(
 )
 `````)
 
-== 8.8 비용·지연 트레이드오프
+== 8.8 LangSmith로 위반 흐름 관측
+
+Moderation 차단은 _드물지만 감사 로그에는 반드시 남아야 하는_ 사건입니다. LangSmith의 자동 트레이싱(`LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY`)을 켜면 `OpenAIModerationMiddleware`가 트리거된 노드도 트레이스 트리에 정상적으로 박힙니다.
+
+#code-block(`````python
+import os
+from langsmith.run_helpers import tracing_context
+
+os.environ["LANGSMITH_TRACING"] = "true"
+# os.environ["LANGSMITH_API_KEY"] = "ls__..."
+# os.environ["LANGSMITH_PROJECT"] = "moderation-audit"
+
+with tracing_context(
+    project_name="moderation-audit",
+    tags=["moderation", "input-only"],
+    metadata={"region": "kr"},
+):
+    agent.invoke({"messages": [{"role": "user", "content": "..."}]})
+`````)
+
+#tip-box[`tracing_context`는 _특정 호출 구간만_ 다른 프로젝트/태그로 분리해 라우팅합니다 — 평소 트레이스는 `production`에, Moderation 차단 케이스만 `moderation-audit`에 모아두는 식의 운영이 자연스럽습니다. `LANGCHAIN_*` 환경변수는 1.1부터 `LANGSMITH_*`로 표준화됐습니다 — 옛 변수도 한동안 동작하지만 신규 코드에서는 `LANGSMITH_*`만 씁니다.]
+
+== 8.9 비용·지연 트레이드오프
 
 #table(
   columns: 4,

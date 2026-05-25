@@ -4,11 +4,11 @@
 
 #chapter(1, "Integration Category Overview", subtitle: "A map of the LangChain ecosystem")
 
-LangChain · LangGraph · Deep Agents take the shape of a common agent interface beneath which _per-provider implementations_ plug in. Parts II–IV focused on "how to use the agent"; this Part focuses on "_what_ you connect the agent to". We scan the twelve integration categories and lay out the representative packages and selection criteria for each.
+LangChain · LangGraph · Deep Agents take the shape of a common agent interface beneath which _per-provider implementations_ plug in. Parts II–IV focused on "how to use the agent"; this Part focuses on "_what_ you connect the agent to". We scan the thirteen integration categories and lay out the representative packages and selection criteria for each.
 
 #learning-header()
 #learning-objectives(
-  [Survey the twelve integration categories of the LangChain ecosystem],
+  [Survey the thirteen integration categories of the LangChain ecosystem],
   [Understand why Provider Middleware is a separate category],
   [Distinguish vendor-sensitive areas (Chat Models, Vector Stores) from standardized ones (Middleware, Checkpointers)],
   [Map the seven Provider Middleware chapters this Part covers],
@@ -18,13 +18,13 @@ LangChain · LangGraph · Deep Agents take the shape of a common agent interface
 
 The code in this Part assumes the following versions. Check the latest releases in `docs/skills/langchain-dependencies.md`.
 
-- `langchain` 1.2
-- `langgraph` 1.1
-- `deepagents` 0.5.0
+- `langchain` 1.3+ (event streaming v3)
+- `langgraph` 1.2+ (per-node timeout · `DeltaChannel` · graceful shutdown)
+- `deepagents` 0.6.1+ (`CodeInterpreterMiddleware`, async subagents, interpreter snapshots)
 
 #warning-box[LangChain 1.2 `create_agent` rejects _duplicate instances_ of the same middleware class. If you hit `AssertionError: Please remove duplicate middleware instances.`, split the two instances into separate types via subclassing.]
 
-== 1.2 The twelve integration categories
+== 1.2 The thirteen integration categories
 
 #table(
   columns: 3,
@@ -71,6 +71,9 @@ The code in this Part assumes the following versions. Check the latest releases 
   [Observability],
   [`langsmith`, `langfuse`, OpenTelemetry],
   [SaaS vs self-hosted · PII policy],
+  [Providers (Hosted Runtime)],
+  [LangGraph Platform, Anthropic Skills, OpenAI Agents],
+  [Managed runtime vs self-hosted · SDK compatibility],
 )
 
 Provider Middleware wraps features that are activated _on the provider's servers_ (prompt caching, native tools, content policy) into the LangChain middleware format. Official docs often mention them in a single line, so there is a lot of value in organizing them as working code. Chapters 2–8 of this Part each cover one of the seven middleware.
@@ -118,6 +121,33 @@ Every chapter in this Part shares the same three-step loop.
 + *Validation* — read `usage_metadata`, `tool_calls`, or the Moderation response to confirm the feature actually ran
 
 #tip-box[Provider-specific middleware needs _a matching model_. If you attach Anthropic middleware to an OpenAI model, behavior is governed by `unsupported_model_behavior` — either a warning or an exception. In multi-provider pipelines, watch the order when combining with `ModelFallbackMiddleware`.]
+
+== 1.5 Observability env-var standardization
+
+From LangChain 1.1, tracing-related environment variables were standardized from `LANGCHAIN_*` to `LANGSMITH_*`. The old names continue to work for a while for compatibility, but _new code uses the new names exclusively_.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Variable],
+  text(weight: "bold")[Role],
+  text(weight: "bold")[Notes],
+  [`LANGSMITH_TRACING`],
+  [Enable tracing (`true` / `false`)],
+  [Auto-instruments every `create_agent` run],
+  [`LANGSMITH_API_KEY`],
+  [LangSmith account key],
+  [`ls__` prefix],
+  [`LANGSMITH_PROJECT`],
+  [Project name for trace grouping],
+  [Per-call overridable via `tracing_context`],
+  [`LANGSMITH_ENDPOINT`],
+  [Endpoint for self-hosted LangSmith],
+  [Optional — unneeded for SaaS],
+)
 
 == Key Takeaways
 

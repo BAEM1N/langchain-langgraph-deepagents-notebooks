@@ -96,13 +96,18 @@ Part 5의 마지막 장입니다. 앞선 장들에서 미들웨어, 멀티에이
   text(weight: "bold")[유형],
   text(weight: "bold")[특징],
   text(weight: "bold")[적합 대상],
-  [_단위 테스트_],
-  [`GenericFakeChatModel`로 LLM 응답을 모킹하여 격리된 결정적 테스트 수행. API 호출 없이 빠르게 실행],
+  [_Unit_],
+  [`GenericFakeChatModel`로 LLM 응답을 모킹해 격리된 결정적 테스트 수행. API 호출 없이 빠르게 실행],
   [개별 도구, 파서, 프롬프트 포맷팅, 상태 변환 로직],
-  [_통합 테스트_],
-  [실제 네트워크 호출로 컴포넌트 간 협업 검증. `agentevals`의 궤적 평가로 에이전트 행동 패턴 분석],
-  [전체 에이전트 흐름, 도구 호출 시퀀스, 최종 응답 품질],
+  [_Integration_],
+  [실제 네트워크 호출로 컴포넌트 간 협업 검증. `pytest` + `vcrpy` 카세트로 재현성 확보],
+  [전체 에이전트 흐름, 도구 호출 시퀀스, 외부 API 연동],
+  [_Evals_],
+  [LangSmith 데이터셋과 `agentevals` 궤적 평가자로 응답 품질·도구 호출 순서를 정량화],
+  [응답 정확도, trajectory match, LLM-as-Judge 루브릭],
 )
+
+#tip-box[테스트는 세 종류 모두 필요합니다 — _Unit_ 은 회귀 방지, _Integration_ 은 외부 API 계약 검증, _Evals_ 는 비결정적 응답 품질 측정. 셋 다 CI 에서 돌리되 Evals 만 _샘플 데이터셋_ 으로 자주, _풀 데이터셋_ 으로 야간에 돌리는 식의 이원화가 일반적입니다.]
 
 에이전트 시스템은 다중 컴포넌트가 체이닝되어 동작하므로, 일반적으로 통합 테스트의 비중이 더 높습니다. 단위 테스트로 개별 컴포넌트의 정확성을 확인하고, 통합 테스트로 전체 흐름의 품질을 평가합니다.
 
@@ -313,9 +318,40 @@ export LANGSMITH_API_KEY=<your-api-key>
 
 `create_agent`로 생성한 에이전트는 환경 변수 설정 시 자동으로 실행 데이터를 LangSmith에 전송합니다. LangChain의 모든 컴포넌트(LLM, 체인, 도구 등)가 내장 계측(instrumentation)을 포함하고 있어 별도의 코드 수정이 필요 없습니다.
 
-=== 선택적 트레이싱
+=== 선택적 트레이싱 & PII 익명화 (`tracing_context` + `LangChainTracer`)
 
-`tracing_context`를 사용하면 특정 코드 블록만 선택적으로 트레이싱할 수 있습니다. 이를 통해 디버깅이 필요한 부분만 집중적으로 모니터링하거나, 프로젝트별로 트레이스를 분리할 수 있습니다.
+`tracing_context` 는 특정 코드 블록만 선택적으로 트레이싱하거나, 프로젝트·태그·메타데이터를 _런타임에 동적으로_ 바꿔 끼울 수 있습니다. 프로덕션에서는 보통 `LangChainTracer` 를 직접 인스턴스화해서 _anonymizer_ 콜백을 끼워 넣어, 트레이스로 전송되기 전 단계에서 PII(이메일·전화·주민번호 등) 를 마스킹합니다.
+
+#code-block(`````python
+import re
+from langsmith import tracing_context
+from langchain.callbacks.tracers import LangChainTracer
+
+EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+PHONE_RE = re.compile(r"\b\d{2,3}-\d{3,4}-\d{4}\b")
+
+def anonymize(payload: dict) -> dict:
+    """트레이스 전송 전에 PII를 마스킹합니다."""
+    text = str(payload)
+    text = EMAIL_RE.sub("<email>", text)
+    text = PHONE_RE.sub("<phone>", text)
+    return {**payload, "redacted": text}
+
+tracer = LangChainTracer(
+    project_name="production-agent",
+    client_kwargs={"hide_inputs": anonymize,
+                   "hide_outputs": anonymize},
+)
+
+with tracing_context(
+    project_name="production-agent",
+    tags=["v2.1", "experiment-A"],
+    metadata={"user_tier": "premium"},
+):
+    agent.invoke({"messages": [...]}, config={"callbacks": [tracer]})
+`````)
+
+#warning-box[PII 마스킹은 _트레이스가 LangSmith 로 전송되기 전_ 의 단계에서 처리해야 합니다. 모델에는 원본을 그대로 전달하고, 외부에 기록되는 트레이스에만 마스킹된 사본이 남도록 분리하는 것이 핵심입니다.]
 
 == 9.6 트레이스 분석
 
@@ -405,8 +441,14 @@ LangGraph Studio는 에이전트의 실행 흐름을 _시각적으로_ 디버깅
   [에이전트의 노드/엣지 구조를 실시간 확인. 현재 실행 중인 노드를 하이라이트],
   [_단계별 실행_],
   [각 노드의 입출력 데이터를 검사하며 디버깅. 프롬프트, 도구 호출, 결과를 단계별로 확인],
-  [_상태 검사_],
-  [에이전트의 전체 상태를 시각적으로 탐색. 메시지 히스토리, 체크포인트 데이터 포함],
+  [_상태 검사 & 편집_],
+  [메시지 히스토리·체크포인트를 탐색하고, 노드 입력값을 _즉석에서 수정_ 한 뒤 재실행],
+  [_Time Travel_],
+  [이전 체크포인트로 되돌아가 다른 분기/도구 호출을 시도하는 분기 디버깅],
+  [_HITL 인터럽트 처리_],
+  [`interrupt()` 로 멈춘 그래프에 Studio UI 에서 직접 `Command(resume=...)` 입력],
+  [_스레드 관리_],
+  [`thread_id` 별 대화 트리를 좌측 패널에 표시, 과거 실행 비교 가능],
   [_실시간 스트리밍_],
   [에이전트 실행 과정을 실시간으로 관찰. 토큰/레이턴시 메트릭 제공],
 )
@@ -432,6 +474,19 @@ langgraph dev
 - 최종 출력
 - 중간 상태 (검사 및 수정 가능)
 - 토큰 사용량과 레이턴시 메트릭
+
+=== 채팅 UI 스캐폴드 -- `npx create-agent-chat-app`
+
+Studio 가 _개발자_ 의 디버깅 도구라면, 최종 사용자를 위한 채팅 UI 는 별도의 프런트엔드가 필요합니다. LangChain 팀이 제공하는 `create-agent-chat-app` 템플릿은 배포된 LangGraph 에이전트에 곧바로 연결되는 Next.js 채팅 앱을 한 줄로 생성합니다.
+
+#code-block(`````bash
+npx create-agent-chat-app@latest my-agent-ui
+cd my-agent-ui
+# .env.local 에 NEXT_PUBLIC_API_URL, NEXT_PUBLIC_ASSISTANT_ID, LANGSMITH_API_KEY 설정
+pnpm dev
+`````)
+
+이 템플릿은 `/runs/stream` SSE 스트리밍, `thread_id` 기반 대화 이력, `interrupt()` 인터럽트 UI 까지 기본 탑재하고 있어 _배포된 그래프의 외피_ 로 빠르게 활용할 수 있습니다.
 
 테스트와 관측성이 준비되었다면, 마지막 단계는 실제 배포입니다. 에이전트 배포는 전통적인 웹 애플리케이션 배포와 다른 고려사항이 있습니다.
 
@@ -632,6 +687,27 @@ except Exception as e:
 `````)
 #output-block(`````
 LANGSMITH_API_KEY 미설정. 클라이언트 연결 건너뜀.
+`````)
+
+==== `client.runs.stream(...)` 으로 스트리밍 호출
+
+SDK 의 `runs.stream(...)` 는 배포된 에이전트로부터 토큰·메시지·도구 호출을 _Server-Sent Events_ 로 받습니다. `stream_mode` 는 `"values"`, `"updates"`, `"messages"`, `"events"` 를 조합할 수 있으며, `thread_id` 를 함께 넘기면 동일 세션의 대화 이력이 유지됩니다.
+
+#code-block(`````python
+from langgraph_sdk import get_client
+
+client = get_client(url="https://your-deployment.langsmith.com",
+                    api_key=api_key)
+
+async for chunk in client.runs.stream(
+    thread_id="user-42",
+    assistant_id="agent",
+    input={"messages": [
+        {"role": "user", "content": "최근 5분 매출 요약"}
+    ]},
+    stream_mode=["updates", "messages"],
+):
+    print(chunk.event, chunk.data)
 `````)
 
 === REST API로 접근

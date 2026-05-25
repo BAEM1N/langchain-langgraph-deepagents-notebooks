@@ -22,7 +22,7 @@ from langchain_openai import ChatOpenAI
 
 load_dotenv()
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == 1.2 Middleware Architecture Overview
@@ -75,9 +75,9 @@ from langchain.agents.middleware import (
 )
 
 agent = create_agent(
-    model="gpt-4.1", tools=[],
+    model="gpt-5.4", tools=[],
     middleware=[
-        SummarizationMiddleware(model="gpt-4.1-mini", trigger=("messages", 50)),
+        SummarizationMiddleware(model="gpt-5.4-mini", trigger=("messages", 50)),
         HumanInTheLoopMiddleware(interrupt_on={}),
     ],
 )
@@ -100,7 +100,7 @@ When a conversation becomes long enough to exceed the context window, it automat
   text(weight: "bold")[Example],
   [`model`],
   [Summary Lightweight model to use for creation (reduces costs)],
-  [`"gpt-4.1-mini"`],
+  [`"gpt-5.4-mini"`],
   [`trigger`],
   [Summary Trigger condition],
   [`("tokens", 4000)`, `("messages", 50)`, `("fraction", 0.8)`],
@@ -121,7 +121,7 @@ When a conversation becomes long enough to exceed the context window, it automat
 from langchain.agents.middleware import SummarizationMiddleware
 
 summarizer = SummarizationMiddleware(
-    model="gpt-4.1-mini",
+    model="gpt-5.4-mini",
     trigger=("tokens", 4000),
     keep=("messages", 20),
 )
@@ -171,7 +171,7 @@ hitl = HumanInTheLoopMiddleware(
 
 #code-block(`````python
 agent = create_agent(
-    model="gpt-4.1", tools=[],
+    model="gpt-5.4", tools=[],
     checkpointer=InMemorySaver(),
     middleware=[hitl],
 )
@@ -242,10 +242,10 @@ If you pass a fallback model to the constructor in order, it will try the fallba
 #code-block(`````python
 from langchain.agents.middleware import ModelFallbackMiddleware
 
-# gpt-4.1 failed -> gpt-4.1-mini -> claude
+# gpt-5.4 failed -> gpt-5.4-mini -> claude
 fallback = ModelFallbackMiddleware(
-    "gpt-4.1-mini",
-    "claude-3-5-sonnet-20241022",
+    "gpt-5.4-mini",
+    "claude-sonnet-4-6",
 )
 `````)
 
@@ -361,15 +361,45 @@ When there are more than 10 tools, Lightweight LLM analyzes the user query and s
   [`[]`],
 )
 
-Using a lightweight model like `gpt-4.1-mini` as the model of choice allows for effective tool filtering while reducing cost.
+Using a lightweight model like `gpt-5.4-mini` as the model of choice allows for effective tool filtering while reducing cost.
 
 #code-block(`````python
 from langchain.agents.middleware import LLMToolSelectorMiddleware
 
 tool_selector = LLMToolSelectorMiddleware(
-    model="gpt-4.1-mini",
+    model="gpt-5.4-mini",
     max_tools=3,
     always_include=["search"],
+)
+`````)
+
+=== ContextEditingMiddleware
+For long multi-turn conversations, `ContextEditingMiddleware` clears _old tool results_ once a token threshold is crossed, while keeping the most recent N. Where `SummarizationMiddleware` writes a single summary blob, this one prunes tool-result by tool-result.
+
+#code-block(`````python
+from langchain.agents.middleware import ContextEditingMiddleware, ClearToolUsesEdit
+
+agent = create_agent(
+    model="gpt-5.4",
+    tools=[search_tool],
+    middleware=[
+        ContextEditingMiddleware(
+            edits=[ClearToolUsesEdit(trigger=100_000, keep=3, placeholder="[cleared]")],
+        ),
+    ],
+)
+`````)
+
+=== PatchToolCallsMiddleware (Deep Agents)
+Some models produce slightly malformed tool-call JSON. `PatchToolCallsMiddleware` (from `deepagents`) repairs common defects so tool calls do not fail outright.
+
+#code-block(`````python
+from deepagents.middleware.patch_tool_calls import PatchToolCallsMiddleware
+
+agent = create_agent(
+    model="claude-sonnet-4-6",
+    tools=[search_tool, write_file],
+    middleware=[PatchToolCallsMiddleware()],
 )
 `````)
 
@@ -391,6 +421,66 @@ You can control agent flow by returning a dictionary from `after_model`, etc.:
 - `{"jump_to": "end"}` — Terminate agent immediately
 - Go to `{"jump_to": "tools"}` — tool execution phase
 - `{"jump_to": "model"}` — Go to model call step
+
+Since v1.2, declare legal jump targets statically with `@hook_config(can_jump_to=[...])`. The graph is validated at compile time so an invalid jump target fails fast.
+
+#code-block(`````python
+from langchain.agents.middleware import after_model, hook_config, AgentState
+from langgraph.runtime import Runtime
+from langchain.messages import AIMessage
+
+@after_model
+@hook_config(can_jump_to=["end"])
+def block_unsafe(state: AgentState, runtime: Runtime) -> dict | None:
+    last = state["messages"][-1]
+    if "BLOCKED" in last.content:
+        return {"messages": [AIMessage("Cannot respond.")], "jump_to": "end"}
+    return None
+`````)
+
+=== Type annotations — `ModelRequest`/`ToolCallRequest`/`ModelResponse`
+v1 ships dataclasses for hook signatures:
+- `ModelRequest` (`wrap_model_call` input): `messages`, `tools`, `model`, `system_message`, `response_format`, `state`, `runtime`.
+- `ToolCallRequest` (`wrap_tool_call` input): `tool_call`, `state`, `runtime`.
+- `ModelResponse`: return type of the inner handler.
+- `ExtendedModelResponse`: wraps `ModelResponse` + `Command` for persistent state updates.
+
+#code-block(`````python
+from typing import Callable
+from langchain.agents.middleware import (
+    wrap_model_call, wrap_tool_call,
+    ModelRequest, ModelResponse, ToolCallRequest,
+)
+from langchain.messages import ToolMessage
+from langgraph.types import Command
+
+@wrap_model_call
+def add_cache_marker(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ModelResponse:
+    cached = request.override(system_message=f"{request.system_message}\n[CACHE]")
+    return handler(cached)
+`````)
+
+=== `request.override(...)`
+`ModelRequest.override(...)` returns a modified copy without mutating shared state, so multiple middleware can cooperate safely. `messages`, `tools`, `model`, `system_message`, `system_prompt`, `response_format` are all overridable.
+
+=== `ExtendedModelResponse`
+Return `ExtendedModelResponse` from `wrap_model_call` when you need a state update to survive the call:
+
+#code-block(`````python
+from langchain.agents.middleware import ExtendedModelResponse
+
+@wrap_model_call
+def track_tokens(request, handler) -> ExtendedModelResponse:
+    response = handler(request)
+    tokens = response.message.usage_metadata.get("total_tokens", 0)
+    return ExtendedModelResponse(
+        model_response=response,
+        command=Command(update={"total_tokens": tokens}),
+    )
+`````)
 
 #code-block(`````python
 from langchain.agents.middleware import before_model
@@ -482,13 +572,13 @@ from langgraph.checkpoint.memory import InMemorySaver
 #code-block(`````python
 middleware_stack = [
     PIIMiddleware("email", strategy="redact", apply_to_input=True),
-    ModelFallbackMiddleware("gpt-4.1-mini", "claude-3-5-sonnet-20241022"),
+    ModelFallbackMiddleware("gpt-5.4-mini", "claude-sonnet-4-6"),
     ModelCallLimitMiddleware(thread_limit=50, run_limit=10),
-    SummarizationMiddleware(model="gpt-4.1-mini", trigger=("tokens", 4000)),
+    SummarizationMiddleware(model="gpt-5.4-mini", trigger=("tokens", 4000)),
 ]
 
 production_agent = create_agent(
-    model="gpt-4.1", tools=[], checkpointer=InMemorySaver(), middleware=middleware_stack,
+    model="gpt-5.4", tools=[], checkpointer=InMemorySaver(), middleware=middleware_stack,
 )
 `````)
 
@@ -606,7 +696,7 @@ The `type` parameter only takes effect on `ChatBedrock` (the legacy invoke-model
 from langchain_aws.middleware import BedrockPromptCachingMiddleware
 
 agent = create_agent(
-    model="bedrock_converse:anthropic.claude-sonnet-4-20250514-v2:0",
+    model="bedrock_converse:anthropic.claude-sonnet-4-v6:0",
     tools=[],
     middleware=[
         BedrockPromptCachingMiddleware(
@@ -658,7 +748,7 @@ Here is the full parameter set for `OpenAIModerationMiddleware`, which we introd
 from langchain_openai.middleware import OpenAIModerationMiddleware
 
 agent = create_agent(
-    model="openai:gpt-4.1",
+    model="openai:gpt-5.4",
     tools=[search_tool],
     middleware=[
         OpenAIModerationMiddleware(

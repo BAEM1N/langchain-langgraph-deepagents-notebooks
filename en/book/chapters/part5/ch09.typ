@@ -76,13 +76,18 @@ Agent testing requires a combination of two approaches:
   text(weight: "bold")[Type],
   text(weight: "bold")[Features],
   text(weight: "bold")[Suitable for],
-  [_Unit Test_],
-  [Perform isolated deterministic tests by mocking the LLM response with `GenericFakeChatModel`. Fast execution without API calls],
-  [Individual tool, parser, prompt formatting, state transition logic],
-  [_Integration Test_],
-  [Verification of collaboration between components with actual network calls. Analysis of agent behavior patterns by trajectory evaluation of `agentevals`],
-  [Total agent flow, tool calling sequence, final response quality],
+  [_Unit_],
+  [Mock LLM responses with `GenericFakeChatModel` for isolated, deterministic tests; runs fast without API calls],
+  [Individual tools, parsers, prompt formatting, state transition logic],
+  [_Integration_],
+  [Validate cross-component behavior with real network calls; `pytest` + `vcrpy` cassettes keep runs reproducible],
+  [End-to-end agent flow, tool calling sequence, external API contracts],
+  [_Evals_],
+  [Quantify response quality and tool-call ordering with LangSmith datasets and `agentevals` trajectory evaluators],
+  [Answer accuracy, trajectory match, LLM-as-Judge rubrics],
 )
+
+#tip-box[All three test types are needed — _Unit_ guards against regressions, _Integration_ verifies external API contracts, _Evals_ measure non-deterministic answer quality. A common pattern is to run unit + integration on every CI run, _sample-eval_ on each PR, and _full-eval_ nightly.]
 
 Because agent systems operate by chaining multiple components, integration testing generally requires a higher proportion. Unit tests verify the correctness of individual components, and integration tests evaluate the quality of the overall flow.
 
@@ -267,9 +272,40 @@ export LANGSMITH_API_KEY=<your-api-key>
 
 `create_agent` agents automatically send execution data to LangSmith when the relevant environment variables are configured. All LangChain components (LLMs, chains, tools, etc.) include built-in instrumentation, so no extra code changes are required.
 
-=== Selective Tracing
+=== Selective tracing & PII anonymization (`tracing_context` + `LangChainTracer`)
 
-`tracing_context` allows you to selectively trace only specific code blocks. This allows you to intensively monitor only the parts that require debugging or separate traces by project.
+`tracing_context` lets you scope tracing to a code block and swap project, tags, and metadata at runtime. In production, you typically pair it with a directly-instantiated `LangChainTracer` and an _anonymizer_ callback that masks PII (emails, phone numbers, IDs) _before_ the trace leaves your process.
+
+#code-block(`````python
+import re
+from langsmith import tracing_context
+from langchain.callbacks.tracers import LangChainTracer
+
+EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+PHONE_RE = re.compile(r"\b\d{2,3}-\d{3,4}-\d{4}\b")
+
+def anonymize(payload: dict) -> dict:
+    """Mask PII before the trace ships to LangSmith."""
+    text = str(payload)
+    text = EMAIL_RE.sub("<email>", text)
+    text = PHONE_RE.sub("<phone>", text)
+    return {**payload, "redacted": text}
+
+tracer = LangChainTracer(
+    project_name="production-agent",
+    client_kwargs={"hide_inputs": anonymize,
+                   "hide_outputs": anonymize},
+)
+
+with tracing_context(
+    project_name="production-agent",
+    tags=["v2.1", "experiment-A"],
+    metadata={"user_tier": "premium"},
+):
+    agent.invoke({"messages": [...]}, config={"callbacks": [tracer]})
+`````)
+
+#warning-box[Run PII masking _before_ the trace leaves the process. Keep the original payload on the model side and store only the redacted copy in LangSmith.]
 
 == 9.6 Trace analysis
 
@@ -353,37 +389,55 @@ LangGraph Studio is a free tool that allows you to _visually_ debug an agent's e
   text(weight: "bold")[Features],
   text(weight: "bold")[Description],
   [_Graph visualization_],
-  [Check the agent's node/edge structure in real-time. Highlight the currently running node],
-  [_Step by step_],
-  [Debugging by inspecting the input and output data of each node. Prompt, tool calling, check results step by step],
-  [_Status Check_],
-  [Visually explore the overall state of your agents. Includes message history and checkpoint data],
-  [_Live Streaming_],
-  [Observe the agent execution process in real-time. Token/latency metrics provided],
+  [Inspect the agent's node/edge structure in real-time and highlight the currently running node],
+  [_Step-by-step execution_],
+  [Debug by inspecting each node's input/output: prompts, tool calls, and results step by step],
+  [_State inspection & editing_],
+  [Browse message history and checkpoints, then _edit node inputs on the fly_ and re-run],
+  [_Time travel_],
+  [Rewind to an earlier checkpoint to try alternative branches or tool calls],
+  [_Interrupt handling (HITL)_],
+  [Resume `interrupt()`-paused graphs directly from the Studio UI with `Command(resume=...)`],
+  [_Thread management_],
+  [Show conversation trees per `thread_id` in the sidebar so you can compare past runs],
+  [_Live streaming_],
+  [Observe execution in real-time with token / latency metrics],
 )
 
 === Setting up a local development server
 
 To use Studio, start your local development server with the LangGraph CLI:
 
-You can access the Studio UI from 
-== LangGraph CLI installation (Python 3.11+ required)
+#code-block(`````bash
+# Install LangGraph CLI (requires Python 3.11+)
 pip install --upgrade "langgraph-cli[inmem]"
 
-== Start the development server
+# Start the development server
 langgraph dev
-#code-block(`````python
-
-When the server starts, open `https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024`.
-
-### Information available in Studio
-
-- Prompt sent to agent
-- Each tool calling and its results
-- Final output
-- Intermediate state (can be inspected and modified)
-- Token usage and latency metrics
 `````)
+
+Once the server is running, open `https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024` in your browser.
+
+=== Information available in Studio
+
+- Prompt sent to the agent
+- Each tool call and its result
+- Final output
+- Intermediate state (inspectable and editable)
+- Token usage and latency metrics
+
+=== Chat UI scaffold -- `npx create-agent-chat-app`
+
+Studio is the _developer_'s debugging surface; end-users need a separate chat UI. The `create-agent-chat-app` template from the LangChain team scaffolds a Next.js chat app wired to a deployed LangGraph agent in a single command.
+
+#code-block(`````bash
+npx create-agent-chat-app@latest my-agent-ui
+cd my-agent-ui
+# Set NEXT_PUBLIC_API_URL, NEXT_PUBLIC_ASSISTANT_ID, LANGSMITH_API_KEY in .env.local
+pnpm dev
+`````)
+
+The template ships with `/runs/stream` SSE streaming, `thread_id`-scoped conversation history, and a built-in interrupt UI for `interrupt()` — a convenient _shell_ around any deployed graph.
 
 == 9.8 Deployment Options
 
@@ -564,6 +618,27 @@ try:
         print("Client connected:", type(client).__name__)
 except Exception as e:
     print(f"LangGraph SDK client unavailable: {e}")
+`````)
+
+==== Streaming with `client.runs.stream(...)`
+
+The SDK's `runs.stream(...)` returns tokens, messages, and tool calls from the deployed agent over _Server-Sent Events_. Combine `stream_mode` values like `"values"`, `"updates"`, `"messages"`, `"events"`, and pass a `thread_id` to keep the conversation history of the same session.
+
+#code-block(`````python
+from langgraph_sdk import get_client
+
+client = get_client(url="https://your-deployment.langsmith.com",
+                    api_key=api_key)
+
+async for chunk in client.runs.stream(
+    thread_id="user-42",
+    assistant_id="agent",
+    input={"messages": [
+        {"role": "user", "content": "Summarize sales for the last 5 minutes."}
+    ]},
+    stream_mode=["updates", "messages"],
+):
+    print(chunk.event, chunk.data)
 `````)
 
 === Access via REST API

@@ -6,9 +6,9 @@ Deep Agents 0.4에서 추가된 샌드박스 통합 패키지 3종. 에이전트
 
 | # | 제공자 | 패키지 | 특징 | 상태 |
 |---|--------|--------|------|------|
-| 01 | Modal | `langchain-modal` | 서버리스 Python, GPU 선택 | ⬜ |
-| 02 | Daytona | `langchain-daytona` | Dev Container 기반 워크스페이스 | ⬜ |
-| 03 | Runloop | `langchain-runloop` | 세션형 샌드박스, 파일시스템 지속 | ⬜ |
+| 01 | Modal | `langchain-modal` | 서버리스 Python, GPU 선택 | ✅ ipynb 생성됨 |
+| 02 | Daytona | `langchain-daytona` | Dev Container 기반 워크스페이스 | ✅ ipynb 생성됨 |
+| 03 | Runloop | `langchain-runloop` | 세션형 샌드박스, 파일시스템 지속 | ✅ ipynb 생성됨 |
 
 ## 학습 포인트
 

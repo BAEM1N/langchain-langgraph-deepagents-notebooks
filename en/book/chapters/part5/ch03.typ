@@ -27,7 +27,7 @@ from langchain_openai import ChatOpenAI
 
 load_dotenv()
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == 3.2 Handoffs Overview
@@ -176,6 +176,37 @@ _Sequence of operations:_
 
 This is the core mechanic of Handoffs: a single agent will have completely different personas and abilities depending on their status. Achieve dynamic behavior changes with a single middleware, without the need to create multiple agents.
 
+=== Single-agent handoff via `request.override(system_prompt=, tools=)`
+Rather than running multiple agent nodes that hand off through `Command(goto=...)`, v1 lets you keep a _single agent node_ and swap its persona/tools from inside a `@wrap_model_call` middleware. Message history stays intact, so the user sees one continuous conversation.
+
+#code-block(`````python
+@wrap_model_call
+def step_middleware(request, handler):
+    step = request.state.get("current_step", "identify_customer")
+    cfg = STEP_CONFIG[step]
+    request = request.override(system_prompt=cfg["system_prompt"], tools=cfg["tools"])
+    return handler(request)
+`````)
+
+#warning-box[`request.override(...)` returns a copy. You must rebind `request = request.override(...)` before passing it to `handler(request)`.]
+
+=== Subgraph message rules — pair `AIMessage` + `ToolMessage`
+When a tool updates `messages` directly through `Command`, the update must contain both:
++ An `AIMessage` declaring the tool call (`tool_calls=[{"id": ..., ...}]`),
++ A `ToolMessage` with a matching `tool_call_id`.
+
+Missing the pair causes `Unmatched tool_call_id` on the next model call. `Command(update={...}, result=...)` generates the pair automatically; if you build `messages` by hand, include both.
+
+#code-block(`````python
+from langchain.messages import AIMessage, ToolMessage
+from langgraph.types import Command
+
+return Command(
+    update={"current_step": "diagnose_issue"},
+    result="Found customer. Moving to diagnosis.",
+)
+`````)
+
 #code-block(`````python
 STEP_CONFIG = {
     "identify_customer": {
@@ -248,7 +279,7 @@ all_tools = [
     send_satisfaction_survey, close_ticket,
 ]
 support_agent = create_agent(
-    model="gpt-4.1", tools=all_tools,
+    model="gpt-5.4", tools=all_tools,
     state_schema=SupportState, middleware=[step_middleware],
 )
 `````)
@@ -300,7 +331,33 @@ The Router pattern is an architecture that classifies input and routes it to spe
 
 === Router vs. Subagents Comparison
 
-Routers have a “dedicated routing stage (classification),” while Subagents have “supervisor agents dynamically” deciding what to call. Router is suitable when distinct knowledge domains (verticals) are clearly distinguished and parallel queries are required.
+Routers have a "dedicated routing stage (classification)," while Subagents have "supervisor agents dynamically" deciding what to call. Router is suitable when distinct knowledge domains (verticals) are clearly distinguished and parallel queries are required.
+
+=== Router vs. Supervisor vs. Handoffs
+
+#table(
+  columns: 4,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Pattern],
+  text(weight: "bold")[Control flow owner],
+  text(weight: "bold")[Execution],
+  text(weight: "bold")[Best fit],
+  [_Router_],
+  [Dedicated classifier],
+  [Parallel fan-out / fan-in],
+  [Distinct knowledge verticals],
+  [_Supervisor (Subagents)_],
+  [Supervisor agent tool-calls],
+  [Sequential or parallel],
+  [Conversational + many domains],
+  [_Handoffs_],
+  [State variable (`current_step`)],
+  [Single agent, persona swap],
+  [Sequential multi-step flows],
+)
 
 === Architecture Mode
 
@@ -414,12 +471,12 @@ def search_slack_messages(query: str) -> str:
 
 #code-block(`````python
 github_agent = create_agent(
-    model="gpt-4.1", tools=[search_github_code],
+    model="gpt-5.4", tools=[search_github_code],
     system_prompt="Search for code and PRs on GitHub.",
     name="github_agent",
 )
 notion_agent = create_agent(
-    model="gpt-4.1", tools=[search_notion_pages],
+    model="gpt-5.4", tools=[search_notion_pages],
     system_prompt="Search documents in Notion.",
     name="notion_agent",
 )
@@ -427,7 +484,7 @@ notion_agent = create_agent(
 
 #code-block(`````python
 slack_agent = create_agent(
-    model="gpt-4.1", tools=[search_slack_messages],
+    model="gpt-5.4", tools=[search_slack_messages],
     system_prompt="Search for discussions in Slack.",
     name="slack_agent",
 )
@@ -443,6 +500,16 @@ def dispatch_to_agents(state):
     return [
         Send(src, {"messages": [{"role": "user", "content": sq_dict.get(src, "")}], "source": src})
         for src in cls.sources
+    ]
+`````)
+
+When the classifier returns a list of dicts like `[{"agent": "github", "query": "..."}, ...]`, fan out with `Send(c["agent"], {...})`:
+
+#code-block(`````python
+def dispatch_dict_form(state):
+    return [
+        Send(c["agent"], {"messages": [{"role": "user", "content": c["query"]}]})
+        for c in state["classification"]
     ]
 `````)
 

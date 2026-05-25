@@ -26,7 +26,7 @@ load_dotenv(override=True)
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
-llm = ChatOpenAI(model="gpt-4.1")
+llm = ChatOpenAI(model="gpt-5.4")
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 print("Environment ready.")
 `````)
@@ -372,7 +372,23 @@ Build your own RAG agent that allows detailed control with LangGraph `StateGraph
 
 === Architecture
 
-The custom RAG graph follows this high-level flow:
+The custom RAG graph follows this high-level flow — a _Rewrite → Retrieve → Agent_ loop with a relevance gate in between:
+
+#code-block(`````python
+        [generate_query_or_respond]
+             /              \
+       (tool call)       (no tool call)
+           |                  |
+      [retrieve]           [END]
+           |
+   [grade_documents]
+      /          \
+(relevant)    (not relevant)
+    |              |
+[generate]   [rewrite_question]
+    |              |
+  [END]    [generate_query_or_respond]
+`````)
 
 - `generate_query_or_respond` decides whether the model should search or answer directly.
 - If a tool call is made, `retrieve` runs the search.
@@ -380,7 +396,7 @@ The custom RAG graph follows this high-level flow:
 - If the documents are relevant, `generate_answer` produces the final answer.
 - If the documents are not relevant, `rewrite_question` rewrites the query and loops back to `generate_query_or_respond`.
 
-#note-box[Because `rewrite_question` can loop back to `generate_query_or_respond`, it is a good idea to add a retry counter to state so the graph cannot loop forever.]
+#note-box[Because `rewrite_question` can loop back to `generate_query_or_respond`, add a `retry_count` field to state so the graph cannot loop forever — 2–3 attempts is a sane default before falling back to "answer with what we have".]
 
 #table(
   columns: 2,
@@ -401,22 +417,6 @@ The custom RAG graph follows this high-level flow:
   [`generate_answer`],
   [Generates the final answer from relevant documents.],
 )
-
-#code-block(`````python
-
-### Role of Each Node
-
-| Node | Role |
-|---|---|
-| `generate_query_or_respond` | Entry node. Decides whether to search or answer directly. |
-| `retrieve` | `ToolNode`runs retrieval through |
-| `grade_documents` | Evaluates document relevance through structured output (`GradeDocuments`). |
-| `rewrite_question` | rewrite the query when results are not relevant |
-| `generate_answer` | Generates the final answer from relevant documents. |
-
-### Preventing Infinite Loops
-`rewrite_question` -> `generate_query_or_respond` because a loop can occur, `retry_count` to State. Recommended.
-`````)
 
 #code-block(`````python
 from langgraph.graph import MessagesState

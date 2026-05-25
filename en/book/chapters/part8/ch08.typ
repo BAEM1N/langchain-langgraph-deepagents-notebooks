@@ -70,7 +70,7 @@ Defaults are `check_input=True`, `check_output=True`, `exit_behavior="end"`. If 
 
 #code-block(`````python
 agent = create_agent(
-    model="openai:gpt-4.1",
+    model="openai:gpt-5.4",
     tools=[],
     middleware=[OpenAIModerationMiddleware()],
 )
@@ -88,7 +88,7 @@ Use this in testing / batch environments where you would rather _not let the vio
 from langchain_openai.middleware import OpenAIModerationError
 
 agent = create_agent(
-    model="openai:gpt-4.1",
+    model="openai:gpt-5.4",
     tools=[],
     middleware=[OpenAIModerationMiddleware(exit_behavior="error")],
 )
@@ -106,7 +106,7 @@ When output scanning catches a violation, _only that response_ is swapped out fo
 
 #code-block(`````python
 agent = create_agent(
-    model="openai:gpt-4.1",
+    model="openai:gpt-5.4",
     tools=[],
     middleware=[
         OpenAIModerationMiddleware(
@@ -128,7 +128,7 @@ Prevents _harmful content authored by third parties_ in web search, crawling, or
 
 #code-block(`````python
 agent = create_agent(
-    model="openai:gpt-4.1",
+    model="openai:gpt-5.4",
     tools=[web_search_tool, fetch_url_tool],
     middleware=[
         OpenAIModerationMiddleware(
@@ -140,7 +140,29 @@ agent = create_agent(
 )
 `````)
 
-== 8.8 Cost / latency tradeoff
+== 8.8 Observing violation flows with LangSmith
+
+Moderation blocks are _rare but must always show up in the audit log_. With LangSmith auto-tracing on (`LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY`), the nodes where `OpenAIModerationMiddleware` triggers land in the trace tree as usual.
+
+#code-block(`````python
+import os
+from langsmith.run_helpers import tracing_context
+
+os.environ["LANGSMITH_TRACING"] = "true"
+# os.environ["LANGSMITH_API_KEY"] = "ls__..."
+# os.environ["LANGSMITH_PROJECT"] = "moderation-audit"
+
+with tracing_context(
+    project_name="moderation-audit",
+    tags=["moderation", "input-only"],
+    metadata={"region": "kr"},
+):
+    agent.invoke({"messages": [{"role": "user", "content": "..."}]})
+`````)
+
+#tip-box[`tracing_context` routes _only a specific call range_ to a different project / tag set — a natural pattern is to keep regular traces in `production` while sending only Moderation-blocked cases to `moderation-audit`. The `LANGCHAIN_*` environment variables were standardized to `LANGSMITH_*` from 1.1 onward — the old names still work for a while, but new code should use `LANGSMITH_*` exclusively.]
+
+== 8.9 Cost / latency tradeoff
 
 #table(
   columns: 4,

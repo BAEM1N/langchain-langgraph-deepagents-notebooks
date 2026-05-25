@@ -120,7 +120,48 @@ agent = create_agent(
 )
 `````)
 
-== 5.5 Relationship with Deep Agents' `StoreBackend`
+== 5.5 Scaling to a durable checkpointer
+
+`MemorySaver` is an in-process dict — it evaporates on restart. In production, use the context-manager pattern of `langgraph-checkpoint-postgres` or `-sqlite`: acquire a pool with `from_conn_string()`, then call `setup()` once to create the schema.
+
+#code-block(`````python
+from langgraph.checkpoint.postgres import PostgresSaver
+
+DB = "postgresql://user:pass@localhost/agent"
+
+with PostgresSaver.from_conn_string(DB) as checkpointer:
+    checkpointer.setup()  # one-time — creates tables / indexes
+
+    agent = create_agent(
+        model="anthropic:claude-sonnet-4-6",
+        checkpointer=checkpointer,
+        middleware=[StateClaudeMemoryMiddleware()],
+    )
+`````)
+
+#tip-box[For async graphs, wrap `AsyncPostgresSaver.from_conn_string(DB)` with `async with`. `setup()` also needs `await`. SQLite follows the same context-manager API (`SqliteSaver` / `AsyncSqliteSaver`).]
+
+== 5.6 Multi-tenant isolation via `runtime.context.user_id`
+
+When many users share the same disk directory (or the same Store), isolate with a _namespace_. From LangGraph 1.2, the standard pattern reads `runtime.context.user_id` directly and uses it as the Store namespace key.
+
+#code-block(`````python
+from langgraph.store.postgres import PostgresStore
+from langgraph.runtime import get_runtime
+
+with PostgresStore.from_conn_string(DB) as store:
+    store.setup()
+
+    def upsert_profile(profile: dict) -> str:
+        rt = get_runtime()
+        ns = ("profiles", rt.context.user_id)  # per-user namespace
+        store.put(ns, "self", profile)
+        return "ok"
+`````)
+
+#tip-box[The Claude Memory Middleware's `/memories/*` path contract and the LangGraph Store's `(namespace, key)` contract live at _different layers_. The former lets Claude manage memos autonomously; the latter requires the code to assign keys explicitly — so multi-tenant isolation is a more natural fit for the Store.]
+
+== 5.7 Relationship with Deep Agents' `StoreBackend`
 
 Deep Agents 0.5 ships a separate `StoreBackend` for persistent memory. The two have _similar roles but different scope_.
 

@@ -54,7 +54,7 @@ assert os.environ.get("OPENAI_API_KEY"), "Set OPENAI_API_KEY in .env"
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 `````)
 
@@ -237,6 +237,25 @@ Reuse the same `thread_id` so the follow-up analysis keeps the earlier conversat
 == Step 8: Streaming — Additional Analysis
 
 Observe the execution process in real time with `stream(subgraphs=True)`.
+
+== `@tool` + scikit-learn Pattern
+
+`run_ml_code` exposes pandas, numpy, and sklearn through a single `@tool`. The agent can run a continuous sklearn pipeline — from EDA through training and evaluation — in a single tool call.
+
+#code-block(`````python
+@tool
+def run_ml_code(code: str) -> str:
+    """Run pandas + numpy + sklearn code."""
+    import pandas as pd, numpy as np, sklearn
+    ns = {"pd": pd, "np": np, "sklearn": sklearn, "os": os, "DATA_DIR": DATA_DIR}
+    # ... capture print output and return the result
+`````)
+
+#tip-box[
+- Built-in `ls` / `read_file` → _file exploration_
+- `run_ml_code` → _code execution_
+- Separating these responsibilities makes it obvious to the agent which tool to call at each step.
+]
 
 
 == Summary

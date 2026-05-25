@@ -22,7 +22,7 @@ from langchain_openai import ChatOpenAI
 
 load_dotenv()
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == 2.2 Subagents 아키텍처 개요
@@ -137,7 +137,7 @@ def search_emails(query: str, limit: int = 10) -> str:
 from langchain.agents import create_agent
 
 calendar_agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[create_calendar_event, read_calendar_events],
     system_prompt="당신은 캘린더 어시스턴트입니다. ISO 8601 날짜 형식을 사용하세요.",
     name="calendar_agent",
@@ -146,7 +146,7 @@ calendar_agent = create_agent(
 
 #code-block(`````python
 email_agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[send_email, read_emails, search_emails],
     system_prompt="당신은 이메일 어시스턴트입니다. 메시지를 전문적으로 작성하세요.",
     name="email_agent",
@@ -181,7 +181,7 @@ _입출력 전략 선택_: 쿼리만 전달(간단)할 수도 있고, 전체 컨
 
 #code-block(`````python
 supervisor = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[call_calendar, call_email],
     system_prompt=(
         "당신은 개인 비서입니다. 복잡한 요청을 "
@@ -241,7 +241,7 @@ hitl = HumanInTheLoopMiddleware(interrupt_on={
 
 #code-block(`````python
 supervisor_hitl = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[call_calendar, call_email],
     checkpointer=InMemorySaver(),
     middleware=[hitl],
@@ -285,7 +285,7 @@ ToolRuntime 미출시 — 폴백 스텁 사용
 
 #code-block(`````python
 supervisor_ctx = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[call_calendar, call_email],
     system_prompt="당신은 개인 비서입니다.",
 )
@@ -374,9 +374,124 @@ def check_job(job_id: str) -> str:
 
 단일 디스패치 패턴은 `agent_name` 파라미터로 호출 대상을 지정합니다. 에이전트 레지스트리에 등록된 서브에이전트를 이름으로 조회하여 호출하므로, 분산 팀에서 서브에이전트를 독립적으로 추가하거나 제거할 수 있어 확장성이 뛰어납니다.
 
+=== 단일 dispatch 도구 3가지 노출 방식
+단일 디스패치 도구를 모델에게 어떻게 노출하느냐에 따라 세 가지 변형이 있습니다. 도메인 수와 라우팅 자유도에 맞춰 선택합니다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[노출 방식],
+  text(weight: "bold")[특징],
+  text(weight: "bold")[적합 시나리오],
+  [_Literal enum_],
+  [`agent_name: Literal["calendar", "email"]` — 모델이 enum에서 선택],
+  [도메인 ≤ 5, 안정적인 라우팅 필요],
+  [_dict 레지스트리 + 동적 description_],
+  [에이전트 추가/제거를 코드 수정 없이 dict로 관리],
+  [도메인 6~20, 잦은 추가/삭제],
+  [_벡터 검색 라우팅_],
+  [에이전트 설명을 임베딩하고 사용자 쿼리와 유사도 매칭],
+  [도메인 20+, 의미 기반 라우팅],
+)
+
+#code-block(`````python
+from typing import Literal
+from langchain.tools import tool
+
+# 1) Literal enum — 가장 단순
+@tool
+def dispatch_enum(
+    agent_name: Literal["calendar", "email", "crm"],
+    query: str,
+) -> str:
+    """전문 에이전트에 작업을 라우팅합니다."""
+    return AGENT_REGISTRY[agent_name].invoke(
+        {"messages": [{"role": "user", "content": query}]}
+    )["messages"][-1].content
+`````)
+
+=== `SubAgentMiddleware` — Deep Agents 통합 패턴
+서브에이전트를 일일이 `@tool`로 래핑하는 대신, `deepagents.SubAgentMiddleware`를 사용하면 _선언적 설정_만으로 감독자가 서브에이전트를 호출할 수 있게 됩니다. 미들웨어가 자동으로 dispatch 도구를 등록하고, 서브에이전트 실행 결과를 메시지로 변환해 감독자 상태에 병합합니다.
+
+#code-block(`````python
+from deepagents.middleware import SubAgentMiddleware
+
+supervisor_with_mw = create_agent(
+    model="gpt-5.4",
+    tools=[],  # 별도 래핑 불필요 — 미들웨어가 dispatch 도구 자동 등록
+    middleware=[
+        SubAgentMiddleware(subagents=[
+            {"name": "calendar", "description": "일정 관리", "agent": calendar_agent},
+            {"name": "email", "description": "이메일 전송/조회", "agent": email_agent},
+        ]),
+    ],
+    system_prompt="당신은 개인 비서입니다.",
+)
+`````)
+
+=== `checkpointer=True` — 서브에이전트 자동 체크포인터 공유
+v1.2부터는 `create_agent(checkpointer=True)`로 부모 그래프의 체크포인터를 _자동으로 상속_받을 수 있습니다. 명시적 체크포인터 인스턴스를 전달하지 않아도 서브에이전트가 부모와 같은 `thread_id`에서 재개됩니다. HITL 미들웨어를 서브에이전트에 적용할 때 특히 편리합니다.
+
+#code-block(`````python
+calendar_agent = create_agent(
+    model="gpt-5.4",
+    tools=[create_calendar_event],
+    checkpointer=True,  # 부모 그래프의 체크포인터 자동 상속
+    middleware=[HumanInTheLoopMiddleware(interrupt_on={
+        "create_calendar_event": {"allowed_decisions": ["approve", "reject"]},
+    })],
+    name="calendar_agent",
+)
+`````)
+
+=== `ToolRuntime[None, CustomState]` — 컨텍스트 없이 커스텀 상태만 주입
+컨텍스트(`@dataclass`)는 필요 없지만 _커스텀 상태_만 도구에 노출하고 싶을 때 `ToolRuntime[None, CustomState]` 타입 어노테이션을 사용합니다. 첫 번째 제네릭이 컨텍스트, 두 번째가 상태 스키마입니다.
+
+#code-block(`````python
+from typing import NotRequired
+from langchain.tools import tool, ToolRuntime
+from langchain.agents import AgentState
+
+class JobState(AgentState):
+    pending_jobs: NotRequired[list[str]]
+
+@tool
+def list_pending(runtime: ToolRuntime[None, JobState]) -> str:
+    """현재 진행 중인 비동기 작업 목록을 조회합니다."""
+    return ", ".join(runtime.state.get("pending_jobs", []))
+`````)
+
+=== 비동기 5-tool 디스패치 패턴
+실제 프로덕션에서는 비동기 서브에이전트 호출에 _5개 도구_를 한 세트로 제공하는 것이 권장됩니다. 시작/조회/취소/목록/대기의 다섯 책임을 분리하면 모델이 작업 라이프사이클을 명확히 파악합니다.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[도구],
+  text(weight: "bold")[책임],
+  [`start_job(agent_name, query)`],
+  [비동기 잡 시작 후 `job_id` 반환],
+  [`check_job(job_id)`],
+  [잡 상태(`pending`/`running`/`done`/`failed`) 조회],
+  [`cancel_job(job_id)`],
+  [실행 중 잡을 취소],
+  [`list_jobs()`],
+  [현재 활성 잡 목록 반환],
+  [`wait_for(job_id, timeout_s)`],
+  [완료까지 폴링 — 짧은 작업에 유용],
+)
+
+다섯 도구는 외부 작업 큐(Celery, Redis Streams, Cloud Tasks 등)나 데이터베이스 백엔드와 결합해 프로세스 재시작에도 잡 상태가 유지되도록 구성해야 합니다.
+
 #code-block(`````python
 supervisor_dispatch = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[dispatch],
     system_prompt=(
         "delegate 도구를 사용하여 작업을 라우팅하세요. "

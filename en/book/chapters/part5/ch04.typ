@@ -26,7 +26,7 @@ load_dotenv(override=True)
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 print("Environment ready.")
 `````)
@@ -121,7 +121,7 @@ from langchain.tools import tool, ToolRuntime
 from langchain.agents import create_agent
 
 @dataclass
-class UserContext:
+class Context:
     user_id: str
     role: str
     department: str
@@ -129,11 +129,33 @@ class UserContext:
 
 #code-block(`````python
 @tool
-def get_permissions(runtime: ToolRuntime[UserContext]) -> str:
+def get_permissions(runtime: ToolRuntime[Context]) -> str:
     """View permissions based on the current user's role."""
     ctx = runtime.context
     perms = {"admin": "read,write,delete", "editor": "read,write"}
     return f"User {ctx.user_id} ({ctx.department}): {perms.get(ctx.role, 'read')}"
+
+agent = create_agent(
+    model=model,
+    tools=[get_permissions],
+    context_schema=Context,
+)
+agent.invoke(
+    {"messages": [{"role": "user", "content": "What can I do?"}]},
+    context=Context(user_id="u42", role="admin", department="eng"),
+)
+`````)
+
+=== `runtime.execution_info` / `runtime.server_info`
+Beyond context, `runtime` exposes execution metadata. `runtime.execution_info` carries `thread_id`/`run_id`/step for the current invoke, and `runtime.server_info` exposes the LangGraph server environment (deployment id, host). Useful for audit logs and distributed tracing.
+
+#code-block(`````python
+@tool
+def audited_action(action: str, runtime: ToolRuntime[Context]) -> str:
+    info = runtime.execution_info
+    print(f"[audit] user={runtime.context.user_id} "
+          f"thread={info.thread_id} run={info.run_id} action={action}")
+    return f"Executed: {action}"
 `````)
 
 === Key points
@@ -213,6 +235,31 @@ The memory is stored as a _JSON document_, organized hierarchically into _namesp
 )
 
 In production environments, you should use _DB-based Store_ (e.g. PostgreSQL) instead of `InMemoryStore`.
+
+=== PostgreSQL Store
+`langgraph-checkpoint-postgres` ships `PostgresStore`, a drop-in replacement with the same `put`/`get`/`search` API but PostgreSQL-backed persistence. With `pgvector`, semantic search works the same way. Use this as the default production backend; `AsyncPostgresStore` is the async variant.
+
+#code-block(`````python
+# pip install langgraph-checkpoint-postgres
+from langgraph.store.postgres import PostgresStore
+
+DB_URI = "postgresql://user:pass@localhost:5432/langgraph?sslmode=disable"
+
+with PostgresStore.from_conn_string(DB_URI) as store:
+    store.setup()
+
+    store_with_index = PostgresStore.from_conn_string(
+        DB_URI,
+        index={"embed": embeddings, "dims": 1536},
+    )
+
+    agent = create_agent(
+        model=model,
+        tools=[get_user_info, save_preference],
+        store=store_with_index,
+        context_schema=Context,
+    )
+`````)
 
 #code-block(`````python
 from langgraph.store.memory import InMemoryStore
@@ -311,21 +358,23 @@ Receives user input with the tool parameter and saves the memory as `store.put()
 
 #code-block(`````python
 @tool
-def get_user_info(runtime: ToolRuntime[UserContext]) -> str:
+def get_user_info(runtime: ToolRuntime[Context]) -> str:
     """Search the saved information of the current user."""
     store = runtime.store
     user_id = runtime.context.user_id
-    info = store.get(("users",), user_id)
-    return str(info.value) if info else "User information not found."
+    info = store.get((user_id, "memories"), "profile")
+    # info.value may be a lazy / dict-subclass — cast to dict explicitly
+    return str(dict(info.value)) if info else "User information not found."
 `````)
 
 #code-block(`````python
 @tool
-def save_preference(key: str, value: str, runtime: ToolRuntime[UserContext]) -> str:
+def save_preference(key: str, value: str, runtime: ToolRuntime[Context]) -> str:
     """Stores user preferences."""
     store = runtime.store
     user_id = runtime.context.user_id
-    store.put((user_id, "preferences"), key, {"value": value})
+    # Recommended namespace: (user_id, "memories") — compatible with semantic-search store
+    store.put((user_id, "memories"), key, {"value": value})
     return f"Preference saved: {key}={value}"
 `````)
 

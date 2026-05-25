@@ -6,8 +6,8 @@ Checkpointer가 "스레드별 실행 상태"를 저장한다면, Store는 "스�
 
 | # | 백엔드 | 클래스 | 패키지 | 상태 |
 |---|--------|--------|--------|------|
-| 01 | In-Memory (+ 시맨틱 검색) | `InMemoryStore` | `langgraph` (포함) | ⬜ |
-| 02 | Postgres | `PostgresStore` | `langgraph-checkpoint-postgres` | ⬜ |
+| 01 | In-Memory (+ 시맨틱 검색) | `InMemoryStore` | `langgraph` (포함) | ✅ ipynb 생성됨 |
+| 02 | Postgres | `PostgresStore` | `langgraph-checkpoint-postgres` | ✅ ipynb 생성됨 |
 
 ## 학습 포인트
 

@@ -29,7 +29,7 @@ from langchain_openai import ChatOpenAI
 
 load_dotenv()
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == 3.2 Handoffs 개요
@@ -192,6 +192,52 @@ _동작 순서:_
 
 이것이 Handoffs의 핵심 메커니즘입니다: 단일 에이전트가 상태에 따라 완전히 다른 페르소나와 능력을 갖게 됩니다. 다중 에이전트를 만들 필요 없이, 미들웨어 하나로 동적 행동 변경을 달성합니다.
 
+=== 단일 에이전트 핸드오프 — `request.override(system_prompt=, tools=)`
+복수 에이전트를 만들고 `Command(goto=...)`로 그래프 노드 사이를 이동하는 _다중 에이전트 핸드오프_는 디버깅이 어렵고 상태 동기화 비용이 큽니다. v1에서는 `@wrap_model_call` 미들웨어 안에서 `request.override(system_prompt=, tools=)`만 호출하면, 동일한 그래프 노드를 유지하면서 _한 에이전트_가 단계별로 페르소나와 도구를 바꿔 끼울 수 있습니다. 메시지 히스토리도 그대로 보존되므로, 사용자 입장에서는 "한 명의 상담원"이 흐름을 이어가는 것처럼 보입니다.
+
+#code-block(`````python
+@wrap_model_call
+def step_middleware(request, handler):
+    """current_step에 따라 단일 에이전트의 system_prompt와 tools를 교체."""
+    step = request.state.get("current_step", "identify_customer")
+    cfg = STEP_CONFIG[step]
+    request = request.override(
+        system_prompt=cfg["system_prompt"],
+        tools=cfg["tools"],
+    )
+    return handler(request)
+`````)
+
+#warning-box[`request.override(...)`는 원본 `ModelRequest`를 변경하지 않고 _수정된 사본_을 반환합니다. 반드시 반환값을 새 `request` 변수에 할당한 뒤 `handler(request)`로 전달해야 합니다.]
+
+=== 서브그래프 메시지 규칙 — AIMessage + ToolMessage 페어
+도구가 `Command(update={"messages": [...]})`로 메시지를 직접 업데이트할 때, _도구 호출과 응답이 짝을 이뤄야_ 합니다. 구체적으로는 다음 2개 메시지를 모두 포함해야 합니다.
+
++ `AIMessage` — `tool_calls=[{"id": ..., "name": ..., "args": ...}]` 형태로 도구 호출을 선언.
++ `ToolMessage` — 동일한 `tool_call_id`를 가진 응답 메시지.
+
+이 페어를 누락하면 후속 모델 호출이 `Unmatched tool_call_id` 오류를 발생시킵니다. LangChain v1은 `Command(update={...}, result=...)` 헬퍼로 이 페어를 자동 생성해 주지만, 직접 `messages` 키를 수정할 때는 수동으로 두 메시지를 함께 넣어야 합니다.
+
+#code-block(`````python
+from langchain.messages import AIMessage, ToolMessage
+from langgraph.types import Command
+
+# Command.result를 쓰면 두 메시지가 자동 페어로 생성됨
+return Command(
+    update={"current_step": "diagnose_issue", "customer": {...}},
+    result="고객을 찾았습니다. 진단 단계로 이동합니다.",  # ToolMessage.content
+)
+
+# 직접 messages를 만들 때는 AIMessage + ToolMessage를 함께 넣어야 함
+return Command(update={
+    "current_step": "diagnose_issue",
+    "messages": [
+        AIMessage(content="", tool_calls=[{"id": "c1", "name": "handoff", "args": {}}]),
+        ToolMessage(content="진단 단계로 이동", tool_call_id="c1"),
+    ],
+})
+`````)
+
 #warning-box[`STEP_CONFIG`에 정의되지 않은 `current_step` 값이 설정되면 `KeyError`가 발생합니다. 프로덕션 코드에서는 반드시 디폴트 처리나 유효성 검증을 추가하세요. 예: `cfg = STEP_CONFIG.get(step, STEP_CONFIG["identify_customer"])`]
 
 다음 코드는 단계별 설정 딕셔너리와 이를 활용하는 미들웨어 구현입니다.
@@ -267,7 +313,7 @@ all_tools = [
     send_satisfaction_survey, close_ticket,
 ]
 support_agent = create_agent(
-    model="gpt-4.1", tools=all_tools,
+    model="gpt-5.4", tools=all_tools,
     state_schema=SupportState, middleware=[step_middleware],
 )
 `````)
@@ -323,7 +369,33 @@ Router 패턴은 입력을 분류하여 전문 에이전트들에게 라우팅�
   [Reducer 노드 + LLM],
 )
 
-=== Router vs. Subagents 비교
+=== Router vs. Subagents (Supervisor) 비교
+
+세 패턴은 _제어 흐름 주체_가 다릅니다. 잘못 선택하면 라우팅 비용이 폭증하거나 컨텍스트 격리가 깨집니다.
+
+#table(
+  columns: 4,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[패턴],
+  text(weight: "bold")[제어 주체],
+  text(weight: "bold")[실행 모드],
+  text(weight: "bold")[적합 시나리오],
+  [_Router_],
+  [별도 분류 단계 (LLM 또는 규칙)],
+  [병렬 fan-out + fan-in],
+  [지식 도메인 분리 + 병렬 검색],
+  [_Supervisor (Subagents)_],
+  [감독자 에이전트의 동적 도구 호출],
+  [순차 또는 병렬 (감독자 결정)],
+  [대화형 상호작용 + 여러 도메인 조율],
+  [_Handoffs_],
+  [상태 변수(`current_step`)],
+  [단일 에이전트가 페르소나 교체],
+  [순차적 다단계 워크플로],
+)
 
 Router는 "전용 라우팅 단계(분류)"가 있고, Subagents는 "감독자 에이전트가 동적으로" 호출 대상을 결정합니다. 별개의 지식 도메인(vertical)이 명확히 구분되어 있고 병렬 조회가 필요할 때 Router가 적합합니다. 반면, 여러 도메인을 조율하면서 대화형 상호작용이 필요하면 Subagents가 더 적합합니다.
 
@@ -447,12 +519,12 @@ def search_slack_messages(query: str) -> str:
 
 #code-block(`````python
 github_agent = create_agent(
-    model="gpt-4.1", tools=[search_github_code],
+    model="gpt-5.4", tools=[search_github_code],
     system_prompt="GitHub에서 코드와 PR을 검색합니다.",
     name="github_agent",
 )
 notion_agent = create_agent(
-    model="gpt-4.1", tools=[search_notion_pages],
+    model="gpt-5.4", tools=[search_notion_pages],
     system_prompt="Notion에서 문서를 검색합니다.",
     name="notion_agent",
 )
@@ -460,7 +532,7 @@ notion_agent = create_agent(
 
 #code-block(`````python
 slack_agent = create_agent(
-    model="gpt-4.1", tools=[search_slack_messages],
+    model="gpt-5.4", tools=[search_slack_messages],
     system_prompt="Slack에서 토론을 검색합니다.",
     name="slack_agent",
 )
@@ -478,6 +550,19 @@ def dispatch_to_agents(state):
         for src in cls.sources
     ]
 `````)
+
+병렬 라우팅의 핵심은 분류 결과의 각 항목마다 `Send(노드_이름, 페이로드)` 객체를 _리스트로 반환_하는 것입니다. LangGraph는 이 리스트의 길이만큼 동시에 노드를 실행하고, 모든 분기가 끝나면 다음 노드로 모입니다. 분류 결과를 `[{"agent": "github", "query": "..."}, ...]` 형태의 dict 리스트로 받는다면 다음과 같이 작성할 수 있습니다.
+
+#code-block(`````python
+def dispatch_dict_form(state):
+    """분류 결과가 dict 리스트일 때의 fan-out."""
+    return [
+        Send(c["agent"], {"messages": [{"role": "user", "content": c["query"]}]})
+        for c in state["classification"]
+    ]
+`````)
+
+#tip-box[`Send`는 같은 노드를 _복수 번_ 호출할 수도 있습니다. 예를 들어 `[Send("github", q1), Send("github", q2)]`처럼 같은 에이전트에 두 개의 서로 다른 쿼리를 동시에 보내고 결과를 합치는 패턴도 가능합니다.]
 
 == 3.11 결과 합성
 

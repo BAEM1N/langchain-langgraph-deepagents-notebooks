@@ -6,14 +6,14 @@
 
 | # | 스토어 | 클래스 | 패키지 | 특징 | 상태 |
 |---|--------|--------|--------|------|------|
-| 01 | In-Memory / FAISS | `InMemoryVectorStore`, `FAISS` | `langchain-core`, `langchain-community` | 로컬 개발·테스트 | ⬜ |
-| 02 | Chroma | `Chroma` | `langchain-chroma` | 로컬 ~ 소규모 배포 | ⬜ |
-| 03 | PGVector | `PGVectorStore`, `PGVector` | `langchain-postgres` | 기존 Postgres에 애드온 | ⬜ |
-| 04 | Pinecone | `PineconeVectorStore` | `langchain-pinecone` | 관리형 serverless | ⬜ |
-| 05 | Qdrant | `QdrantVectorStore` | `langchain-qdrant` | Rust 기반, 로컬·클라우드 | ⬜ |
-| 06 | Weaviate | `WeaviateVectorStore` | `langchain-weaviate` | hybrid search 내장 | ⬜ |
-| 07 | Milvus | `Milvus` | `langchain-milvus` | 대규모 프로덕션 | ⬜ |
-| 08 | Elasticsearch | `ElasticsearchStore` | `langchain-elasticsearch` | 기존 ES 스택 재사용 | ⬜ |
+| 01 | In-Memory / FAISS | `InMemoryVectorStore`, `FAISS` | `langchain-core`, `langchain-community` | 로컬 개발·테스트 | ✅ ipynb 생성됨 |
+| 02 | Chroma | `Chroma` | `langchain-chroma` | 로컬 ~ 소규모 배포 | ✅ ipynb 생성됨 |
+| 03 | PGVector | `PGVectorStore`, `PGVector` | `langchain-postgres` | 기존 Postgres에 애드온 | ✅ ipynb 생성됨 |
+| 04 | Pinecone | `PineconeVectorStore` | `langchain-pinecone` | 관리형 serverless | ✅ ipynb 생성됨 |
+| 05 | Qdrant | `QdrantVectorStore` | `langchain-qdrant` | Rust 기반, 로컬·클라우드 | ✅ ipynb 생성됨 |
+| 06 | Weaviate | `WeaviateVectorStore` | `langchain-weaviate` | hybrid search 내장 | ✅ ipynb 생성됨 |
+| 07 | Milvus | `Milvus` | `langchain-milvus` | 대규모 프로덕션 | ✅ ipynb 생성됨 |
+| 08 | Elasticsearch | `ElasticsearchStore` | `langchain-elasticsearch` | 기존 ES 스택 재사용 | ✅ ipynb 생성됨 |
 
 ## 학습 포인트
 

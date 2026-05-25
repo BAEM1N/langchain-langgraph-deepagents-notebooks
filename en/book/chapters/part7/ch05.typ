@@ -50,7 +50,7 @@ assert os.environ.get("OPENAI_API_KEY"), "Set OPENAI_API_KEY in .env"
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 `````)
 
@@ -231,11 +231,33 @@ research_agent = create_deep_agent(
     middleware=[
         SummarizationMiddleware(model=model, trigger=("messages", 15)),
         ModelCallLimitMiddleware(run_limit=30),
-        ModelFallbackMiddleware("gpt-4.1-mini"),
+        ModelFallbackMiddleware("gpt-5.4-mini"),
     ],
 )
 
 `````)
+
+== DeepAgents Pattern — TodoList + dispatch + 5-Tool Async
+
+The deep research agent in this chapter combines the three core DeepAgents patterns:
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Pattern],
+  text(weight: "bold")[Description],
+  [_TodoList_],
+  [The built-in `write_todos` makes the plan explicit during the Plan step — progress is anchored in the message history],
+  [_dispatch_],
+  [The built-in `task` delegates work to subagents — only the summary returns to the main agent, keeping its context clean],
+  [_5-tool async_],
+  [Five tools — `web_search`, `think_tool`, `write_todos`, `task`, `read/write_file` — drive the async workflow],
+)
+
+#tip-box[Pass an `AsyncSubAgent` spec to `subagents` and `create_deep_agent` automatically wires in `AsyncSubAgentMiddleware`, so the subagents run in parallel asynchronously (see `docs/deepagents/12-async-subagents.md`).]
 
 == Step 6: Run the Research Workflow
 

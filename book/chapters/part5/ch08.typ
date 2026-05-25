@@ -74,7 +74,7 @@ from langchain_openai import ChatOpenAI
 
 load_dotenv()
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == 8.2 보이스 에이전트 아키텍처 개요
@@ -264,7 +264,7 @@ def calendar_tool(action: str, details: str) -> str:
 
 #code-block(`````python
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, calendar_tool],
     system_prompt=(
         "당신은 유용한 음성 어시스턴트입니다. "
@@ -307,6 +307,31 @@ async def stream_agent_response(user_text: str):
                 if hasattr(msg, "content") and msg.content:
                     yield msg.content
 `````)
+
+=== 멀티모달 content blocks 와 `output_version="v1"`
+
+보이스 에이전트는 입력이 텍스트만이 아닐 수 있습니다 — 사용자가 사진을 함께 보내거나, 도구가 이미지 차트를 반환할 수 있습니다. LangChain v1 메시지는 _content blocks_ 배열을 받기 때문에 텍스트·이미지·오디오를 한 메시지에 섞어 보낼 수 있습니다. 또한 `output_version="v1"` 로 모델을 만들면 응답이 `AIMessage.content_blocks` 표준 스키마로 직렬화되어 STT/Agent/TTS 사이에서 안전하게 주고받을 수 있습니다.
+
+#code-block(`````python
+from langchain.chat_models import init_chat_model
+
+llm_v1 = init_chat_model("gpt-5.4", output_version="v1")
+
+response = llm_v1.invoke([
+    {"role": "user", "content": [
+        {"type": "text", "text": "이 차트에서 이상 구간을 찾아 음성으로 설명해줘"},
+        {"type": "image", "source_type": "base64",
+         "mime_type": "image/png", "data": "..."},
+    ]},
+])
+
+# v1 표준 — content_blocks 로 안전하게 직렬화
+for block in response.content_blocks:
+    if block["type"] == "text":
+        tts_input_queue.put_nowait(block["text"])
+`````)
+
+#tip-box[`output_version="v1"` 은 응답을 `content_blocks` 표준 스키마로 정규화합니다. WebSocket 으로 다른 프로세스(예: TTS 서버)에 메시지를 넘길 때 JSON 직렬화/역직렬화가 깨지지 않으므로, 보이스 파이프라인처럼 _경계를 자주 넘는_ 시스템에서는 사실상 필수 옵션입니다.]
 
 에이전트가 텍스트 응답을 스트리밍하면, 마지막 레이어인 TTS가 이를 음성으로 변환합니다. TTS 단계의 설계 목표는 _첫 오디오 출력까지의 시간을 최소화_하는 것입니다.
 
@@ -538,7 +563,7 @@ def reminder_tool(time: str, message: str) -> str:
 
 #code-block(`````python
 voice_agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, calendar_tool,
            weather_tool, reminder_tool],
     system_prompt=(

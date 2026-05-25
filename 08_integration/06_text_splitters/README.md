@@ -6,9 +6,9 @@ RAG 품질의 80%는 분할에서 결정된다. 문서 특성별로 다른 분�
 
 | # | 주제 | 주요 클래스 | 패키지 | 상태 |
 |---|------|-------------|--------|------|
-| 01 | Character / Recursive | `CharacterTextSplitter` · `RecursiveCharacterTextSplitter` · `TokenTextSplitter` | `langchain-text-splitters` | ⬜ |
-| 02 | Markdown / Code 언어별 | `MarkdownHeaderTextSplitter` · `RecursiveCharacterTextSplitter.from_language(Language.PYTHON)` · `HTMLHeaderTextSplitter` · `LatexTextSplitter` | `langchain-text-splitters` | ⬜ |
-| 03 | Semantic splitter | `SemanticChunker` | `langchain-experimental` | ⬜ |
+| 01 | Character / Recursive | `CharacterTextSplitter` · `RecursiveCharacterTextSplitter` · `TokenTextSplitter` | `langchain-text-splitters` | ✅ ipynb 생성됨 |
+| 02 | Markdown / Code 언어별 | `MarkdownHeaderTextSplitter` · `RecursiveCharacterTextSplitter.from_language(Language.PYTHON)` · `HTMLHeaderTextSplitter` · `LatexTextSplitter` | `langchain-text-splitters` | ✅ ipynb 생성됨 |
+| 03 | Semantic splitter | `SemanticChunker` | `langchain-experimental` | ✅ ipynb 생성됨 |
 
 ## 학습 포인트
 

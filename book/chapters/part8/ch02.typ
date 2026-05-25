@@ -119,7 +119,24 @@ AnthropicPromptCachingMiddleware(unsupported_model_behavior="ignore")
 AnthropicPromptCachingMiddleware(unsupported_model_behavior="raise")
 `````)
 
-== 2.7 Bedrock과의 차이
+== 2.7 `UsageMetadataCallbackHandler`로 집계
+
+스레드 전체의 캐시 적중률을 한 번에 집계하려면 `langchain.callbacks.UsageMetadataCallbackHandler`를 붙입니다. 매 LLM 호출의 `usage_metadata`가 누적되어 `cache_creation` / `cache_read`까지 그대로 보존됩니다.
+
+#code-block(`````python
+from langchain.callbacks import UsageMetadataCallbackHandler
+
+handler = UsageMetadataCallbackHandler()
+agent.invoke(
+    {"messages": [{"role": "user", "content": "..."}]},
+    config={"callbacks": [handler]},
+)
+print(handler.usage_metadata)  # {model_name: {input/output/cache_creation/cache_read}}
+`````)
+
+#tip-box[Anthropic 응답을 `output_version="v1"`(`ChatAnthropic(..., output_version="v1")`)로 받으면 `cache_creation` / `cache_read` 키가 메시지 본문이 아닌 _표준화된 `usage_metadata.input_token_details`_ 안으로 정리됩니다 — 멀티 프로바이더 집계 코드가 단순해집니다.]
+
+== 2.8 Bedrock과의 차이
 
 AWS Bedrock 경유로 Claude를 호출할 때는 `BedrockPromptCachingMiddleware`(ch7)를 씁니다. 파라미터 이름과 의미는 거의 같지만, _대상 패키지_와 TTL 제약(Nova 모델은 5m만 지원, tool 정의 캐시 미지원)이 다릅니다.
 

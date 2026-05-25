@@ -100,7 +100,7 @@ class Judgement(BaseModel):
     score: float   # 0.0 ~ 1.0
     reason: str
 
-judge_llm = ChatOpenAI(model="gpt-4.1-mini").with_structured_output(Judgement)
+judge_llm = ChatOpenAI(model="gpt-5.4").with_structured_output(Judgement)
 
 def semantic_city_match(inputs, outputs, reference_outputs):
     j = judge_llm.invoke(
@@ -114,17 +114,26 @@ def semantic_city_match(inputs, outputs, reference_outputs):
 
 == 3.5 `evaluate` 러너 + experiment 이름
 
-`from langsmith.evaluation import evaluate`가 표준 러너입니다. `experiment_prefix`에 의미 있는 이름을 주면 UI Experiments 뷰에서 바로 비교됩니다.
+표준 러너는 두 가지 import 경로 모두 동일하게 동작합니다 — 새 코드는 짧은 쪽인 `from langsmith import evaluate`를 권장합니다. `Client` 인스턴스가 있다면 `client.evaluate(...)`로도 동일하게 호출할 수 있습니다. `experiment_prefix`에 의미 있는 이름을 주면 UI Experiments 뷰에서 바로 비교됩니다.
 
 #code-block(`````python
-from langsmith.evaluation import evaluate
+from langsmith import Client, evaluate     # 권장 (langsmith ≥ 0.3)
+# from langsmith.evaluation import evaluate  # 구 경로, 여전히 호환
 
 result = evaluate(
     target=city_extractor,
     data="weather-bot-qa",
     evaluators=[city_exact_match, city_non_empty, semantic_city_match],
-    experiment_prefix="city-extractor:gpt-4.1-mini",
+    experiment_prefix="city-extractor:gpt-5.4",
     metadata={"prompt_commit": "12344e88"},
+)
+
+# Client.evaluate(...) 도 동일 시그니처
+client = Client()
+result = client.evaluate(
+    city_extractor,
+    data="weather-bot-qa",
+    evaluators=[city_exact_match],
 )
 `````)
 
@@ -151,7 +160,67 @@ evaluate(
 )
 `````)
 
-== 3.7 Online evaluator — 프로덕션 trace 자동 평가
+== 3.7 `agentevals` — 에이전트 trajectory 평가
+
+도시 추출처럼 _최종 출력만_ 보는 평가는 단순 string 비교로 충분하지만, 에이전트는 _도구를 어떤 순서로 호출했는가_가 같이 중요합니다. `agentevals` 패키지(`pip install agentevals`)는 LangChain의 메시지 트레이스를 기준으로 reference trajectory와 실제 trajectory를 비교하는 평가기를 제공합니다.
+
+비교 모드는 네 가지입니다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[모드],
+  text(weight: "bold")[일치 기준],
+  text(weight: "bold")[언제 쓰나],
+  [`strict`],
+  [도구 이름·순서·인자까지 모두 일치],
+  [고정된 워크플로우의 회귀 테스트],
+  [`unordered`],
+  [도구 집합 일치, 호출 순서는 무관],
+  [parallel tool use, 순서가 중요하지 않은 파이프라인],
+  [`subset`],
+  [실제 trajectory ⊆ reference (allowed actions)],
+  [에이전트가 _기대보다 적게_ 부른 경우만 허용],
+  [`superset`],
+  [reference ⊆ 실제 trajectory (required actions)],
+  [에이전트가 _반드시_ 부르길 원하는 도구가 있을 때],
+)
+
+#code-block(`````python
+from agentevals.trajectory.match import create_trajectory_match_evaluator
+
+trajectory_strict = create_trajectory_match_evaluator(
+    trajectory_match_mode="strict",
+)
+
+# evaluators 인자에 그대로 넘기면 LangSmith experiment의 점수로 합산
+evaluate(
+    target=run_agent,
+    data="agent-golden-trajectories",
+    evaluators=[trajectory_strict],
+    experiment_prefix="agent:trajectory-strict",
+)
+`````)
+
+LLM-as-judge로 trajectory를 자유 형식으로 평가하려면 `create_trajectory_llm_as_judge`를 씁니다. 도구 이름 비교가 아니라 _전체 reasoning chain의 적절성_을 LLM이 판단하게 만듭니다.
+
+#code-block(`````python
+from agentevals.trajectory.llm import create_trajectory_llm_as_judge
+
+trajectory_judge = create_trajectory_llm_as_judge(
+    model="openai:gpt-5.4",
+    prompt="에이전트의 도구 호출 순서가 사용자의 의도를 효율적으로 달성했는가?",
+)
+`````)
+
+#tip-box[
+  `agentevals`는 `openevals`(범용 LLM 평가)와 한 쌍입니다. _최종 답변 품질_은 `openevals`, _과정의 적절성_은 `agentevals`로 분리해 두 점수를 같은 experiment에 함께 붙이는 것이 권장 패턴입니다.
+]
+
+== 3.8 Online evaluator — 프로덕션 trace 자동 평가
 
 Offline experiment는 배포 전 회귀 테스트에 쓰고, 운영 중에는 *online evaluator*로 실시간 feedback을 붙입니다. UI 흐름:
 
@@ -169,6 +238,7 @@ Offline experiment는 배포 전 회귀 테스트에 쓰고, 운영 중에는 *o
 
 - 데이터셋은 수동 시드 + 프로덕션 trace 이관의 조합으로 누적
 - Evaluator 4종: Code(결정적, 저비용) / LLM-as-judge(자연어 품질) / Pairwise(A/B 비교) / Summary(데이터셋 수준)
-- `evaluate` 러너 + `experiment_prefix`로 experiment 이름을 UI에 노출
+- `from langsmith import evaluate` 또는 `Client.evaluate(...)` 둘 다 동일한 시그니처
+- `agentevals`의 trajectory match 4 모드(strict/unordered/subset/superset) + LLM-as-judge로 _과정의 적절성_ 평가
 - Online evaluator는 프로덕션 trace에 feedback key를 자동 부착, 대시보드·알림의 트리거가 됨
 - `prompt_commit` 같은 metadata를 실험에 붙이면 "어떤 버전에서 낸 수치인지" 재현됩니다

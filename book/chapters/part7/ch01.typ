@@ -3,10 +3,10 @@
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-#chapter(1, "RAG 에이전트", subtitle: "벡터 검색 기반 질의응답")
+#chapter(1, "RAG 에이전트", subtitle: "5 building blocks + 3-Node 패턴")
 
 == 학습 목표
-#learning-objectives([InMemoryVectorStore로 벡터 검색 파이프라인을 구축한다], [`content_and_artifact` 반환 형식으로 검색 도구를 정의한다], [`create_deep_agent`로 RAG 에이전트를 생성하고 질의한다], [v1 미들웨어(ModelCallLimitMiddleware, ToolRetryMiddleware)를 적용한다], [_Skills 시스템_으로 RAG 도메인 지식을 점진적 공개(Progressive Disclosure)한다])
+#learning-objectives([LangChain RAG의 _5 building blocks_(document loaders / text splitters / embedding models / vector stores / retrievers)를 이해한다], [_2-Step / Agentic / Hybrid_ 세 가지 RAG 아키텍처의 차이를 안다], [`Rewrite → Retrieve → Agent` 3-node 패턴으로 질의 재작성과 검색을 분리한다], [`content_and_artifact` 반환 형식으로 검색 도구를 정의한다], [`create_deep_agent`로 RAG 에이전트를 만들고 v1 미들웨어(ModelCallLimitMiddleware, ToolRetryMiddleware)를 적용한다], [_Skills 시스템_으로 RAG 도메인 지식을 점진적 공개(Progressive Disclosure)한다])
 
 == 개요
 
@@ -19,9 +19,11 @@
   text(weight: "bold")[항목],
   text(weight: "bold")[내용],
   [_프레임워크_],
-  [LangChain + Deep Agents],
-  [_핵심 컴포넌트_],
-  [InMemoryVectorStore, OpenAIEmbeddings, RecursiveCharacterTextSplitter],
+  [LangChain v1 + Deep Agents],
+  [_5 building blocks_],
+  [Document loaders · Text splitters · Embedding models · Vector stores · Retrievers],
+  [_아키텍처_],
+  [2-Step (정적 RAG) · Agentic (도구 호출) · Hybrid (Rewrite → Retrieve → Agent)],
   [_에이전트 패턴_],
   [`content_and_artifact` 도구 → `create_deep_agent`],
   [_백엔드_],
@@ -29,6 +31,8 @@
   [_스킬_],
   [`skills/rag-agent/SKILL.md` — RAG 도메인 지식 점진적 공개],
 )
+
+#tip-box[참고: `docs/langchain/24-retrieval.md` — 2-Step / Agentic / Hybrid RAG 아키텍처 비교]
 
 #code-block(`````python
 from dotenv import load_dotenv
@@ -42,8 +46,71 @@ assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY를 .env에 설정하세
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
+`````)
+
+== RAG 5 building blocks
+
+LangChain RAG는 다섯 개 빌딩 블록으로 구성됩니다. 각 블록은 교체 가능하며, 조합 방식이 곧 아키텍처를 결정합니다.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[블록],
+  text(weight: "bold")[역할],
+  [_Document loaders_],
+  [PDF, 웹, DB 등에서 `Document` 객체로 로드],
+  [_Text splitters_],
+  [긴 문서를 검색에 적합한 청크로 분할],
+  [_Embedding models_],
+  [텍스트를 벡터로 변환 (`OpenAIEmbeddings` 등)],
+  [_Vector stores_],
+  [임베딩 저장 + 유사도 검색 (FAISS, Chroma, InMemory)],
+  [_Retrievers_],
+  [질의 → 관련 문서 N개 반환 (도구로 감싸 에이전트 사용)],
+)
+
+== 2-Step / Agentic / Hybrid 아키텍처
+
+같은 빌딩 블록을 어떻게 결합하느냐에 따라 세 가지 아키텍처가 나옵니다.
+
+#table(
+  columns: 4,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[아키텍처],
+  text(weight: "bold")[흐름],
+  text(weight: "bold")[장점],
+  text(weight: "bold")[단점],
+  [_2-Step RAG_],
+  [질의 → 검색 → LLM 응답 (정적)],
+  [단순·빠름·예측 가능],
+  [재질의·다중 검색 불가],
+  [_Agentic RAG_],
+  [에이전트가 `retrieve` 도구를 필요할 때 호출],
+  [멀티스텝·비교 질의 가능],
+  [토큰 사용량 큼],
+  [_Hybrid_],
+  [`Rewrite → Retrieve → Agent` 3-node 분리],
+  [질의 재작성으로 검색 품질↑],
+  [그래프 설계 부담],
+)
+
+== Rewrite → Retrieve → Agent 3-node 패턴
+
+Hybrid 구조는 _질의 재작성_과 _검색_을 별도 노드로 떼어내고, 마지막에 에이전트가 결과를 종합합니다. 이렇게 분리하면 사용자 질의가 모호하거나 다중 의도를 담고 있어도 검색 정확도가 안정적으로 유지됩니다.
+
+#code-block(`````python
+# 개념적 그래프 — 실제 코드는 LangGraph로 노드를 정의
+# rewrite_node:   원본 질의 → 검색용 query 재작성
+# retrieve_node:  vectorstore.similarity_search(query, k=K)
+# agent_node:     create_deep_agent + tools=[retrieve_tool]
 `````)
 
 == 1단계: 샘플 문서 생성
@@ -147,7 +214,7 @@ Deep Agents는 올인원 에이전트 SDK입니다. create_deep_agent로 에이�
 
 == 6단계: RAG 에이전트 생성 (v1 미들웨어 적용)
 
-에서 프롬프트를 로드합니다. LangSmith Hub → Langfuse → 기본값 순으로 시도합니다.
+`prompts.load_prompt` 가 프롬프트를 로드합니다. LangSmith Hub → Langfuse → 기본값 순서로 시도합니다.
 
 #table(
   columns: 2,
@@ -157,9 +224,9 @@ Deep Agents는 올인원 에이전트 SDK입니다. create_deep_agent로 에이�
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[미들웨어],
   text(weight: "bold")[역할],
-  [\\],
+  [`ModelCallLimitMiddleware`],
   [무한 루프 방지 — 최대 모델 호출 횟수 제한],
-  [\\],
+  [`ToolRetryMiddleware`],
   [검색 도구 실패 시 자동 재시도],
 )
 

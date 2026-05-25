@@ -33,7 +33,7 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 from langchain_community.utilities import SQLDatabase
 
-llm = ChatOpenAI(model="gpt-4.1")
+llm = ChatOpenAI(model="gpt-5.4")
 db = SQLDatabase.from_uri("sqlite:///Chinook.db")
 print(f"Dialect: {db.dialect}")
 `````)
@@ -219,15 +219,17 @@ LangChain `create_agent` 기반의 SQL 에이전트는 간단하게 프로토타
   text(weight: "bold")[`Command(resume=...)` 값],
   text(weight: "bold")[설명],
   [_승인_],
-  [`"approve"`],
+  [`{"decisions": [{"type": "approve"}]}`],
   [생성된 쿼리를 그대로 실행],
   [_수정_],
-  [`{"type": "edit", "args": {"query": "..."}}`],
+  [`{"decisions": [{"type": "edit", "args": {...}}]}`],
   [쿼리를 수정한 후 실행],
   [_거부_],
-  [`{"type": "reject", "reason": "..."}`],
+  [`{"decisions": [{"type": "reject", "message": "..."}]}`],
   [쿼리를 실행하지 않고 사유를 전달],
 )
+
+#tip-box[v1 `HumanInTheLoopMiddleware`는 동일 인터럽트에서 여러 도구 호출을 한 번에 검토할 수 있도록 `decisions` 배열을 받습니다. 각 항목은 도구 호출 순서와 1:1로 대응하며 `type`은 `approve`/`edit`/`reject` 중 하나입니다.]
 
 === 왜 HITL이 중요한가?
 
@@ -256,6 +258,30 @@ print("HITL이 적용된 SQL 에이전트 생성됨.")
 `````)
 #output-block(`````
 HITL이 적용된 SQL 에이전트 생성됨.
+`````)
+
+=== DELETE / UPDATE 같은 파괴적 쿼리에 대한 재개 패턴
+
+읽기 전용 SELECT는 `approve` 만으로 충분하지만, DELETE/UPDATE/INSERT 같은 _파괴적 쿼리_ 는 보통 `edit` 으로 `WHERE` 조건이나 `LIMIT` 을 보강한 뒤 실행합니다. 인터럽트가 발생하면 `Command(resume=...)` 의 `decisions` 배열로 의사결정을 한 번에 전달합니다.
+
+#code-block(`````python
+from langgraph.types import Command
+
+# 위험한 쿼리 — 사람 검토 후 LIMIT를 추가하여 승인
+result = sql_agent_hitl.invoke(
+    Command(resume={
+        "decisions": [{
+            "type": "edit",
+            "args": {
+                "query": (
+                    "UPDATE invoices SET status='void' "
+                    "WHERE customer_id=42 AND total < 1 LIMIT 10"
+                )
+            },
+        }],
+    }),
+    config={"configurable": {"thread_id": "sql-session-1"}},
+)
 `````)
 
 `create_agent` 기반 SQL 에이전트는 빠르게 프로토타입을 만들 수 있지만, 도구 호출 순서가 LLM의 자율 판단에 의존합니다. 프로덕션에서는 스키마 조회 → 쿼리 생성 → 검증 → 실행의 순서를 _강제_하고, 쿼리 리뷰를 위한 정확한 중단점을 설정해야 합니다. LangGraph `StateGraph`가 이를 가능하게 합니다.
@@ -440,12 +466,12 @@ LangGraph SQL 에이전트 컴파일됨.
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[액션],
   text(weight: "bold")[`Command(resume=...)`],
-  [Accept],
-  [`{"action": "accept"}`],
+  [Approve],
+  [`{"decisions": [{"type": "approve"}]}`],
   [Edit],
-  [`{"action": "edit", "edited_query": "..."}`],
+  [`{"decisions": [{"type": "edit", "args": {...}}]}`],
   [Reject],
-  [`{"action": "reject", "reason": "..."}`],
+  [`{"decisions": [{"type": "reject", "message": "..."}]}`],
 )
 
 === SQLDatabaseToolkit 4개 도구

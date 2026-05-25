@@ -212,6 +212,56 @@ def tavily_search(query: str) -> str:
     )
 `````)
 
+=== pandas / scikit-learn `@tool` 통합
+
+데이터 분석 에이전트는 종종 _도구가 곧 작은 분석 셀_ 입니다. `@tool` 데코레이터는 모델이 호출하는 시점에 pandas / scikit-learn 코드를 그대로 실행하고, 결과를 텍스트로 다시 모델에 돌려줍니다. 파일시스템 접근(`read_file`) 과 분리해 두면, 입력 검증·캐싱·테스트가 쉬워집니다.
+
+#code-block(`````python
+import pandas as pd
+from sklearn.cluster import KMeans
+from langchain_core.tools import tool
+
+@tool
+def summarize_csv(path: str, top_n: int = 5) -> str:
+    """CSV 파일의 기초 통계와 상위 N개 행을 요약합니다."""
+    df = pd.read_csv(path)
+    return (
+        f"shape={df.shape}\n"
+        f"dtypes={df.dtypes.to_dict()}\n"
+        f"head=\n{df.head(top_n).to_string()}"
+    )
+
+@tool
+def cluster_customers(path: str, k: int = 3) -> str:
+    """수치 컬럼만 사용해 KMeans 클러스터링을 수행합니다."""
+    df = pd.read_csv(path).select_dtypes("number").dropna()
+    labels = KMeans(n_clusters=k, n_init="auto").fit_predict(df)
+    return f"cluster_sizes={pd.Series(labels).value_counts().to_dict()}"
+`````)
+
+=== `CodeInterpreterMiddleware` 와 Skills 패턴
+
+`@tool` 만으로 작성하기 어려운 _임시 코드_ — 예를 들어 "이 컬럼 분포를 박스플롯으로 그려줘" 같은 자유 형식 분석 — 은 `CodeInterpreterMiddleware` 가 자체적인 샌드박스 위에서 실행합니다. 그리고 자주 쓰는 분석 절차는 `skills/` 디렉터리에 마크다운 + 코드 스니펫으로 묶어 두면 에이전트가 _Skill_ 단위로 호출합니다.
+
+#code-block(`````python
+from deepagents.middleware import CodeInterpreterMiddleware
+from deepagents.skills import load_skills
+
+skills = load_skills("./skills/data-analysis")  # 마크다운 + 코드 스니펫
+
+agent = create_deep_agent(
+    model="gpt-5.4",
+    tools=[summarize_csv, cluster_customers, slack_send_message],
+    middleware=[CodeInterpreterMiddleware(backend=backend)],
+    skills=skills,
+    backend=backend,
+    checkpointer=checkpointer,
+    system_prompt="당신은 데이터 분석가입니다.",
+)
+`````)
+
+#tip-box[Skills 디렉터리에는 _재현 가능한 분석 레시피_ 만 두고, 일회성 탐색 코드는 `CodeInterpreterMiddleware` 가 처리하도록 분리하세요. 이렇게 하면 검증된 절차와 즉흥 코드가 섞이지 않습니다.]
+
 커스텀 도구까지 정의했으니, 이제 모든 구성 요소를 하나로 조립하여 데이터 분석 에이전트를 생성합니다. `create_deep_agent()`는 모델, 도구, 백엔드, 체크포인터를 받아 완전한 에이전트를 반환합니다.
 
 == 7.6 에이전트 생성
@@ -255,7 +305,7 @@ checkpointer = InMemorySaver()
 
 #code-block(`````python
 agent = create_deep_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[tavily_search, slack_send_message],
     backend=backend,
     checkpointer=checkpointer,
@@ -419,7 +469,7 @@ checkpointer = InMemorySaver()
 config = {"configurable": {"thread_id": "analysis-session-1"}}
 
 agent_with_memory = create_deep_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[tavily_search, slack_send_message],
     backend=LocalShellBackend(virtual_mode=True),
     checkpointer=checkpointer,

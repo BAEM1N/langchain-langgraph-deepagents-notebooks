@@ -47,7 +47,7 @@ assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY를 .env에 설정하세
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 `````)
 
 == NB03 vs NB04: 백엔드와 도구 확장
@@ -217,6 +217,25 @@ ml_agent = create_deep_agent(
 == 8단계: 스트리밍 — 추가 분석
 
 `stream(subgraphs=True)`으로 에이전트의 실행 과정을 실시간으로 관찰합니다.
+
+== `@tool` + scikit-learn 패턴
+
+`run_ml_code`는 단일 `@tool` 안에 pandas, numpy, sklearn 네임스페이스를 모두 노출합니다. 에이전트는 도구 호출 한 번으로 EDA부터 학습·평가까지 연속된 sklearn 파이프라인을 실행할 수 있습니다.
+
+#code-block(`````python
+@tool
+def run_ml_code(code: str) -> str:
+    """pandas + numpy + sklearn 코드를 실행합니다."""
+    import pandas as pd, numpy as np, sklearn
+    ns = {"pd": pd, "np": np, "sklearn": sklearn, "os": os, "DATA_DIR": DATA_DIR}
+    # ... print 캡처 후 결과 반환
+`````)
+
+#tip-box[
+- 빌트인 `ls` / `read_file` → _데이터 탐색_
+- `run_ml_code` → _코드 실행_
+- 책임을 분리하면 에이전트가 어떤 도구를 언제 호출해야 하는지 명확해집니다.
+]
 
 #chapter-summary-header()
 

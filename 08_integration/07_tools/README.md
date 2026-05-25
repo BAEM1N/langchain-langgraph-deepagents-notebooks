@@ -6,12 +6,12 @@
 
 | # | 주제 | 주요 도구 | 패키지 | 상태 |
 |---|------|----------|--------|------|
-| 01 | Search (웹) | Tavily · DuckDuckGo · SerpAPI · Google Serper · Brave · Exa · You.com | `langchain-tavily`, `langchain-community` 등 | ⬜ |
-| 02 | Code execution | `PythonREPLTool` · E2B Data Analysis · Riza Code Interpreter | `langchain-experimental`, `langchain-e2b`, `langchain-riza` | ⬜ |
-| 03 | SQL / Database | `SQLDatabaseToolkit` · `create_sql_agent` · Spark SQL | `langchain-community` | ⬜ |
-| 04 | Browser automation | Playwright toolkit (`click`, `navigate`, `extract_text` …) | `langchain-community[playwright]` | ⬜ |
-| 05 | Productivity | Slack · Gmail · GitHub · Jira · Office365 toolkits | `langchain-community` | ⬜ |
-| 06 | Knowledge / reference | Wikipedia · Arxiv · PubMed · Google Scholar | `langchain-community` | ⬜ |
+| 01 | Search (웹) | Tavily · DuckDuckGo · SerpAPI · Google Serper · Brave · Exa · You.com | `langchain-tavily`, `langchain-community` 등 | ✅ ipynb 생성됨 |
+| 02 | Code execution | `PythonREPLTool` · E2B Data Analysis · Riza Code Interpreter | `langchain-experimental`, `langchain-e2b`, `langchain-riza` | ✅ ipynb 생성됨 |
+| 03 | SQL / Database | `SQLDatabaseToolkit` · `create_sql_agent` · Spark SQL | `langchain-community` | ✅ ipynb 생성됨 |
+| 04 | Browser automation | Playwright toolkit (`click`, `navigate`, `extract_text` …) | `langchain-community[playwright]` | ✅ ipynb 생성됨 |
+| 05 | Productivity | Slack · Gmail · GitHub · Jira · Office365 toolkits | `langchain-community` | ✅ ipynb 생성됨 |
+| 06 | Knowledge / reference | Wikipedia · Arxiv · PubMed · Google Scholar | `langchain-community` | ✅ ipynb 생성됨 |
 
 ## 학습 포인트
 
