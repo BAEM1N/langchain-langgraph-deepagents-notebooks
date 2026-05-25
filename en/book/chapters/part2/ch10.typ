@@ -354,8 +354,6 @@ Use LangSmith to trace agent behavior. When tracing is enabled, every step of ag
 
 === 10.7.1 Environment variables
 
-The legacy `LANGCHAIN_*` prefix has been replaced by `LANGSMITH_*` in newer code bases.
-
 #code-block(`````bash
 # Current (recommended)
 export LANGSMITH_TRACING=true
@@ -363,21 +361,6 @@ export LANGSMITH_API_KEY="lsv2_..."
 export LANGSMITH_PROJECT="my-agent"   # defaults to `default` if unset
 `````)
 
-#table(
-  columns: 2,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Legacy (deprecated)],
-  text(weight: "bold")[Current],
-  [`LANGCHAIN_TRACING_V2`],
-  [`LANGSMITH_TRACING`],
-  [`LANGCHAIN_API_KEY`],
-  [`LANGSMITH_API_KEY`],
-  [`LANGCHAIN_PROJECT`],
-  [`LANGSMITH_PROJECT`],
-)
 
 LangSmith lets you inspect:
 - The complete execution flow of each agent call

@@ -27,10 +27,6 @@ LANGSMITH_PROJECT=langsmith-quickstart
 
 `LANGSMITH_PROJECT`는 UI 좌측 _Projects_ 메뉴에서 구분되는 네임스페이스입니다. 설정하지 않으면 모든 트레이스가 `default` 프로젝트에 기록됩니다. API 키 발급은 한 번만 표시되므로, 생성 직후 바로 `.env`에 복사해야 합니다.
 
-#tip-box[
-  레거시 `LANGCHAIN_API_KEY` / `LANGCHAIN_TRACING_V2` / `LANGCHAIN_PROJECT` 환경 변수도 여전히 shim으로 인식됩니다. 신규 프로젝트는 `LANGSMITH_*` 접두사로 통일하는 것을 권장합니다.
-]
-
 `langsmith>=0.3` 패키지만 추가하면 `langchain` · `langgraph` · `deepagents`의 자동 계측이 모두 이 환경 변수를 공유합니다.
 
 #code-block(`````bash
@@ -179,7 +175,6 @@ UI 프로젝트 페이지 우상단의 _Analytics_ 탭에서 프로젝트 단위
 == 핵심 정리
 
 - 환경변수 세 줄(`LANGSMITH_API_KEY`, `LANGSMITH_TRACING=true`, `LANGSMITH_PROJECT`)로 기존 에이전트가 자동 트레이싱된다 — 미설정 시 `default` 프로젝트로 기록
-- 레거시 `LANGCHAIN_*` 환경 변수도 shim으로 인식되지만 신규 코드는 `LANGSMITH_*`로 통일
 - `run_name` · `tags` · `metadata`로 UI 필터와 `client.list_runs(filter=...)` 질의에 걸리게 한다
 - `@traceable`로 LangChain 외부 함수도 같은 트레이스 트리에 편입한다
 - `import langsmith as ls` + `ls.tracing_context(enabled=...)`로 환경 변수 없이 블록 단위 토글

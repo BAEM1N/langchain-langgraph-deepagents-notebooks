@@ -255,7 +255,6 @@ except Exception as e:
 - 대화 분기(branching)
 - Human-in-the-loop 승인
 
-#code-block(`````python
 설치 방법 두 가지 중 하나를 선택합니다.
 
 #code-block(`````bash
@@ -423,30 +422,12 @@ async def chat(message: str):
 
 === 10.7.1 환경 변수
 
-옛 `LANGCHAIN_*` 접두 변수는 신규 코드베이스에서 `LANGSMITH_*`로 통합되었습니다.
-
 #code-block(`````bash
 # 권장 (현행)
 export LANGSMITH_TRACING=true
 export LANGSMITH_API_KEY="lsv2_..."
 export LANGSMITH_PROJECT="my-agent"   # 미지정 시 기본값 `default`
 `````)
-
-#table(
-  columns: 2,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[옛 이름 (deprecated)],
-  text(weight: "bold")[새 이름],
-  [`LANGCHAIN_TRACING_V2`],
-  [`LANGSMITH_TRACING`],
-  [`LANGCHAIN_API_KEY`],
-  [`LANGSMITH_API_KEY`],
-  [`LANGCHAIN_PROJECT`],
-  [`LANGSMITH_PROJECT`],
-)
 
 LangSmith에서 확인할 수 있는 정보:
 - 각 에이전트 호출의 전체 실행 흐름

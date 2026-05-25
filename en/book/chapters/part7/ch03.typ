@@ -278,7 +278,7 @@ If you reuse the same `thread_id`, the agent keeps the conversation context and 
 
 == `@tool` + pandas vs. CodeInterpreterMiddleware
 
-There are two main ways a data analysis agent can run code. The `run_pandas` tool in this chapter is the _@tool + pandas_ pattern; it can be swapped for the built-in `execute` of `LocalShellBackend` or for `CodeInterpreterMiddleware`.
+There are two main ways a data analysis agent can run code. The `run_pandas` tool in this chapter is the _`@tool` + pandas_ pattern; it can be swapped for the built-in `execute` of `LocalShellBackend` or for `CodeInterpreterMiddleware`.
 
 #table(
   columns: 4,

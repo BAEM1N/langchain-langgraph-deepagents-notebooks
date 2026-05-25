@@ -27,10 +27,6 @@ LANGSMITH_PROJECT=langsmith-quickstart
 
 `LANGSMITH_PROJECT` is the namespace shown in the UI's left sidebar under _Projects_. If you leave it unset, every trace lands in the `default` project. API keys are shown only once on creation, so copy the key into `.env` immediately.
 
-#tip-box[
-  Legacy `LANGCHAIN_API_KEY` / `LANGCHAIN_TRACING_V2` / `LANGCHAIN_PROJECT` environment variables are still honored as a shim. Standardize on the `LANGSMITH_*` prefix for new projects.
-]
-
 Add the `langsmith>=0.3` package alone and `langchain` · `langgraph` · `deepagents` auto-instrumentation all share these environment variables.
 
 #code-block(`````bash
@@ -179,7 +175,6 @@ To re-issue or revoke a key after onboarding, go to _Settings → Access and Sec
 == Key Takeaways
 
 - Three environment variables (`LANGSMITH_API_KEY`, `LANGSMITH_TRACING=true`, `LANGSMITH_PROJECT`) auto-trace existing agents — runs land in the `default` project when unset
-- Legacy `LANGCHAIN_*` environment variables remain as a shim; standardize new code on `LANGSMITH_*`
 - `run_name` · `tags` · `metadata` surface runs in UI filters and `client.list_runs(filter=...)` queries
 - `@traceable` pulls non-LangChain functions into the same trace tree
 - `import langsmith as ls` + `ls.tracing_context(enabled=...)` toggle tracing per block without environment variables

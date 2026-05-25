@@ -278,7 +278,7 @@ Prompt 'deep-research-agent-label:production' not found during refresh, evicting
 
 == `@tool` + pandas 패턴 vs CodeInterpreterMiddleware
 
-데이터 분석 에이전트가 코드를 실행하는 방법은 크게 두 가지입니다. 본 예제의 `run_pandas`는 _@tool + pandas_ 패턴이며, `LocalShellBackend`의 `execute` 빌트인이나 `CodeInterpreterMiddleware`로 대체할 수 있습니다.
+데이터 분석 에이전트가 코드를 실행하는 방법은 크게 두 가지입니다. 본 예제의 `run_pandas`는 _`@tool` + pandas_ 패턴이며, `LocalShellBackend`의 `execute` 빌트인이나 `CodeInterpreterMiddleware`로 대체할 수 있습니다.
 
 #table(
   columns: 4,
