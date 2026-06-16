@@ -186,7 +186,7 @@ agent = create_deep_agent(
 
 == 6단계: HITL 에이전트 (4-decision 정책)
 
-`create_deep_agent`의 `interrupt_on` 파라미터로 도구별 승인 정책을 설정합니다. `sql_db_query` 호출 전에 실행이 중단되고, `Command(resume={"decisions": [...]})` 로 재개합니다. **호출 시 `version="v2"`** 가 필요합니다.
+`create_deep_agent`의 `interrupt_on` 파라미터로 도구별 승인 정책을 설정합니다. `sql_db_query` 호출 전에 실행이 중단되고, `Command(resume={"decisions": [...]})` 로 재개합니다. _호출 시 `version="v2"`_ 가 필요합니다.
 
 #table(
   columns: 3,

@@ -112,10 +112,10 @@ Deep Agents는 _플러그형 백엔드 아키텍처_로 파일시스템 및 코�
 
 === 백엔드 유형별 상세
 
-- **`StateBackend`** (기본값): 파일을 LangGraph 에이전트 상태에 저장합니다. 스크래치패드 용도로 적합하며, 큰 출력물은 자동 제거됩니다.
-- **`FilesystemBackend`**: `root_dir` 설정으로 로컬 디스크 접근을 제공합니다. `virtual_mode=True` 옵션으로 경로 제한 및 디렉터리 탐색 방지가 가능합니다.
-- **`LocalShellBackend`**: 파일시스템 접근에 더해 `execute` 도구로 _무제한 셸 명령 실행_을 제공합니다. 호스트 시스템에 대한 전체 사용자 권한으로 실행됩니다.
-- **`CompositeBackend`**: 경로별로 다른 백엔드를 라우팅합니다. 예: 임시 파일은 `StateBackend`, `/memories/`는 `StoreBackend`.
+- _`StateBackend`_ (기본값): 파일을 LangGraph 에이전트 상태에 저장합니다. 스크래치패드 용도로 적합하며, 큰 출력물은 자동 제거됩니다.
+- _`FilesystemBackend`_: `root_dir` 설정으로 로컬 디스크 접근을 제공합니다. `virtual_mode=True` 옵션으로 경로 제한 및 디렉터리 탐색 방지가 가능합니다.
+- _`LocalShellBackend`_: 파일시스템 접근에 더해 `execute` 도구로 _무제한 셸 명령 실행_을 제공합니다. 호스트 시스템에 대한 전체 사용자 권한으로 실행됩니다.
+- _`CompositeBackend`_: 경로별로 다른 백엔드를 라우팅합니다. 예: 임시 파일은 `StateBackend`, `/memories/`는 `StoreBackend`.
 
 === 샌드박스 보안 원칙
 
@@ -513,7 +513,7 @@ agent = create_deep_agent(
 체크포인터는 단순한 대화 이력 저장을 넘어 다음을 가능하게 합니다:
 
 - _중단 복구_: 네트워크 오류나 타임아웃 시 마지막 완료된 단계부터 재개
-- **`interrupt()` 지원**: Human-in-the-Loop에서 그래프 상태를 저장하여 사람의 응답 후 정확한 위치에서 재개
+- _`interrupt()` 지원_: Human-in-the-Loop에서 그래프 상태를 저장하여 사람의 응답 후 정확한 위치에서 재개
 - _멀티턴 분석_: 동일 세션에서 여러 분석 요청을 연속으로 처리하면서 이전 결과를 참조
 
 === 샌드박스 수명 관리

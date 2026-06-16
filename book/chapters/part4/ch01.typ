@@ -28,7 +28,7 @@ _Deep Agents_는 LangChain 팀이 만든 _에이전트 하네스(Agent Harness)_
 
 LangChain의 기본 에이전트 컴포넌트 위에 구축되었으며, _LangGraph_를 실행 엔진(durable execution + streaming)으로 사용합니다.
 
-#tip-box[_이 교육 자료의 모델 설정_: 본 과정에서는 **OpenAI `gpt-5.4`** 모델을 사용합니다. `OPENAI_API_KEY` 환경 변수를 설정하고, `ChatOpenAI(model="gpt-5.4")`를 사용합니다. Deep Agents의 표준 기본 모델은 `anthropic:claude-sonnet-4-6` 입니다.]
+#tip-box[_이 교육 자료의 모델 설정_: 본 과정에서는 _OpenAI `gpt-5.4`_ 모델을 사용합니다. `OPENAI_API_KEY` 환경 변수를 설정하고, `ChatOpenAI(model="gpt-5.4")`를 사용합니다. Deep Agents의 표준 기본 모델은 `anthropic:claude-sonnet-4-6` 입니다.]
 
 === 아키텍처 개요
 

@@ -122,7 +122,7 @@ _에페메럴(ephemeral)_: 대화 스레드 내에서만 파일이 유지됩니�
 
 === 주요 옵션
 - `root_dir` — 접근 가능한 루트 디렉토리 (기본: 현재 디렉토리)
-- `virtual_mode=True` — 경로 제한 활성화 (`..`, `~`, **`root_dir` 밖의 절대 경로**를 모두 차단)
+- `virtual_mode=True` — 경로 제한 활성화 (`..`, `~`, _`root_dir` 밖의 절대 경로_를 모두 차단)
 - `max_file_size_mb` — 읽을 수 있는 최대 파일 크기
 
 === ⚠️ 보안 주의사항
@@ -181,7 +181,7 @@ StoreBackend 에이전트가 생성되었습니다!
 == 5. CompositeBackend — 경로별 라우팅
 
 서로 다른 경로를 서로 다른 백엔드로 라우팅합니다.
-가장 일반적인 패턴: **`/memories/*`는 영속 저장_, _나머지는 에페메럴**
+가장 일반적인 패턴: _`/memories/*`는 영속 저장_, _나머지는 에페메럴_
 
 #image("../../assets/images/composite_backend.png")
 
@@ -224,7 +224,7 @@ CompositeBackend 에이전트가 생성되었습니다!
 `LocalShellBackend`는 `FilesystemBackend`에 _셸 명령 실행 기능_(`execute` 도구)을 추가합니다.
 
 === ⚠️ 보안 경고
-#note-box[호스트 시스템에서 **사용자 권한으로 `subprocess.run(shell=True)`_ 가 직접 실행됩니다. 샌드박스 없음, CPU/메모리/디스크 무제한, 비가역적입니다. 개발 환경에서만 사용하고, 공유 또는 프로덕션 시스템에서는 _샌드박스 백엔드**를 사용하세요.]
+#note-box[호스트 시스템에서 _사용자 권한으로 `subprocess.run(shell=True)`_ 가 직접 실행됩니다. 샌드박스 없음, CPU/메모리/디스크 무제한, 비가역적입니다. 개발 환경에서만 사용하고, 공유 또는 프로덕션 시스템에서는 _샌드박스 백엔드_를 사용하세요.]
 
 === 정책 적용 방법
 

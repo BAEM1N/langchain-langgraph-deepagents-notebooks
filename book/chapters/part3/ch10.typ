@@ -254,7 +254,7 @@ curl -s --request POST \
 
 == 10.8 관측성 — LangSmith 트레이싱
 
-**환경 변수 (`.env`):**
+_환경 변수 (`.env`):_
 #code-block(`````python
 LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=lsv2-...

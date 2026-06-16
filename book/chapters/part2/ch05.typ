@@ -81,7 +81,7 @@ print("모델 준비 완료:", model.model_name)
 
 === namespace 설계 패턴
 
-`store.put(namespace, key, value)` 의 `namespace` 는 튜플로 다층 분리가 가능합니다. **사용자별로 격리하려면 `runtime.context.user_id` 를 namespace 의 일부로 포함**시키는 것이 권장 패턴입니다.
+`store.put(namespace, key, value)` 의 `namespace` 는 튜플로 다층 분리가 가능합니다. _사용자별로 격리하려면 `runtime.context.user_id` 를 namespace 의 일부로 포함_시키는 것이 권장 패턴입니다.
 
 #code-block(`````python
 namespace = ("preferences", runtime.context.user_id)  # 사용자별 격리
@@ -135,7 +135,7 @@ store = PostgresStore.from_conn_string("postgresql://...")
 
 === version="v2" + GraphOutput — 백엔드 스트리밍 표준 패턴
 
-LangChain v1 의 새 스트리밍 API 는 `version="v2"` 플래그를 사용합니다. 이 모드에서는 `invoke()` 가 dict 가 아닌 **`GraphOutput`** 객체를 반환하며, `.value`(최종 상태)와 `.interrupts`(HITL 인터럽트 리스트)로 접근합니다.
+LangChain v1 의 새 스트리밍 API 는 `version="v2"` 플래그를 사용합니다. 이 모드에서는 `invoke()` 가 dict 가 아닌 _`GraphOutput`_ 객체를 반환하며, `.value`(최종 상태)와 `.interrupts`(HITL 인터럽트 리스트)로 접근합니다.
 
 `stream(..., version="v2")` 는 각 청크에 `type` 필드를 포함하므로 `updates`/`messages`/`custom` 을 한 스트림에서 식별 가능합니다.
 

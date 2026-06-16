@@ -63,8 +63,8 @@ print(f"모델 설정 완료: {model.model_name}")
 
 === 필수 요구사항
 - _Checkpointer_: 중단/재개 사이의 에이전트 상태를 유지하기 위해 반드시 필요 (`MemorySaver` 등)
-- **`version="v2"`**: invoke/stream 호출에 모두 지정 — interrupt 지원의 표준 경로
-- **동일한 `thread_id`**: 초기 invoke와 resume invoke가 같은 `thread_id`를 공유해야 함
+- _`version="v2"`_: invoke/stream 호출에 모두 지정 — interrupt 지원의 표준 경로
+- _동일한 `thread_id`_: 초기 invoke와 resume invoke가 같은 `thread_id`를 공유해야 함
 
 === `interrupt_on` 설정 옵션
 
@@ -107,7 +107,7 @@ Deep Agents는 LangGraph의 스트리밍 인프라 위에서 작동합니다.
 
 === v2 통합 포맷 (표준)
 
-**`agent.stream(..., stream_mode=..., subgraphs=True, version="v2")` 한 경로**가 표준입니다. 모든 청크는 동일한 3-필드 구조입니다.
+_`agent.stream(..., stream_mode=..., subgraphs=True, version="v2")` 한 경로_가 표준입니다. 모든 청크는 동일한 3-필드 구조입니다.
 
 #code-block(`````python
 {

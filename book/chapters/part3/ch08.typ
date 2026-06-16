@@ -148,7 +148,7 @@ LangGraph의 체크포인트 시스템은 모든 실행 상태를 저장합니�
 
 v1의 `invoke()`는 state dict에 인터럽트 정보가 섞여 반환됩니다. 호출 측에서 _"이번 결과가 최종인지, 인터럽트 대기 중인지"_ 구분하려면 `graph.get_state(config)`를 따로 호출해야 했습니다.
 
-v2에서는 **`GraphOutput` 객체**가 반환됩니다.
+v2에서는 _`GraphOutput` 객체_가 반환됩니다.
 
 #table(
   columns: 3,

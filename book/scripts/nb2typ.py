@@ -36,15 +36,21 @@ def escape_typst(text: str) -> str:
 # ─── Inline markdown → Typst conversion ───────────────────────
 def convert_inline(text: str) -> str:
     """Convert inline markdown formatting to Typst."""
-    # Code spans (must be first to protect content inside)
-    parts = []
-    last_end = 0
-    for m in re.finditer(r'`([^`]+)`', text):
-        parts.append(_convert_inline_no_code(text[last_end:m.start()]))
-        parts.append(f'`{m.group(1)}`')
-        last_end = m.end()
-    parts.append(_convert_inline_no_code(text[last_end:]))
-    return ''.join(parts)
+    # Protect code spans before applying Markdown emphasis. This lets patterns
+    # such as **`invoke()`** become *`invoke()`* instead of leaking raw ** into
+    # Typst, which compiles with noisy "no text within stars" warnings.
+    code_spans: list[str] = []
+
+    def _stash_code(m: re.Match) -> str:
+        code_spans.append(f'`{m.group(1)}`')
+        return f'@@CODE{len(code_spans) - 1}@@'
+
+    protected = re.sub(r'`([^`]+)`', _stash_code, text)
+    converted = _convert_inline_no_code(protected)
+
+    for idx, code in enumerate(code_spans):
+        converted = converted.replace(f'@@CODE{idx}@@', code)
+    return converted
 
 
 def _convert_inline_no_code(text: str) -> str:

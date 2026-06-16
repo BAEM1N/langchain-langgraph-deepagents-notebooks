@@ -187,7 +187,7 @@ Alice: {'favorite_color': 'blue', 'city': 'Seoul'}
 
 `compile(store=store)`로 그래프에 스토어를 연결하면 노드 함수에서 스토어에 접근할 수 있습니다.
 
-LangGraph 1.x 권장 패턴은 **`Runtime[Context]`** 입니다.
+LangGraph 1.x 권장 패턴은 _`Runtime[Context]`_ 입니다.
 
 - `context_schema=Context`를 `StateGraph()`에 전달
 - 노드 시그니처에 `runtime: Runtime[Context]` 파라미터 선언
@@ -227,7 +227,7 @@ LangGraph 1.x 권장 패턴은 **`Runtime[Context]`** 입니다.
 
 == 6.9 프로덕션 체크포인터 / 스토어 — 코드 레퍼런스
 
-`InMemorySaver`는 데모용이며, 프로덕션에서는 DB-backed 체크포인터/스토어를 사용합니다. 모두 `from_conn_string()` 컨텍스트 매니저 패턴을 따르고, **최초 1회 `setup()`을 호출해 스키마를 생성**해야 합니다.
+`InMemorySaver`는 데모용이며, 프로덕션에서는 DB-backed 체크포인터/스토어를 사용합니다. 모두 `from_conn_string()` 컨텍스트 매니저 패턴을 따르고, _최초 1회 `setup()`을 호출해 스키마를 생성_해야 합니다.
 
 #note-box[아래 셀은 의존 DB가 없으면 실행하지 않습니다 — API 패턴 참고용 코드 레퍼런스입니다.]
 

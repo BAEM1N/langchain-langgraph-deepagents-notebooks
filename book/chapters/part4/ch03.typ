@@ -33,10 +33,10 @@ print(f"기본 모델: {model.model_name}")
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 1. 모델 선택
 
-Deep Agents는 _LangChain ChatModel 객체_ 또는 **`provider:model`** 포맷으로 다양한 LLM을 지원합니다.
+Deep Agents는 _LangChain ChatModel 객체_ 또는 _`provider:model`_ 포맷으로 다양한 LLM을 지원합니다.
 모델을 지정하지 않으면 기본값은 `anthropic:claude-sonnet-4-6` 입니다.
 
-본 노트북에서는 **OpenAI `gpt-5.4`** 를 기본 모델로 사용합니다.
+본 노트북에서는 _OpenAI `gpt-5.4`_ 를 기본 모델로 사용합니다.
 
 #table(
   columns: 4,

@@ -75,7 +75,7 @@ _활용 사례:_
 
 == 7.8 version="v2" — 타입-안전 통일 스트림 (LangGraph 1.1+)
 
-`version="v2"`를 opt-in하면 **모든 청크가 `StreamPart` dict**로 통일됩니다. v1은 모드/서브그래프 조합에 따라 dict/tuple이 섞여 호출 측 분기 코드가 복잡했습니다.
+`version="v2"`를 opt-in하면 _모든 청크가 `StreamPart` dict_로 통일됩니다. v1은 모드/서브그래프 조합에 따라 dict/tuple이 섞여 호출 측 분기 코드가 복잡했습니다.
 
 === StreamPart 구조
 
@@ -124,7 +124,7 @@ _활용 사례:_
 
 === 마이그레이션 전략
 
-+ 새 코드는 **`version="v2"` 기본값**으로 작성
++ 새 코드는 _`version="v2"` 기본값_으로 작성
 + 기존 v1 호출부는 _그대로 두어도 무방_ (v1은 계속 동작)
 + 타입 안전성이 필요한 핫패스 / 신기능부터 점진 마이그레이션
 + Pydantic state 쓰는 그래프는 자동 강제 덕분에 이득이 가장 큼
@@ -133,7 +133,7 @@ _활용 사례:_
 
 같은 그래프 안에서 _사용자에게 보여줄 응답 모델_과 _내부 보조 모델_(라우팅·요약·툴 결정 등)이 함께 호출되면, 두 모델의 토큰이 모두 `messages` 스트림에 흘러들어 UI가 노이즈를 받습니다.
 
-해결책: 내부 모델에 **`nostream` 태그**를 부여하면 `stream_mode="messages"` 출력에서 자동으로 제외됩니다.
+해결책: 내부 모델에 _`nostream` 태그_를 부여하면 `stream_mode="messages"` 출력에서 자동으로 제외됩니다.
 
 #code-block(`````python
 from langchain_anthropic import ChatAnthropic
@@ -152,7 +152,7 @@ internal_model = ChatAnthropic(model_name="claude-haiku-4-5-20251001").with_conf
 
 - `metadata["tags"]` — 모델 호출에 부여한 태그 리스트 → `["joke"]`, `["poem"]`처럼 모델별 필터링
 - `metadata["langgraph_node"]` — 어떤 노드가 호출한 토큰인지
-- `metadata["chunk_position"]` — `"first"` / 중간(없음) / `"last"` 중 하나. **`"last"`**가 들어오면 해당 메시지의 스트리밍이 끝났음을 의미해 UI에서 cursor 정리·전송 확정에 사용
+- `metadata["chunk_position"]` — `"first"` / 중간(없음) / `"last"` 중 하나. _`"last"`_가 들어오면 해당 메시지의 스트리밍이 끝났음을 의미해 UI에서 cursor 정리·전송 확정에 사용
 
 #code-block(`````python
 joke_model = init_chat_model(model="gpt-5.4-mini", tags=["joke"])
@@ -182,7 +182,7 @@ async for chunk in graph.astream(
 
 == 7.11 `GraphOutput` — `invoke(..., version="v2")`의 반환 타입
 
-`stream()`뿐 아니라 `invoke()`에도 `version="v2"`를 줄 수 있습니다. 이때 반환값은 dict가 아니라 **`GraphOutput`** 객체입니다.
+`stream()`뿐 아니라 `invoke()`에도 `version="v2"`를 줄 수 있습니다. 이때 반환값은 dict가 아니라 _`GraphOutput`_ 객체입니다.
 
 #table(
   columns: 3,
@@ -286,14 +286,14 @@ print(example)
   [전체 실행 트레이스],
   [여러 모드 동시],
   [v1: `(mode, data)` 튜플 / v2: `chunk["type"]`],
-  [**`version="v2"`**],
+  [_`version="v2"`_],
   [`StreamPart` dict (`type` / `ns` / `data`) 통일, Pydantic state 자동 강제],
-  [**`invoke(..., version="v2")`**],
+  [_`invoke(..., version="v2")`_],
   [`GraphOutput` 반환 — `.value` / `.interrupts`],
-  [**`nostream` 태그**],
+  [_`nostream` 태그_],
   [내부 보조 LLM을 messages 스트림에서 제외],
-  [**`chunk_position == "last"`**],
+  [_`chunk_position == "last"`_],
   [메시지 스트리밍 종료 시점 감지],
-  [**`stream_events(..., version="v3")`**],
+  [_`stream_events(..., version="v3")`_],
   [projection 기반 — `stream.messages` / `stream.values` / `stream.output`, interrupt 재개 지원],
 )

@@ -273,7 +273,7 @@ rag_agent = create_agent(
 - `docs/langchain/24-retrieval.md` — RAG 5 building blocks
 - `07_examples/skills/multimodal-rag/SKILL.md`
 - #link("https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/index.html")[PyMuPDF4LLM 공식 문서]
-- [PyMuPDF4LLM API: `to_markdown`](https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/api.html)
+- #link("https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/api.html")[PyMuPDF4LLM API: `to_markdown`]
 - #link("https://docs.langchain.com/oss/python/integrations/providers/pymupdf4llm/")[LangChain PyMuPDF4LLM integration]
 - #link("https://web.stanford.edu/class/cs224n/slides_w26/cs224n-2026-lecture05-transformers.pdf")[Stanford CS224N 2026 Lecture 5 PDF]
 _다음 단계:_ → #link("../08_integration/04_document_loaders/")[08_integration/04_document_loaders]에서 PDF·웹·구조화 문서 로더를 비교합니다.

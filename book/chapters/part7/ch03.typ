@@ -6,7 +6,7 @@
 #chapter(3, "데이터 분석 에이전트", subtitle: "`@tool` + pandas + 멀티턴")
 
 == 학습 목표
-#learning-objectives([`@tool` 데코레이터로 pandas 코드 실행 도구(`run_pandas`)를 정의한다], [`LocalShellBackend` 와 커스텀 도구를 조합해 데이터 분석 워크플로를 구성한다], [스트리밍과 멀티턴 대화로 반복 분석을 수행한다], [v1 미들웨어(`SummarizationMiddleware`, `ModelCallLimitMiddleware`)를 적용한다], [대안으로 **`CodeInterpreterMiddleware` (QuickJS)** 패턴을 안내한다])
+#learning-objectives([`@tool` 데코레이터로 pandas 코드 실행 도구(`run_pandas`)를 정의한다], [`LocalShellBackend` 와 커스텀 도구를 조합해 데이터 분석 워크플로를 구성한다], [스트리밍과 멀티턴 대화로 반복 분석을 수행한다], [v1 미들웨어(`SummarizationMiddleware`, `ModelCallLimitMiddleware`)를 적용한다], [대안으로 _`CodeInterpreterMiddleware` (QuickJS)_ 패턴을 안내한다])
 
 == 개요
 

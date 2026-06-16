@@ -321,7 +321,7 @@ skills=[
   [General-purpose (빌트인)],
   [메인 에이전트의 스킬을 _자동 상속_],
   [커스텀 SubAgent],
-  [**명시적 `skills` 파라미터** 필요],
+  [_명시적 `skills` 파라미터_ 필요],
 )
 
 #code-block(`````python

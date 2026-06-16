@@ -5,7 +5,7 @@
 
 #chapter(2, "첫 번째 에이전트")
 
-**`create_agent()`로 시작하기**
+_`create_agent()`로 시작하기_
 
 == 학습 목표
 LangChain v1의 `create_agent()`로 에이전트를 생성하고 실행합니다.

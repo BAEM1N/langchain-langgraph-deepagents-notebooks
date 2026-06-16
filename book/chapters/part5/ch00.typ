@@ -308,7 +308,7 @@ OpenAI Responses API 사용 시 메시지 콘텐츠는 기본적으로 표준 �
   [`example` 파라미터가 제거되었습니다. `additional_kwargs`를 사용하세요.],
   [_AIMessageChunk_],
   [`chunk_position` 속성이 추가되었습니다 (마지막 청크에 `'last'` 값).],
-  [**`.text` 프로퍼티**],
+  [_`.text` 프로퍼티_],
   [`.text()` 메서드가 `.text` 프로퍼티로 변경되었습니다.],
   [_파일 인코딩_],
   [파일이 기본적으로 UTF-8 인코딩으로 열립니다.],

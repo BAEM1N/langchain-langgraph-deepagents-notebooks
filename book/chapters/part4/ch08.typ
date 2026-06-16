@@ -533,7 +533,7 @@ for scope, path in memory_config.items():
 
 Provider/모델별 harness 기본값을 자동으로 겹쳐 적용하는 beta API.
 
-**`HarnessProfile` 7 필드**
+_`HarnessProfile` 7 필드_
 
 #table(
   columns: 2,
@@ -566,7 +566,7 @@ _Merge semantics_
 - middleware 인스턴스: 동일 구체 클래스가 등장하면 교체, 새 타입은 append
 - provider-level + model-level 둘 다 있으면 model-level 우선, 나머지는 provider-level 상속
 
-**`ProviderProfile` 3 필드**
+_`ProviderProfile` 3 필드_
 
 #table(
   columns: 2,
@@ -584,7 +584,7 @@ _Merge semantics_
   [runtime 정보 기반 kwargs 동적 생성],
 )
 
-**`HarnessProfileConfig` (YAML/JSON)**
+_`HarnessProfileConfig` (YAML/JSON)_
 
 #code-block(`````python
 import yaml
@@ -609,7 +609,7 @@ my_provider = "my_pkg.profiles:register_harness"
 my_provider = "my_pkg.profiles:register_provider"
 `````)
 
-로드 순서: **built-ins → entry-point plugins → 사용자 코드의 직접 `register_*_profile`**.
+로드 순서: _built-ins → entry-point plugins → 사용자 코드의 직접 `register_*_profile`_.
 
 
 

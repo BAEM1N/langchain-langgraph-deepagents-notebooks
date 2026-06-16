@@ -145,10 +145,10 @@ State에 넣지 않을 의존성(LLM provider, DB connection, user id 등)을 _�
   [LLM 대화용 사전 정의된 상태],
   [_Input/Output Schema_],
   [내부 상태와 외부 입출력 분리],
-  [**`context_schema` + `Runtime`**],
+  [_`context_schema` + `Runtime`_],
   [State에 넣지 않는 호출 시점 의존성 주입],
-  [**`add_node()` 옵션**],
+  [_`add_node()` 옵션_],
   [`retry_policy` / `timeout` / `cache_policy` / `error_handler` / `defer`],
-  [**`Send` + `Command`**],
+  [_`Send` + `Command`_],
   [동적 fan-out (map-reduce), state 갱신 + 라우팅 동시 처리, `Command.PARENT` 로 부모 그래프 점프],
 )
