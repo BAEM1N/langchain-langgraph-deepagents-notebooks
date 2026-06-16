@@ -6,7 +6,7 @@
 #chapter(1, "RAG 에이전트", subtitle: "5 building blocks + 3-Node 패턴")
 
 == 학습 목표
-#learning-objectives([LangChain RAG의 _5 building blocks_(document loaders / text splitters / embedding models / vector stores / retrievers)를 이해한다], [_2-Step / Agentic / Hybrid_ 세 가지 RAG 아키텍처의 차이를 안다], [`Rewrite → Retrieve → Agent` 3-node 패턴으로 질의 재작성과 검색을 분리한다], [`content_and_artifact` 반환 형식으로 검색 도구를 정의한다], [`create_deep_agent`로 RAG 에이전트를 만들고 v1 미들웨어(ModelCallLimitMiddleware, ToolRetryMiddleware)를 적용한다], [_Skills 시스템_으로 RAG 도메인 지식을 점진적 공개(Progressive Disclosure)한다])
+#learning-objectives([LangChain RAG의 _5 building blocks_(document loaders / text splitters / embedding models / vector stores / retrievers)를 이해한다], [_2-Step / Agentic / Hybrid_ 세 가지 RAG 아키텍처의 차이를 안다], [`Rewrite → Retrieve → Agent` 3-node 패턴으로 질의 재작성과 검색을 분리한다], [`content_and_artifact` 반환 형식으로 검색 도구를 정의한다], [`create_deep_agent`로 RAG 에이전트를 만들고 v1 미들웨어를 적용한다], [_Skills 시스템_으로 RAG 도메인 지식을 점진적 공개(Progressive Disclosure)한다])
 
 == 개요
 
@@ -32,7 +32,7 @@
   [`skills/rag-agent/SKILL.md` — RAG 도메인 지식 점진적 공개],
 )
 
-#tip-box[참고: `docs/langchain/24-retrieval.md` — 2-Step / Agentic / Hybrid RAG 아키텍처 비교]
+#note-box[참고: `docs/langchain/24-retrieval.md` — 2-Step / Agentic / Hybrid RAG 아키텍처 비교]
 
 #code-block(`````python
 from dotenv import load_dotenv
@@ -52,31 +52,7 @@ model = ChatOpenAI(model="gpt-5.4")
 
 == RAG 5 building blocks
 
-LangChain RAG는 다섯 개 빌딩 블록으로 구성됩니다. 각 블록은 교체 가능하며, 조합 방식이 곧 아키텍처를 결정합니다.
-
-#table(
-  columns: 2,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[블록],
-  text(weight: "bold")[역할],
-  [_Document loaders_],
-  [PDF, 웹, DB 등에서 `Document` 객체로 로드],
-  [_Text splitters_],
-  [긴 문서를 검색에 적합한 청크로 분할],
-  [_Embedding models_],
-  [텍스트를 벡터로 변환 (`OpenAIEmbeddings` 등)],
-  [_Vector stores_],
-  [임베딩 저장 + 유사도 검색 (FAISS, Chroma, InMemory)],
-  [_Retrievers_],
-  [질의 → 관련 문서 N개 반환 (도구로 감싸 에이전트 사용)],
-)
-
-== 2-Step / Agentic / Hybrid 아키텍처
-
-같은 빌딩 블록을 어떻게 결합하느냐에 따라 세 가지 아키텍처가 나옵니다.
+`docs/langchain/24-retrieval.md` 가 정의하는 다섯 가지 구성 요소를 노트북 흐름에 매핑하면 다음과 같습니다.
 
 #table(
   columns: 4,
@@ -84,34 +60,63 @@ LangChain RAG는 다섯 개 빌딩 블록으로 구성됩니다. 각 블록은 �
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[아키텍처],
-  text(weight: "bold")[흐름],
-  text(weight: "bold")[장점],
-  text(weight: "bold")[단점],
-  [_2-Step RAG_],
-  [질의 → 검색 → LLM 응답 (정적)],
-  [단순·빠름·예측 가능],
-  [재질의·다중 검색 불가],
-  [_Agentic RAG_],
-  [에이전트가 `retrieve` 도구를 필요할 때 호출],
-  [멀티스텝·비교 질의 가능],
-  [토큰 사용량 큼],
-  [_Hybrid_],
-  [`Rewrite → Retrieve → Agent` 3-node 분리],
-  [질의 재작성으로 검색 품질↑],
-  [그래프 설계 부담],
+  text(weight: "bold")[\#],
+  text(weight: "bold")[컴포넌트],
+  text(weight: "bold")[역할],
+  text(weight: "bold")[본 노트북 매핑],
+  [1],
+  [_Document loaders_],
+  [외부 소스에서 표준화된 `Document` 객체로 데이터를 적재],
+  [1단계: 6개 `Document` 직접 생성],
+  [2],
+  [_Text splitters_],
+  [큰 문서를 검색 가능한 청크로 분할],
+  [2단계: `RecursiveCharacterTextSplitter`],
+  [3],
+  [_Embedding models_],
+  [의미적으로 가까운 텍스트가 모이도록 벡터로 변환],
+  [3단계: `OpenAIEmbeddings(text-embedding-3-small)`],
+  [4],
+  [_Vector stores_],
+  [임베딩 저장 + 유사도 검색],
+  [3단계: `InMemoryVectorStore`],
+  [5],
+  [_Retrievers_],
+  [비정형 질의로부터 관련 문서 반환],
+  [4단계: `retrieve` 도구 (`similarity_search`)],
 )
 
-== Rewrite → Retrieve → Agent 3-node 패턴
+== 세 가지 RAG 아키텍처
 
-Hybrid 구조는 _질의 재작성_과 _검색_을 별도 노드로 떼어내고, 마지막에 에이전트가 결과를 종합합니다. 이렇게 분리하면 사용자 질의가 모호하거나 다중 의도를 담고 있어도 검색 정확도가 안정적으로 유지됩니다.
+#table(
+  columns: 5,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[아키텍처],
+  text(weight: "bold")[검색 시점],
+  text(weight: "bold")[지연 시간],
+  text(weight: "bold")[유연성],
+  text(weight: "bold")[적합 시나리오],
+  [_2-Step RAG_],
+  [항상 검색 후 생성],
+  [Fast],
+  [Low],
+  [FAQ, 문서 봇],
+  [_Agentic RAG_],
+  [에이전트가 필요할 때 도구 호출],
+  [Variable],
+  [High],
+  [리서치 어시스턴트, 다중 도구],
+  [_Hybrid RAG_],
+  [Rewrite → Retrieve → Agent + 검증],
+  [Variable],
+  [High],
+  [품질 검증이 필요한 도메인],
+)
 
-#code-block(`````python
-# 개념적 그래프 — 실제 코드는 LangGraph로 노드를 정의
-# rewrite_node:   원본 질의 → 검색용 query 재작성
-# retrieve_node:  vectorstore.similarity_search(query, k=K)
-# agent_node:     create_deep_agent + tools=[retrieve_tool]
-`````)
+본 노트북은 _Agentic RAG_(에이전트가 `retrieve` 도구를 호출)를 기본으로 하고, 마지막에 `Rewrite → Retrieve → Agent` 3-node Hybrid 패턴을 한 번 더 보입니다.
 
 == 1단계: 샘플 문서 생성
 
@@ -214,7 +219,7 @@ Deep Agents는 올인원 에이전트 SDK입니다. create_deep_agent로 에이�
 
 == 6단계: RAG 에이전트 생성 (v1 미들웨어 적용)
 
-`prompts.load_prompt` 가 프롬프트를 로드합니다. LangSmith Hub → Langfuse → 기본값 순서로 시도합니다.
+에서 프롬프트를 로드합니다. LangSmith Hub → Langfuse → 기본값 순으로 시도합니다.
 
 #table(
   columns: 2,
@@ -224,9 +229,9 @@ Deep Agents는 올인원 에이전트 SDK입니다. create_deep_agent로 에이�
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[미들웨어],
   text(weight: "bold")[역할],
-  [`ModelCallLimitMiddleware`],
+  [\\],
   [무한 루프 방지 — 최대 모델 호출 횟수 제한],
-  [`ToolRetryMiddleware`],
+  [\\],
   [검색 도구 실패 시 자동 재시도],
 )
 
@@ -268,6 +273,25 @@ Prompt 'deep-research-agent-label:production' not found during refresh, evicting
 단순 질의(하나의 검색)와 비교 질의(다중 검색)로 에이전트의 RAG 동작을 확인합니다.
 
 
+== 8단계: Hybrid RAG — `Rewrite → Retrieve → Agent` 3-node 패턴
+
+Agentic RAG 는 에이전트가 한 번에 검색·답변을 다 결정하지만, 도메인 어휘가 풍부할수록 _질의 재작성(rewrite)_ 을 분리하면 재현율이 올라갑니다. LangGraph 의 `StateGraph` 로 3개 노드를 명시적으로 구성합니다.
+
+#code-block(`````python
+사용자 입력
+   │
+   ▼
+[1] rewrite   ─ 모델이 질의를 검색용 키워드로 재작성
+   │
+   ▼
+[2] retrieve  ─ 벡터 스토어에서 후보 문서 K개 조회
+   │
+   ▼
+[3] agent     ─ create_deep_agent 가 근거 기반 답변 생성
+`````)
+
+`retrieve` 도구는 4단계에서 이미 정의했으므로 그대로 재사용합니다.
+
 #chapter-summary-header()
 
 #table(
@@ -278,19 +302,23 @@ Prompt 'deep-research-agent-label:production' not found during refresh, evicting
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[항목],
   text(weight: "bold")[핵심],
+  [_5 building blocks_],
+  [loaders · splitters · embeddings · vector stores · retrievers — RAG 표준 구성],
   [_벡터 스토어_],
   [`InMemoryVectorStore.from_documents()` — 임베딩 기반 유사도 검색],
   [_검색 도구_],
   [`\@tool(response_format="content_and_artifact")` — 요약 + 원본 분리],
-  [_에이전트_],
+  [_Agentic RAG_],
   [`create_deep_agent(model, tools=[retrieve], backend=..., skills=["/skills/"])`],
+  [_Hybrid RAG_],
+  [`Rewrite → Retrieve → Agent` 3-node `StateGraph`],
   [_스킬_],
-  [`skills/rag-agent/SKILL.md` — Progressive Disclosure로 토큰 절약],
+  [`skills/rag-agent/SKILL.md` — Progressive Disclosure 로 토큰 절약],
 )
 
 
 #references-box[
-- `docs/langchain/24-retrieval.md`
+- `docs/langchain/24-retrieval.md` — 5 building blocks · 2-Step / Agentic / Hybrid 아키텍처
 - #link("https://python.langchain.com/docs/tutorials/rag/")[LangChain RAG Tutorial]
 - `docs/deepagents/10-skills.md`
 _다음 단계:_ → #link("./02_sql_agent.ipynb")[02_sql_agent.ipynb]: SQL 에이전트를 구축합니다.

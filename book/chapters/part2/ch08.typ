@@ -5,11 +5,7 @@
 
 #chapter(8, "멀티 에이전트 패턴")
 
-복잡한 작업을 단일 에이전트로 처리하면 시스템 프롬프트가 비대해지고, 도구가 넘쳐나며, 컨텍스트 윈도우가 빠르게 소진됩니다. 멀티 에이전트 아키텍처는 작업을 전문 에이전트로 분할하여 이 문제를 해결합니다. 이 장에서는 LangChain v1이 제공하는 5가지 멀티 에이전트 패턴 — Subagents, Handoffs, Skills, Router, Custom — 의 개념과 구현을 비교합니다.
-
-단일 에이전트의 한계는 단순히 프롬프트 길이의 문제가 아닙니다. 도구가 20개를 넘어가면 LLM이 적절한 도구를 선택하는 정확도가 떨어지고, 서로 다른 도메인의 지시사항이 충돌하여 예측 불가능한 동작이 발생할 수 있습니다. 멀티 에이전트 패턴은 "관심사의 분리(Separation of Concerns)" 원칙을 에이전트 설계에 적용한 것으로, 각 에이전트가 명확한 책임 범위와 최소한의 도구 집합을 갖도록 합니다.
-
-#learning-header()
+== 학습 목표
 5가지 멀티 에이전트 패턴을 이해하고 구현합니다.
 
 이 노트북에서 다루는 내용:
@@ -35,12 +31,12 @@ model = ChatOpenAI(
 print("모델 준비 완료:", model.model_name)
 `````)
 #output-block(`````
-모델 준비 완료: gpt-5.4
+모델 준비 완료: gpt-4.1
 `````)
 
 == 8.2 멀티 에이전트 패턴 비교
 
-아래 표는 5가지 멀티 에이전트 패턴을 비교합니다. 각 패턴은 서로 다른 상황에 적합하며, 프로젝트의 요구사항에 맞게 선택해야 합니다.
+아래 표는 5가지 멀티 에이전트 패턴을 비교합니다. 각 패턴은 서로 다른 상황에 적합하므로, 프로젝트 요구사항에 맞게 선택해야 합니다.
 
 #table(
   columns: 4,
@@ -80,37 +76,7 @@ print("모델 준비 완료:", model.model_name)
 - _Skills_는 하나의 에이전트가 여러 역할을 전환합니다.
 - _Router_는 입력을 분류한 뒤 적절한 에이전트에게 위임합니다.
 
-이 다섯 패턴은 복잡도와 유연성의 스펙트럼 위에 놓여 있습니다. Subagents와 Skills는 구현이 간단하지만 유연성이 제한적이고, Handoffs와 Router는 중간 수준의 복잡도로 대부분의 실전 시나리오를 커버하며, Custom은 최대한의 유연성을 제공하되 개발 비용이 가장 높습니다. 각 패턴의 동작 원리와 트레이드오프를 하나씩 살펴보겠습니다.
-
-=== 패턴 선택 매트릭스 (요구사항 → 패턴)
-
-비교 표가 패턴의 _속성_을 정리한 것이라면, 아래 매트릭스는 _요구사항_에서 출발하여 최적 패턴을 역으로 찾는 표입니다.
-
-#table(
-  columns: 2,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[요구사항],
-  text(weight: "bold")[최적 패턴],
-  [단일 단순 작업 (one-shot)],
-  [_Skills_ (또는 단일 에이전트)],
-  [같은 작업을 반복 호출],
-  [_Subagents_],
-  [멀티 도메인을 병렬 처리],
-  [_Router_ (분류 후 fan-out)],
-  [매우 큰 컨텍스트 (긴 문서·이력)],
-  [_Subagents_ (컨텍스트 격리로 토큰 절약)],
-  [팀 기반 — 에이전트가 서로 협업],
-  [_Handoffs_ (상태 공유)],
-  [에이전트와 직접 대화 (역할 유지)],
-  [_Handoffs_ + supervisor],
-)
-
-=== 패턴별 토큰·호출 비용 (참고 수치)
-
-같은 작업을 서로 다른 패턴으로 구현했을 때의 대략적인 호출 수와 누적 토큰을 비교합니다. 수치는 시나리오와 모델에 따라 달라지지만, 패턴 간 _상대적 비용_을 가늠하는 데 도움이 됩니다.
+=== 패턴 선택 매트릭스 (요구사항 → 최적 패턴)
 
 #table(
   columns: 4,
@@ -118,49 +84,131 @@ print("모델 준비 완료:", model.model_name)
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[시나리오],
-  text(weight: "bold")[패턴],
-  text(weight: "bold")[호출 수],
-  text(weight: "bold")[누적 토큰],
-  [One-Shot (단일 도메인)],
+  text(weight: "bold")[\#],
+  text(weight: "bold")[요구사항],
+  text(weight: "bold")[최적 패턴],
+  text(weight: "bold")[이유],
+  [1],
+  [_One-shot 단순 작업_ — 한 번의 도구 호출로 끝나는 단일 도메인],
+  [_Single agent_ (멀티 에이전트 불필요)],
+  [오버헤드만 늘어남. `create_agent` 한 개로 충분],
+  [2],
+  [_반복(repeat) 호출_ — 같은 도구를 여러 번 호출해 데이터를 축적],
   [_Subagents_],
-  [4–5 calls],
-  [~9K],
-  [Repeat (같은 작업 반복)],
-  [_Skills_],
-  [2–3 calls],
-  [~15K],
-  [Multi-Domain (협업)],
+  [메인이 결과를 모으며, 각 subagent 호출이 독립 컨텍스트로 격리됨],
+  [3],
+  [_병렬 멀티 도메인_ — 분류 후 도메인별 전문가에게 동시 분배],
+  [_Router_ (+ `Send`)],
+  [분류 노드 → fan-out. 동시 실행으로 지연 최소화],
+  [4],
+  [_대용량 컨텍스트_ — 문서 1만 토큰 이상을 부분별로 분석],
+  [_Subagents_ (격리된 컨텍스트) 또는 _Skills_],
+  [메인 에이전트 토큰을 보존. Skills는 프롬프트 교체로 추가 도구 없이 처리],
+  [5],
+  [_팀 기반(team-based)_ — 여러 역할이 서로 결과를 검토·반복],
   [_Handoffs_],
-  [3–7+ calls],
-  [~14K+],
-  [Multi-Domain (분류 후 fan-out)],
-  [_Router_],
-  [\~분류 1 + 도메인 N],
-  [~9K],
+  [`Command(goto=...)`로 대화 상태가 다음 역할로 전달됨],
+  [6],
+  [_다이렉트 대화(direct conversation)_ — 사용자와 끊김 없이 대화하면서 부서 이관],
+  [_Handoffs_ (subgraph + conversation history)],
+  [메시지 히스토리가 보존되어 사용자가 같은 톤·맥락으로 계속 진행 가능],
 )
 
-#tip-box[_Router vs Supervisor_ — 두 용어는 자주 혼용되지만 구현 측면에서 다릅니다. _Router_는 입력을 한 번 분류하여 적절한 에이전트(또는 Send)로 _fan-out_ 하는 _단순 함수형_ 노드입니다. 반면 _Supervisor_는 대화 이력을 가지고 _conversation-aware_ 하게 어떤 서브에이전트를 호출할지 매 턴 결정하는 에이전트입니다. 일회성 분류라면 Router, 다단계 협업이 필요하면 Supervisor 패턴을 선택하세요.]
+=== 성능 비교 (3-step task 기준)
+
+같은 3-step 작업을 패턴별로 수행했을 때 도구 호출 횟수와 컨텍스트 비용(approx.):
+
+#table(
+  columns: 5,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[시나리오],
+  text(weight: "bold")[패턴],
+  text(weight: "bold")[도구 호출 수],
+  text(weight: "bold")[컨텍스트(approx.)],
+  text(weight: "bold")[비고],
+  [_One-Shot_ (단일 질의)],
+  [Single agent],
+  [1 call],
+  [~3K],
+  [베이스라인],
+  [_Repeat_ (반복 검색·집계)],
+  [Subagents],
+  [_4–5 calls_],
+  [_~9K_],
+  [권장],
+  [_Multi-Domain_ (병렬 분배)],
+  [Router (+ Send)],
+  [3 calls],
+  [_~9K_],
+  [분류 1 + 도메인 fan-out 병렬],
+)
+
+#tip-box[수치는 `docs/langchain/22-multi-agent.md` 기준 추정치. 실제는 모델·프롬프트·tool schema에 따라 ±30% 변동.]
+
+=== Router vs Supervisor 용어
+
+#tip-box[_Router_ — _단순 함수형_ 라우팅. 입력을 분류한 뒤 결정론적으로 다음 노드를 선택합니다. 대화 상태를 인식하지 않고, 한 번 위임하면 끝납니다. (예: `classify_query()` → `math` / `code` / `general` 분기)]
+\>
+#tip-box[_Supervisor_ — _대화 인식(conversation-aware)_ 감독자. 메시지 히스토리를 보면서 다음 단계에 어떤 subagent를 호출할지 LLM이 판단합니다. 반복 호출, 결과 통합, 재시도 의사결정이 가능합니다. (LangChain v1에서는 `create_agent` + subagent 도구 묶음 = 사실상 supervisor 패턴)]
+\>
+#note-box[본 노트북의 8.3은 _Supervisor_(LLM이 위임 판단), 8.6은 _Router_(함수형 분류)입니다.]
 
 == 8.3 서브에이전트 패턴
 
-메인 에이전트(감독자)가 전문 서브에이전트를 _도구로_ 호출하는 패턴입니다. 핵심 아이디어는 `create_agent()`로 생성한 에이전트를 `@tool` 데코레이터로 감싸서, 상위 에이전트가 일반 도구처럼 호출할 수 있게 만드는 것입니다.
+메인 에이전트(감독자)가 전문 서브에이전트를 _도구로_ 호출하는 패턴입니다.
 
 === 특징
 - 각 서브에이전트는 도구 함수로 캡슐화됩니다.
 - 메인 에이전트가 어떤 서브에이전트를 호출할지 판단합니다.
-- 서브에이전트의 내부 상태는 메인 에이전트와 격리됩니다. — 서브에이전트의 중간 추론 과정이나 도구 호출 이력은 메인 에이전트의 컨텍스트를 오염시키지 않습니다.
+- 서브에이전트의 내부 상태는 메인 에이전트와 격리됩니다.
 - 병렬 실행이 가능하여 성능에 유리합니다.
 
-#tip-box[서브에이전트 패턴은 "컨텍스트 격리"가 가장 큰 장점입니다. 서브에이전트가 내부적으로 여러 도구를 호출하더라도 메인 에이전트에는 최종 결과 문자열만 전달되므로, 메인 에이전트의 컨텍스트 윈도우를 절약할 수 있습니다.]
+=== 8.3.1 Subagent-local history — `checkpointer=True`
 
-=== 서브에이전트 로컬 히스토리 (`checkpointer=True`)
+서브에이전트를 `create_agent`로 만들 때 `checkpointer=True`를 전달하면, 그 서브에이전트만의 _로컬 대화 히스토리_가 유지됩니다. 메인 에이전트는 서브에이전트의 내부 multi-turn 추론을 보지 않고 최종 결과만 받습니다.
 
-서브에이전트를 `create_agent(..., checkpointer=True)` 로 만들면 _서브에이전트만의 대화 이력_을 별도 스레드에 보관할 수 있습니다. 메인 에이전트는 최종 결과만 전달받지만, 서브에이전트 내부에서는 멀티턴 추론이 가능해집니다. 동일 thread_id 로 재호출하면 이전 컨텍스트를 이어받아 _점진적_으로 작업을 진행할 수 있습니다.
+- 메인 컨텍스트 보존 (서브의 reasoning step 미노출)
+- 서브 내부에서는 도구 호출-결과-재추론 multi-turn 유지
+- 부모와 자식이 별도 checkpointer를 가질 수 있음 (격리)
 
-=== 단일 dispatch 도구로 N개 서브에이전트 노출
+=== 8.3.2 단일 dispatch tool — 서브에이전트 노출 방식 3가지
 
-서브에이전트가 많을 때 각각을 개별 도구로 노출하면 메인 에이전트의 도구 목록이 비대해집니다. 대안은 단일 `dispatch(agent_name, query)` 도구 하나로 묶고, 어떤 서브에이전트가 있는지를 _다른 방식_으로 알려주는 것입니다.
+서브에이전트가 많아지면 도구 슬롯 폭증을 막기 위해 단일 `dispatch` 도구 하나로 묶고, 어떤 서브를 호출할지는 인자로 받습니다. 노출 방식은 세 가지가 있습니다.
+
+#table(
+  columns: 4,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[방식],
+  text(weight: "bold")[적합 규모],
+  text(weight: "bold")[장점],
+  text(weight: "bold")[단점],
+  [_(A) System prompt 열거_],
+  [\\\< 10개],
+  [간단·즉시 발견],
+  [프롬프트 토큰 증가, 대규모 시 흐려짐],
+  [**(B) `Literal` 인자 제약**],
+  [10–30개],
+  [tool schema가 enum을 강제 → 모델 hallucination 감소],
+  [명단을 코드에서 관리해야 함],
+  [_(C) Tool-based discovery_],
+  [30+ 개],
+  [`list_subagents()` / `describe(name)` 도구로 동적 탐색. 무한 확장],
+  [호출 1–2회 추가],
+)
+
+=== 8.3.3 부모 state 주입 — `ToolRuntime[None, CustomState]`
+
+서브에이전트 도구가 부모 그래프의 커스텀 state(예: `user_id`, `tenant`, 누적 결과)에 접근해야 할 때 `ToolRuntime[ContextSchema, StateSchema]`로 의존성을 주입합니다. 도구 인자 시그니처에 명시하면 LangChain이 자동으로 그래프 state를 전달합니다.
+
+=== 8.3.4 비동기 서브에이전트 — 3-tool 패턴
+
+장시간(분 단위) 실행되는 서브에이전트는 동기 호출로 메인을 블록하면 안 됩니다. **`start_job` / `check_status` / `get_result`** 세 도구로 분리하면 메인 에이전트가 백그라운드 작업을 폴링하면서 다른 일을 병행할 수 있습니다.
 
 #table(
   columns: 3,
@@ -168,163 +216,90 @@ print("모델 준비 완료:", model.model_name)
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[방식],
-  text(weight: "bold")[권장 규모],
-  text(weight: "bold")[특징],
-  [시스템 프롬프트에 enumerate],
-  [< 10],
-  [LLM이 이름을 텍스트로 인식. 간단·유연],
-  [`Literal["a", "b", ...]` 타입 제약],
-  [10–30],
-  [툴 스키마로 validation. 잘못된 이름 차단],
-  [Tool-based discovery (`list_agents`)],
-  [> 30],
-  [동적 등록. 별도 도구로 검색·필터링],
+  text(weight: "bold")[도구],
+  text(weight: "bold")[역할],
+  text(weight: "bold")[반환],
+  [`start_job(task)`],
+  [작업 제출 (즉시 반환)],
+  [`job_id`],
+  [`check_status(job_id)`],
+  [진행 상태 폴링],
+  [`pending` / `running` / `done` / `failed`],
+  [`get_result(job_id)`],
+  [완료된 결과 회수],
+  [최종 출력 (미완료 시 에러)],
 )
 
-=== 부모 state 주입: `ToolRuntime[None, CustomState]`
+=== 8.3.5 `Command` 반환으로 부모 state 업데이트
 
-서브에이전트 도구가 부모 그래프의 state 일부를 읽어야 할 때 `ToolRuntime[None, CustomState]` 를 인자로 받습니다.
-
-#code-block(`````python
-from langchain.tools import tool, ToolRuntime
-
-@tool
-def research_subagent(query: str, runtime: ToolRuntime[None, ResearchState]) -> str:
-    """리서치 서브에이전트. 부모 state의 user_id를 사용."""
-    user_id = runtime.state["user_id"]
-    # ... 서브에이전트 호출 ...
-    return result
-`````)
-
-=== 비동기 작업: start / status / get_result 3-tool 패턴
-
-오래 걸리는 서브에이전트는 단일 동기 호출 대신 _세 개 도구_로 쪼개는 것이 안전합니다.
-
-#code-block(`````python
-@tool
-def start_research_job(query: str) -> str:
-    """리서치 작업을 시작하고 job_id를 반환합니다."""
-    ...
-
-@tool
-def check_job_status(job_id: str) -> str:
-    """작업 상태 — running / done / failed."""
-    ...
-
-@tool
-def get_job_result(job_id: str) -> str:
-    """완료된 작업의 결과를 가져옵니다."""
-    ...
-`````)
-
-=== `Command` 반환으로 부모 state 업데이트
-
-서브에이전트 도구가 단순 문자열 대신 `Command(update={...})` 를 반환하면 부모 그래프의 state 를 _직접_ 갱신할 수 있습니다. 메시지뿐 아니라 커스텀 필드까지 업데이트해야 할 때 유용합니다.
-
-#code-block(`````python
-from langgraph.types import Command
-
-@tool
-def research_with_state_update(query: str) -> Command:
-    result = run_research(query)
-    return Command(update={
-        "research_results": result,
-        "messages": [{"role": "tool", "content": result}],
-    })
-`````)
-
-서브에이전트 패턴이 도구 호출을 통해 결과만 받아오는 "위임" 방식이라면, 핸드오프 패턴은 대화의 _흐름 자체_를 다른 에이전트로 넘기는 방식입니다.
+도구가 단순 문자열 대신 `Command(update={...})`를 반환하면, 부모 그래프의 state를 직접 갱신할 수 있습니다. 누적 로그·집계 결과·중간 산출물을 메시지 히스토리 밖에 두고 싶을 때 유용합니다.
 
 == 8.4 핸드오프 패턴
 
-`Command(goto=...)`로 에이전트 간 _상태를 전환_하는 패턴입니다. 핸드오프는 LangGraph의 노드 전환 메커니즘을 활용합니다. 에이전트 내부의 도구가 `Command(goto="target_agent")` 객체를 반환하면, LangGraph 런타임이 현재 에이전트의 실행을 중단하고 대상 에이전트 노드로 제어를 이동시킵니다.
+`Command(goto=...)`로 에이전트 간 _상태를 전환_하는 패턴입니다.
 
 === 특징
 - 도구가 `Command` 객체를 반환하여 다른 에이전트로 전환합니다.
-- 대화 상태(메시지 히스토리)가 다음 에이전트로 전달됩니다. — 서브에이전트 패턴과 달리 이전 대화의 전체 맥락을 유지합니다.
-- `StateGraph`를 사용하여 에이전트 간 흐름을 정의합니다.
+- 대화 상태(메시지 히스토리)가 다음 에이전트로 전달됩니다.
+- `StateGraph`로 에이전트 간 흐름을 정의합니다.
 - 고객 서비스의 부서 이관 같은 순차적 멀티홉 시나리오에 적합합니다.
 
-#warning-box[핸드오프 패턴에서 대화 상태가 모든 에이전트에 공유되므로, 에이전트 수가 많아지면 컨텍스트 윈도우가 빠르게 소진될 수 있습니다. 핸드오프 체인이 3단계 이상 필요하다면, 중간에 상태를 요약하거나 서브에이전트 패턴과 조합하는 것을 고려하세요.]
+=== 8.4.1 단일 에이전트 핸드오프 — `\@wrap_model_call` 미들웨어
 
-=== 단일 에이전트 + 미들웨어 핸드오프 (권장 1순위)
+위의 multi-subgraph 방식은 부서가 많아질수록 노드 수가 폭증합니다. _docs 권장 1순위_는 단일 에이전트에 `@wrap_model_call` 미들웨어를 붙여, 모드(`role`)에 따라 `system_prompt`와 `tools`를 동적으로 교체하는 방식입니다.
 
-LangChain v1 docs 의 1순위 권장 핸드오프 패턴은 _여러 subgraph_ 가 아니라 _단일 에이전트 + `@wrap_model_call` 미들웨어_입니다. 라우팅 결과에 따라 시스템 프롬프트와 도구 집합을 동적으로 _override_ 하여, 하나의 에이전트 노드 안에서 페르소나를 전환합니다.
+- _노드 1개_ — `StateGraph` 불필요
+- _상태 자연 전이_ — `role` 필드만 업데이트하면 다음 호출부터 새 프롬프트·도구 셋 적용
+- _핸드오프 = 도구 호출_ — `transfer_to_sales`가 state의 `role`을 바꾸고 다음 모델 호출 시 sales 페르소나로 작동
 
-#code-block(`````python
-from langchain.agents.middleware import wrap_model_call, ModelRequest
-from langchain.agents import create_agent
+=== 8.4.2 Subgraph 핸드오프의 conversation history 규칙
 
-@wrap_model_call
-def role_router(request: ModelRequest, handler):
-    state = request.state
-    role = state.get("active_role", "general")
+서브그래프 방식(8.4 원본 예제)으로 핸드오프를 만들 때는 _부모 그래프의 메시지 히스토리에 정확히 2개만 흘러야_ 다음 에이전트가 정상 작동합니다.
 
-    if role == "billing":
-        return handler(request.override(
-            system_prompt="당신은 결제 전문 상담원입니다.",
-            tools=[refund_tool, charge_tool],
-        ))
-    elif role == "tech":
-        return handler(request.override(
-            system_prompt="당신은 기술 지원 상담원입니다.",
-            tools=[diagnose_tool, escalate_tool],
-        ))
-    return handler(request)
+#table(
+  columns: 4,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[\#],
+  text(weight: "bold")[메시지],
+  text(weight: "bold")[누가 만드는가],
+  text(weight: "bold")[역할],
+  [1],
+  [`AIMessage(tool_calls=[transfer_to_X])`],
+  [라우터 에이전트의 LLM],
+  ["이관 결정"의 흔적],
+  [2],
+  [`ToolMessage(tool_call_id=...)`],
+  [`transfer_to_X` 도구 자체],
+  [OpenAI tool-call 규칙: 모든 tool_call에는 짝 ToolMessage 필요],
+)
 
-agent = create_agent(model="gpt-5.4", tools=ALL_TOOLS, middleware=[role_router])
-`````)
+_부모 history에 흘리지 말아야 할 것:_
+- 라우터의 중간 reasoning 메시지 (서브그래프 내부에서 처리)
+- 도구의 길고 자세한 결과 (요약만 ToolMessage로)
 
-기존의 다중 subgraph 핸드오프 패턴은 _부서 간 명시적 그래프 흐름_을 보여줘야 할 때 여전히 유효하지만, 단순한 페르소나 전환이라면 위 미들웨어 패턴이 훨씬 가볍습니다.
+_왜 중요한가:_
+- 다음 에이전트(sales/support)는 이 2개 메시지를 보고 _방금 이관됐다_를 인지함
+- OpenAI/Anthropic은 짝 없는 `tool_calls`가 있으면 다음 turn에서 에러를 냅니다
+- 부모 history가 깨끗할수록 컨텍스트가 가볍고, 같은 thread에서 추가 이관이 가능
 
-=== 핸드오프 도구의 `ToolRuntime` + `tool_call_id` 에코백
-
-핸드오프 도구는 `ToolRuntime[None, SupportState]` 로 부모 state 와 현재 `tool_call_id` 에 접근해야 합니다. `Command(goto=..., update={"messages": [...]})` 로 전환할 때, _현재 도구 호출에 대응하는 `ToolMessage`_ 를 반드시 함께 넣어야 OpenAI tool-call 규약이 깨지지 않습니다.
-
-#code-block(`````python
-from langchain.tools import tool, ToolRuntime
-from langchain_core.messages import ToolMessage
-from langgraph.types import Command
-
-@tool
-def transfer_to_billing(reason: str, runtime: ToolRuntime[None, SupportState]) -> Command:
-    """결제팀으로 상담을 이관합니다."""
-    return Command(
-        goto="billing_agent",
-        update={
-            "messages": [
-                ToolMessage(
-                    content=f"결제팀으로 이관: {reason}",
-                    tool_call_id=runtime.tool_call_id,
-                ),
-            ],
-            "active_role": "billing",
-        },
-    )
-`````)
-
-#tip-box[_subgraph 핸드오프 시 흘려야 할 메시지는 정확히 2개_ — (1) 핸드오프 도구를 호출한 `AIMessage(tool_calls=[...])` 와 (2) 그에 대한 `ToolMessage` _두 개만_ 다음 subgraph로 전달되어야 합니다. 그 사이에 다른 메시지를 끼워 넣으면 OpenAI provider가 tool_call 짝이 맞지 않는다고 거부합니다.]
-
-핸드오프가 여러 에이전트 사이에서 대화를 이동시키는 것이라면, 스킬 패턴은 하나의 에이전트가 _역할을 전환_하는 보다 경량화된 접근법입니다.
+→ 위 8.4.1의 `wrap_model_call` 패턴은 이 규칙을 자동으로 따릅니다 (도구가 `ToolMessage` 하나만 흘리고 state.role을 갱신).
 
 == 8.5 스킬 패턴
 
-단일 에이전트가 상황에 따라 _전문 프롬프트를 로드_하는 패턴입니다. 여러 에이전트를 별도로 생성하는 대신, 하나의 에이전트가 도메인별 시스템 프롬프트를 교체하며 전문가처럼 동작합니다.
+단일 에이전트가 상황에 따라 _전문 프롬프트를 로드_하는 패턴입니다.
 
 === 특징
 - 하나의 에이전트가 여러 "스킬"을 가집니다.
 - 각 스킬은 특화된 시스템 프롬프트입니다.
 - 에이전트가 필요한 스킬을 동적으로 로드합니다.
-- 여러 에이전트를 관리할 필요 없이 하나의 에이전트로 다양한 작업을 처리할 수 있습니다.
-
-#tip-box[스킬 패턴은 오버헤드가 가장 적은 멀티 에이전트 패턴입니다. 에이전트 인스턴스가 하나뿐이므로 상태 관리와 그래프 구성이 불필요합니다. 도메인 간 도구 집합이 겹치지 않고, 프롬프트 전환만으로 충분한 경우에 가장 효율적입니다.]
-
-스킬 패턴이 하나의 에이전트 내부에서 프롬프트를 전환하는 것이라면, 라우터 패턴은 입력 단계에서 _어느 에이전트가 처리할지를 먼저 결정_하는 방식입니다.
+- 여러 에이전트를 관리하지 않고도 하나의 에이전트로 다양한 작업을 처리할 수 있습니다.
 
 == 8.6 라우터 패턴
 
-분류기가 입력을 적절한 에이전트로 _라우팅_하는 패턴입니다. 라우터 노드는 사용자의 쿼리를 분석하여 카테고리를 판별한 뒤, 해당 카테고리 전문 에이전트로 요청을 전달합니다. 분류 로직은 LLM을 사용할 수도 있고, 키워드 매칭이나 임베딩 유사도 같은 규칙 기반으로도 구현할 수 있습니다.
+분류기가 입력을 적절한 에이전트로 _라우팅_하는 패턴입니다.
 
 === 특징
 - 먼저 쿼리를 분류(classify)합니다.
@@ -332,25 +307,9 @@ def transfer_to_billing(reason: str, runtime: ToolRuntime[None, SupportState]) -
 - 멀티 도메인 시스템에서 유용합니다.
 - 분류 로직은 규칙 기반 또는 LLM 기반으로 구현할 수 있습니다.
 
-#tip-box[라우터의 분류기를 LLM 기반으로 구현할 때는 경량 모델(예: `gpt-5.4-mini`)을 사용하는 것이 비용 효율적입니다. 분류 작업은 복잡한 추론이 필요하지 않으므로, 빠르고 저렴한 모델로도 충분한 정확도를 얻을 수 있습니다.]
+=== 8.6.1 진짜 fan-out 라우터 — `Send`로 병렬 분배
 
-=== `Send`로 멀티 도메인 fan-out
-
-쿼리가 _여러 도메인_을 동시에 다뤄야 할 때는 단일 라우팅 대신 `Send` 로 _병렬 fan-out_ 합니다. `add_conditional_edges` 의 라우팅 함수가 `list[Send]` 를 반환하면 LangGraph 런타임이 해당 노드들을 _병렬_로 실행합니다.
-
-#code-block(`````python
-from langgraph.types import Command, Send
-
-def route_to_agents(state: RouterState) -> list[Send]:
-    """분류 결과에 포함된 모든 카테고리로 fan-out."""
-    return [
-        Send(c["agent"], {"query": c["query"]})
-        for c in state["classifications"]
-    ]
-
-graph.add_conditional_edges("classifier", route_to_agents,
-                             ["billing_agent", "tech_agent", "general_agent"])
-`````)
+위 8.6 예제의 `from langgraph.types import Send`는 사실 dead import였습니다(분류 후 단일 분기만 실행). 실제 라우터의 강점은 _분류 결과를 여러 노드에 동시에 fan-out_하는 능력입니다. 한 질문이 여러 도메인에 걸칠 때 `Send(node, payload)` 리스트를 반환하면 LangGraph가 병렬로 실행합니다.
 
 == 8.7 패턴 선택 가이드
 
@@ -414,6 +373,3 @@ graph.add_conditional_edges("classifier", route_to_agents,
 - 단순한 것부터 시작하고, 필요에 따라 복잡도를 높이세요.
 - 각 에이전트는 _하나의 책임_만 가지도록 설계하세요.
 - 에이전트 간 _인터페이스_(입력/출력)를 명확히 정의하세요.
-
-다음 장에서는 이 패턴들 중 _Custom_ 패턴의 핵심인 `StateGraph`를 본격적으로 활용하여, 에이전트를 워크플로 노드로 통합하고 RAG(Retrieval-Augmented Generation) 파이프라인을 구현하는 방법을 학습합니다.
-

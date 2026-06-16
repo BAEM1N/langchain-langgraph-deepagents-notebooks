@@ -3,10 +3,10 @@
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-#chapter(2, "SQL 에이전트", subtitle: "자연어 데이터베이스 질의")
+#chapter(2, "SQL 에이전트", subtitle: "자연어 데이터베이스 질의 + HITL 4-decision")
 
 == 학습 목표
-#learning-objectives([SQLDatabaseToolkit으로 SQL 도구를 자동 생성한다], [AGENTS.md 기반 안전 규칙(READ-ONLY)을 적용한다], [HITL(Human-in-the-Loop) interrupt로 쿼리 실행 전 승인을 구현한다], [v1 미들웨어(HumanInTheLoopMiddleware, ModelCallLimitMiddleware)를 명시적으로 적용한다])
+#learning-objectives([`SQLDatabaseToolkit`으로 SQL 도구 4종을 자동 생성한다], [AGENTS.md / Skills 기반 안전 규칙(READ-ONLY)을 적용한다], [HITL 4-decision(`approve` / `edit` / `reject` / `respond`)을 모두 시연한다], [`interrupt_on={"sql_db_query": {"allowed_decisions": [...]}}` 로 도구별 정책을 좁힌다], [`version="v2"` 호출과 `Command(resume={"decisions": [...]})` 재개 패턴을 익힌다])
 
 == 개요
 
@@ -19,18 +19,22 @@
   text(weight: "bold")[항목],
   text(weight: "bold")[내용],
   [_프레임워크_],
-  [LangChain + Deep Agents],
+  [LangChain v1 + Deep Agents],
   [_핵심 컴포넌트_],
-  [SQLDatabaseToolkit, SQLDatabase, InMemorySaver],
+  [`SQLDatabaseToolkit`, `SQLDatabase`, `InMemorySaver`],
   [_에이전트 패턴_],
   [AGENTS.md 안전 규칙 + Skills 기반 워크플로],
   [_HITL_],
   [`interrupt_on={"sql_db_query": {"allowed_decisions":[...]}}` + `Command(resume={"decisions":[...]})`],
+  [_호출 버전_],
+  [`version="v2"` — `GraphOutput` 의 `.interrupts` 필요],
   [_데이터베이스_],
   [Chinook (SQLite)],
   [_스킬_],
   [`skills/sql-agent/SKILL.md` — SQL 안전 규칙 + 쿼리 워크플로],
 )
+
+#note-box[참고: `docs/langchain/17-human-in-the-loop.md` — HITL 4-decision 사양]
 
 #code-block(`````python
 from dotenv import load_dotenv
@@ -180,25 +184,34 @@ agent = create_deep_agent(
 )
 `````)
 
-== 6단계: HITL 에이전트 (interrupt_on)
+== 6단계: HITL 에이전트 (4-decision 정책)
 
-`create_deep_agent`의 `interrupt_on` 파라미터로 도구별 승인 정책을 설정합니다. `sql_db_query` 호출 전에 실행이 중단되고, `Command(resume={"decisions":[...]})`로 재개합니다. v1에서는 도구별로 허용할 결정 종류를 `allowed_decisions`로 명시할 수 있습니다.
+`create_deep_agent`의 `interrupt_on` 파라미터로 도구별 승인 정책을 설정합니다. `sql_db_query` 호출 전에 실행이 중단되고, `Command(resume={"decisions": [...]})` 로 재개합니다. **호출 시 `version="v2"`** 가 필요합니다.
 
 #table(
-  columns: 2,
+  columns: 3,
   align: left,
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[파라미터],
-  text(weight: "bold")[역할],
-  [`interrupt_on={"sql_db_query": {"allowed_decisions": [...]}}`],
-  [`sql_db_query` 호출 전 실행 중단 + 허용 결정 종류 지정],
-  [`ModelCallLimitMiddleware`],
-  [무한 루프 방지 — 최대 15회 모델 호출 제한],
-  [`InMemorySaver`],
-  [체크포인팅으로 중단/재개 지원],
+  text(weight: "bold")[결정 유형],
+  text(weight: "bold")[페이로드],
+  text(weight: "bold")[동작],
+  [`approve`],
+  [`{"type": "approve"}`],
+  [도구를 그대로 실행],
+  [`edit`],
+  [`{"type": "edit", "edited_action": {"name":"sql_db_query", "args":{"query":"..."}}}`],
+  [인자 수정 후 실행],
+  [`reject`],
+  [`{"type": "reject", "message": "..."}`],
+  [실행 거부 + 에이전트에 피드백],
+  [`respond`],
+  [`{"type": "respond", "message": "..."}`],
+  [도구 호출 생략, 사람 응답이 ToolMessage 가 됨],
 )
+
+여기서는 위험한 데이터 변경 도구가 없으므로 `sql_db_query` 에 대해 _네 결정 모두를 허용_합니다. 운영 환경에서는 `allowed_decisions=["approve","reject"]` 처럼 좁혀 두는 것이 안전합니다.
 
 #code-block(`````python
 from langgraph.checkpoint.memory import InMemorySaver
@@ -222,37 +235,23 @@ hitl_agent = create_deep_agent(
 )
 `````)
 
-== 7단계: 승인 후 재개 — 4가지 결정 유형
+== 7단계: 4-decision 시연
 
-`Command(resume={"decisions": [...]})`로 중단된 실행을 재개합니다. v1 `HITLResponse`는 네 가지 결정 유형을 지원합니다.
+각 결정 유형이 어떻게 동작하는지 개별 thread 에서 확인합니다.
 
-#table(
-  columns: 2,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[결정 유형],
-  text(weight: "bold")[설명],
-  [`{"type": "approve"}`],
-  [도구 호출 승인 — 그대로 실행],
-  [`{"type": "edit", "edited_action": {"name": "...", "args": {...}}}`],
-  [도구 호출 수정 후 실행 (예: LIMIT 추가, WHERE 조건 보강)],
-  [`{"type": "reject", "message": "..."}`],
-  [도구 호출 거부 — 에이전트에게 피드백 메시지 전달],
-  [`{"type": "respond", "message": "..."}`],
-  [도구 실행을 건너뛰고 사람의 답변을 도구 결과로 사용 — "ask user" 패턴],
-)
+=== 7-1. `approve` — 제안된 SQL 그대로 실행
 
-#code-block(`````python
-from langgraph.types import Command
+=== 7-2. `edit` — SQL 인자를 수정한 뒤 실행
 
-response = hitl_agent.invoke(
-    Command(resume={"decisions": [{"type": "approve"}]}),
-    config={**thread, **lf_config},
-    version="v2",
-)
-`````)
+검토자가 더 엄격한 `LIMIT` 을 강제하거나 컬럼을 추가하고 싶을 때 사용합니다. `edited_action.args` 로 도구 인자를 덮어씁니다.
+
+=== 7-3. `reject` — 실행 거부 후 에이전트에 피드백
+
+`message` 가 ToolMessage 로 추가되어 에이전트가 다음 사고에서 이를 반영합니다.
+
+=== 7-4. `respond` — 도구 실행을 건너뛰고 사람이 직접 답변
+
+`respond` 는 도구 호출 자체를 생략합니다. 검토자의 `message` 가 그대로 ToolMessage 가 되어 에이전트의 다음 응답에 반영됩니다. "이번엔 굳이 쿼리하지 말고 내가 알려준 값을 써" 같은 시나리오에 적합합니다.
 
 #chapter-summary-header()
 
@@ -267,18 +266,20 @@ response = hitl_agent.invoke(
   [_도구 생성_],
   [`SQLDatabaseToolkit(db, llm).get_tools()` → 4개 SQL 도구 자동 생성],
   [_안전 규칙_],
-  [AGENTS.md로 READ-ONLY 정책 적용],
-  [_Skills_],
-  [query-writing, schema-exploration 워크플로 가이드],
-  [_HITL_],
-  [`interrupt_on={"sql_db_query": {"allowed_decisions":[...]}}` → 4-decision (`approve` / `edit` / `reject` / `respond`)],
+  [Skills + 프롬프트로 READ-ONLY 정책 적용],
+  [_HITL 정책_],
+  [`interrupt_on={"sql_db_query": {"allowed_decisions": [...]}}`],
+  [_HITL 호출_],
+  [`version="v2"` → `GraphOutput.interrupts` 검사 → `Command(resume={"decisions":[...]})` 재개],
+  [_4-decision_],
+  [`approve` (그대로) / `edit` (인자 수정) / `reject` (피드백 후 거부) / `respond` (도구 생략, 사람 답변)],
 )
 
 
 #references-box[
+- `docs/langchain/17-human-in-the-loop.md` — HITL 4-decision · `version="v2"` 사양
 - `docs/deepagents/examples/03-text-to-sql-agent.md`
 - #link("https://python.langchain.com/docs/tutorials/sql_qa/")[LangChain SQL Agent Tutorial]
-- `docs/deepagents/06-backends.md`
 _다음 단계:_ → #link("./03_data_analysis_agent.ipynb")[03_data_analysis_agent.ipynb]: 데이터 분석 에이전트를 구축합니다.
 ]
 #chapter-end()

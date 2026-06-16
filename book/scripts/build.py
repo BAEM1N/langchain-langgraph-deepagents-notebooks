@@ -71,6 +71,7 @@ def run_compile() -> bool:
 
     result = subprocess.run(
         [typst_cmd, "compile", str(MAIN_TYP), str(OUTPUT_PDF),
+         "--root", str(BOOK_DIR.parent),
          "--font-path", "fonts",],
         cwd=str(BOOK_DIR),
         capture_output=True,

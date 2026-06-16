@@ -5,11 +5,7 @@
 
 #chapter(12, "프론트엔드 스트리밍")
 
-사용자가 에이전트의 응답을 수 초간 기다리게 하는 것은 좋은 경험이 아닙니다. 토큰이 생성되는 즉시 화면에 표시하면 체감 응답 시간이 극적으로 줄어듭니다. 이 장에서는 백엔드의 LangGraph 스트리밍 API부터 프론트엔드의 React `useStream` 훅까지, 실시간 스트리밍을 구현하는 전체 파이프라인을 학습합니다.
-
-스트리밍이 중요한 이유는 단순히 UX를 넘어서, 에이전트의 _투명성_에 있습니다. 에이전트가 어떤 도구를 호출하고 있는지, 어떤 단계를 실행 중인지를 실시간으로 보여주면 사용자의 신뢰가 높아집니다. LangGraph SDK는 `StreamEvent` 프로토콜을 통해 토큰 스트리밍뿐 아니라 도구 호출 시작/완료, 노드 전환 등의 내부 이벤트도 세밀하게 전달할 수 있습니다.
-
-#learning-header()
+== 학습 목표
 LLM 응답을 실시간으로 스트리밍하여 사용자에게 전달하는 방법을 알아봅니다.
 
 이 노트북에서 다루는 내용:
@@ -18,6 +14,7 @@ LLM 응답을 실시간으로 스트리밍하여 사용자에게 전달하는 �
 - `StreamEvent` 프로토콜을 이해한다
 - Python SDK로 실시간 스트리밍을 소비하는 방법을 익힌다
 - 에이전트 상태 실시간 표시 패턴을 안다
+- Headless Tools와 Custom Stream Channels로 UI 확장 지점을 구분한다
 
 == 12.1 환경 설정
 
@@ -34,31 +31,16 @@ model = ChatOpenAI(
 
 print("환경 준비 완료.")
 `````)
-#output-block(`````
-환경 준비 완료.
-`````)
 
 == 12.2 Python SDK 스트리밍 기초
 
-`.stream()` 메서드는 모델 응답을 토큰 단위로 실시간 전달합니다. 사용자는 전체 응답이 완성되기 전에 부분 결과를 볼 수 있습니다. 내부적으로 `.stream()`은 LLM API의 스트리밍 응답을 파이썬 제너레이터로 감싸서, `for chunk in model.stream(...)` 형태로 각 토큰 청크를 순회할 수 있게 합니다.
-
-#align(center)[#image("../../assets/diagrams/png/frontend_streaming_flow.png", width: 88%, height: 106mm, fit: "contain")]
-
-이 그림처럼 프론트엔드 스트리밍은 단순히 _토큰을 받는 기능_ 이 아니라, 스레드 재개, 상태 동기화, 커스텀 이벤트 수신까지 포함하는 _세션 프로토콜_ 에 가깝습니다.
-
-`.stream()`이 최종 출력만 토큰 단위로 전달한다면, `.astream_events()`는 에이전트 실행의 _모든 내부 이벤트_를 제공합니다.
+`.stream()` 메서드는 모델 응답을 토큰 단위로 실시간 전달합니다. 전체 응답이 완성되기 전에 부분 결과를 볼 수 있습니다.
 
 == 12.3 astream_events()
 
-`.astream_events()`는 비동기 방식으로 _모든 내부 이벤트_를 스트리밍합니다. 모델 호출, 도구 실행, 체인 단계 등을 세밀하게 추적할 수 있습니다. 각 이벤트는 `event`(이벤트 타입), `data`(이벤트 데이터), `metadata`(실행 컨텍스트) 필드를 포함하는 딕셔너리입니다.
+`.astream_events()`는 비동기 방식으로 _모든 내부 이벤트_를 스트리밍합니다. 모델 호출, 도구 실행, 체인 단계 등을 세밀하게 추적할 수 있습니다.
 
 === 주요 이벤트 타입
-
-#align(center)[#image("../../assets/diagrams/png/frontend_streaming_events.png", width: 88%, height: 145mm, fit: "contain")]
-
-이 다이어그램은 _사용자 입력 → `useStream` → LangGraph 서버 → 에이전트 런타임 → 이벤트 반환_ 의 왕복 흐름을 보여줍니다. 실무에서는 토큰 자체보다도 `on_tool_start`, `on_tool_end` 같은 _상태 이벤트_ 가 중요합니다. 사용자는 "지금 답을 쓰는 중인지", "검색 도구를 실행 중인지"를 구분해 볼 수 있어야 체감 대기 시간이 크게 줄어듭니다.
-
-#tip-box[_이벤트 읽는 법_: *start 계열*은 UI 상태 전환, *stream 계열*은 점진적 렌더링, *end 계열*은 메시지 확정 저장에 연결하면 구현이 깔끔합니다.]
 
 #table(
   columns: 2,
@@ -137,16 +119,67 @@ await stream_events_demo()
 ... (truncated)
 `````)
 
-백엔드의 스트리밍 API를 살펴보았으니, 이제 프론트엔드에서 이 스트림을 소비하는 방법을 알아보겠습니다. `useStream` React 훅은 백엔드의 복잡한 스트리밍 프로토콜을 추상화하여, 프론트엔드 개발자가 몇 줄의 코드로 실시간 채팅 UI를 구축할 수 있게 합니다.
+== 12.4 Event Streaming v3 — LangChain 1.3+
 
-== 12.4 useStream React 훅
+LangChain 1.3부터 agent 실행에는 `stream_events(..., version="v3")`를 우선 검토합니다. 기존 `.stream()`은 토큰을 직접 받는 저수준 API이고, v3 event streaming은 _메시지, 도구 호출, 상태, 최종 출력_을 projection 단위로 나누어 UI 코드가 덜 복잡해집니다.
 
-`useStream`은 LangGraph SDK(`@langchain/langgraph-sdk/react`)에서 제공하는 React 훅으로, LangGraph 서버와의 스트리밍 통신을 간편하게 처리합니다. 이 훅은 스레드 생성, 메시지 전송, 스트림 수신, 에러 처리를 모두 내부적으로 관리합니다.
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Projection],
+  text(weight: "bold")[의미],
+  text(weight: "bold")[UI 매핑],
+  [`stream.messages`],
+  [모델 메시지와 토큰 delta],
+  [채팅 버블],
+  [`stream.tool_calls`],
+  [도구 시작·출력·완료·오류],
+  [도구 타임라인],
+  [`stream.values`],
+  [agent state snapshot],
+  [디버그 패널],
+  [`stream.output`],
+  [최종 state],
+  [저장/후처리],
+)
 
-#note-box[_이벤트 타입별 사용 기준_
-- `on_chat_model_stream` — 사용자에게 바로 보여 줄 텍스트 토큰
-- `on_tool_start` / `on_tool_end` — 로딩 스피너, 단계 표시, 로그 패널
-- 커스텀 이벤트 — 진행률, 분석 중간 결과, 멀티에이전트 상태 같은 앱 전용 UI]
+이 API는 LangGraph의 v3 event streaming 위에 올라가므로 LangGraph/Deep Agents와 같은 UI 패턴을 공유합니다.
+
+#code-block(`````python
+# Event Streaming v3 패턴 — 설치 버전이 낮아도 안전하게 읽을 수 있는 예시 출력
+from importlib.metadata import version
+
+print("설치된 langchain:", version("langchain"))
+print("필요 버전: langchain>=1.3.0")
+
+example = r'''
+from langchain.agents import create_agent
+
+def get_weather(city: str) -> str:
+    """도시 날씨를 조회합니다."""
+    return f"{city}: 맑음"
+
+agent = create_agent(model="openai:gpt-5.4", tools=[get_weather])
+stream = agent.stream_events(
+    {"messages": [{"role": "user", "content": "서울 날씨 알려줘"}]},
+    version="v3",
+)
+
+for message in stream.messages:
+    for token in message.text:
+        print(token, end="", flush=True)
+
+final_state = stream.output
+'''
+print(example)
+`````)
+
+== 12.5 useStream React 훅
+
+`useStream`은 LangGraph SDK에서 제공하는 React 훅으로, LangGraph 서버와의 스트리밍 통신을 간편하게 처리합니다.
 
 === 기본 사용법
 
@@ -211,7 +244,7 @@ function Chat() {
   [스트림 중단],
 )
 
-== 12.5 useStream 설정 옵션
+== 12.6 useStream 설정 옵션
 
 #table(
   columns: 4,
@@ -273,7 +306,7 @@ function Chat() {
   [캐시된 초기 상태],
 )
 
-== 12.6 스레드 관리와 재연결
+== 12.7 스레드 관리와 재연결
 
 === 스레드 ID 관리
 
@@ -309,9 +342,9 @@ const stream = useStream({
 });
 `````)
 
-== 12.7 브랜칭과 메시지 편집
+== 12.8 브랜칭과 메시지 편집
 
-브랜칭을 사용하면 대화 히스토리의 특정 지점에서 _대체 경로_를 만들 수 있습니다. 이 기능의 기반은 LangGraph의 _체크포인트_ 시스템입니다. 매 단계마다 상태가 자동으로 저장되므로, 이전 체크포인트로 돌아가 새로운 입력으로 분기를 생성할 수 있습니다. 메시지를 편집하거나 AI 응답을 재생성할 때 유용합니다.
+브랜칭을 쓰면 대화 히스토리의 특정 지점에서 _대체 경로_를 만들 수 있습니다. 메시지를 편집하거나 AI 응답을 재생성할 때 유용합니다.
 
 #code-block(`````tsx
 {stream.messages.map((message) => {
@@ -352,9 +385,9 @@ const stream = useStream({
 
 핵심: `checkpoint` 파라미터로 특정 시점의 상태로 돌아가 새로운 분기를 생성합니다.
 
-== 12.8 커스텀 스트리밍 이벤트
+== 12.9 커스텀 스트리밍 이벤트
 
-LangGraph의 기본 이벤트(토큰 스트리밍, 도구 호출 등) 외에도, 에이전트에서 _커스텀 데이터_를 클라이언트로 스트리밍할 수 있습니다. 도구 실행 중 진행률 표시, 중간 분석 결과 전달, 단계별 상태 업데이트 등 애플리케이션 고유의 데이터를 실시간으로 전달할 때 유용합니다. 서버 측에서는 `config.writer()` 패턴을 사용하고, 클라이언트 측에서는 `onCustomEvent` 콜백으로 수신합니다.
+에이전트에서 _커스텀 데이터_를 클라이언트로 스트리밍할 수 있습니다. 진행 상황, 중간 결과 등을 실시간으로 전달할 때 유용합니다.
 
 #code-block(`````python
 # 커스텀 스트리밍 이벤트 — Python writer 패턴
@@ -418,11 +451,9 @@ async def analyze_data(
   onCustomEvent: (data) => setProgress(data.progress)
 `````)
 
-== 12.9 멀티 에이전트 스트리밍
+== 12.10 멀티 에이전트 스트리밍
 
-8장에서 학습한 멀티 에이전트 패턴과 스트리밍을 결합하면, 여러 에이전트가 협업하는 과정을 사용자에게 실시간으로 보여줄 수 있습니다. 여러 에이전트가 협업하는 환경에서는 각 에이전트의 메시지를 _구분하여 표시_해야 합니다. 메타데이터의 `langgraph_node`를 사용하여 메시지 출처를 식별합니다.
-
-#tip-box[멀티 에이전트 스트리밍에서는 각 에이전트에 고유한 색상과 레이블을 부여하여 시각적으로 구분하는 것이 좋습니다. 사용자가 "지금 리서치 에이전트가 검색 중"인지 "작성 에이전트가 글을 쓰는 중"인지 한눈에 파악할 수 있으면 에이전트 시스템에 대한 신뢰도가 크게 높아집니다.]
+여러 에이전트가 협업하는 환경에서는 각 에이전트의 메시지를 _구분하여 표시_해야 합니다. 메타데이터의 `langgraph_node`로 메시지 출처를 식별합니다.
 
 #code-block(`````tsx
 // 노드별 설정
@@ -477,6 +508,39 @@ function AgentMessage({ message, stream }) {
   [—],
 )
 
+== 12.11 Headless Tools와 Custom Stream Channels
+
+최신 LangChain/LangGraph UI 문서는 프론트엔드 확장을 두 축으로 나눕니다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[기능],
+  text(weight: "bold")[언제 쓰나],
+  text(weight: "bold")[프론트엔드 연결],
+  [_Headless Tools_],
+  [서버에는 tool schema만 두고, 실제 실행은 브라우저/디바이스 API에서 해야 할 때],
+  [`useStream({ tools: [...] })`, `stream.toolCalls`],
+  [_Custom Stream Channels_],
+  [모델 토큰이 아닌 별도 진행률·상태·차트 데이터를 흘려보낼 때],
+  [`useExtension`, `useChannel`],
+)
+
+Headless tool은 “도구 실행을 서버가 아니라 클라이언트에서 하게 할까”의 문제입니다. 서버 tool은 `interrupt()`로 실행을 프론트엔드에 넘기고, 브라우저 구현은 같은 tool 이름과 schema를 mirror한 뒤 `.implement(...)`로 붙입니다.
+
+#code-block(`````tsx
+const stream = useStream<AgentState>({
+  apiUrl: AGENT_URL,
+  assistantId: "headless_tools",
+  tools: [memoryPut, memoryGet, geolocationGet],
+});
+`````)
+
+Custom channel은 “기본 메시지 스트림 밖의 데이터를 어디로 보낼까”의 문제입니다. 최신값만 필요하면 `useExtension("channel-name")`, 로그/히스토리가 필요하면 `useChannel(stream, ["custom:channel-name"])`로 분리합니다.
+
 #chapter-summary-header()
 
 이 노트북에서 배운 내용:
@@ -493,6 +557,8 @@ function AgentMessage({ message, stream }) {
   [`.stream()`으로 토큰 단위 실시간 응답을 받습니다],
   [_astream_events_],
   [비동기 이벤트 스트리밍으로 모델/도구 호출을 세밀하게 추적합니다],
+  [_Event Streaming v3_],
+  [`stream_events(..., version="v3")`로 메시지·도구·상태 projection을 분리합니다],
   [_useStream_],
   [React 훅으로 LangGraph 서버와 스트리밍 통신을 간편하게 처리합니다],
   [_스레드 관리_],
@@ -503,12 +569,17 @@ function AgentMessage({ message, stream }) {
   [`writer` 패턴으로 진행 상황 등 커스텀 데이터를 스트리밍합니다],
   [_멀티에이전트_],
   [`langgraph_node` 메타데이터로 에이전트별 메시지를 구분 표시합니다],
+  [_Headless Tools_],
+  [`useStream({ tools })`로 브라우저 구현을 연결하고 `stream.toolCalls`로 상태를 표시합니다],
+  [_Custom Channels_],
+  [`useChannel`로 진행률·차트 등 별도 스트림을 수신합니다],
 )
 
-스트리밍을 통해 에이전트의 실행 과정을 사용자에게 투명하게 전달하는 방법을 배웠습니다. 그러나 에이전트가 사용자에게 직접 노출되는 만큼, 안전하지 않은 입력이나 부적절한 출력에 대한 방어가 필수적입니다. 다음 장에서는 에이전트의 입출력 경계에 _가드레일_을 설치하여 PII 유출, 프롬프트 인젝션, 위험한 도구 실행 등을 방지하는 방법을 학습합니다.
 
 #references-box[
-- #link("../docs/langchain/08-streaming.md")[Streaming] — `useStream` 정식 레퍼런스와 이벤트 프로토콜 상세
+- #link("../docs/langchain/08-streaming.md")[Streaming] — useStream 정식 문서
 - #link("../docs/langchain/28-ui.md")[UI (Agent Chat UI & useStream)]
+- #link("../docs/langchain/28-ui.md")[Headless Tools / Custom Stream Channels]
+- #link("../docs/langchain/08-streaming.md")[LangChain Event Streaming v3]
 ]
 #chapter-end()

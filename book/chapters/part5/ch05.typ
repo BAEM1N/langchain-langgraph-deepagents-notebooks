@@ -5,24 +5,12 @@
 
 #chapter(5, "Agentic RAG", subtitle: "- LangGraph로 직접 구축")
 
-이전 장에서 학습한 컨텍스트 엔지니어링의 가장 대표적인 실전 응용이 RAG입니다. Retrieval-Augmented Generation(RAG)을 세 가지 방법으로 구현합니다: LangChain RAG Agent, LangChain RAG Chain, 그리고 LangGraph StateGraph 기반 커스텀 RAG. 문서 관련성 평가, 쿼리 리라이트, 조건부 라우팅 등 심화 패턴을 다룹니다.
+Retrieval-Augmented Generation(RAG)을 세 가지 방법으로 구현합니다: LangChain RAG Agent, LangChain RAG Chain, 그리고 LangGraph StateGraph 기반 커스텀 RAG. 문서 관련성 평가, 쿼리 리라이트, 조건부 라우팅 등 심화 패턴을 다룹니다.
 
-#learning-header()
+== 학습 목표
 #learning-objectives([RAG 파이프라인(인덱싱 -\> 검색 -\> 생성)의 전체 구조를 이해한다], [`RecursiveCharacterTextSplitter`로 문서를 청킹한다], [`InMemoryVectorStore`로 벡터 스토어를 구축한다], [LangChain `create_agent` + `@tool`로 RAG Agent를 구현한다], [`@dynamic_prompt` 미들웨어로 RAG Chain(단일 LLM 호출)을 구현한다], [LangGraph `StateGraph`로 커스텀 RAG 에이전트를 구축한다], [`GradeDocuments` 구조화 출력으로 문서 관련성을 평가한다], [쿼리 리라이트와 조건부 라우팅을 구현한다])
 
-#chapter-question-box[
-이 장의 중심 질문은 _"검색을 한 번 하고 바로 답할 것인가, 에이전트에게 검색을 맡길 것인가, 아니면 검색 이후의 판단 흐름까지 그래프로 직접 통제할 것인가?"_ 입니다.
-]
-
-#chapter-key-points((
-  [RAG는 오프라인 인덱싱과 온라인 질의 처리를 분리해서 보면 구조가 훨씬 단순해집니다.],
-  [단순 Q&A는 Chain, 유연한 검색은 Agent, 평가·재작성·재시도는 Graph가 잘 맞습니다.],
-  [검색 품질 문제는 보통 모델보다 청킹, 검색, 관련성 판단 설계에서 먼저 발생합니다.],
-))
-
 == 5.1 환경 설정
-
-RAG 파이프라인을 구축하기 위해 LLM과 임베딩 모델을 초기화합니다. `ChatOpenAI`는 텍스트 생성을, `OpenAIEmbeddings`는 문서를 벡터로 변환하는 역할을 담당합니다. 두 모델은 RAG의 서로 다른 단계에서 사용되므로 모두 필요합니다.
 
 #code-block(`````python
 from dotenv import load_dotenv
@@ -40,23 +28,9 @@ print("환경 준비 완료.")
 
 == 5.2 RAG 개요
 
-RAG(Retrieval-Augmented Generation)는 외부 지식을 검색하여 LLM 응답의 정확도를 높이는 패턴입니다. LLM은 두 가지 핵심 제약을 가집니다:
-- _유한한 컨텍스트_: 전체 코퍼스를 한 번에 처리할 수 없음
-- _정적 지식_: 학습 데이터가 시간이 지나면 구식이 됨
+RAG(Retrieval-Augmented Generation)는 외부 지식을 검색하여 LLM 응답의 정확도를 높이는 패턴입니다. LLM 의 두 가지 한계 — 유한한 컨텍스트(Finite context)와 정적 학습 지식(Static knowledge) — 을 검색으로 보완합니다.
 
-RAG는 쿼리 시점에 관련 외부 정보를 가져와 이 제약을 극복합니다.
-
-#align(center)[#image("../../assets/diagrams/png/rag_pipeline_overview.png", width: 76%, height: 148mm, fit: "contain")]
-
-RAG를 처음 볼 때는 _오프라인 인덱싱_ 과 _온라인 질의 처리_ 를 분리해서 보는 것이 가장 중요합니다. 문서를 청킹하고 임베딩하는 단계는 미리 준비해 두는 백오피스 작업이고, 사용자가 질문했을 때는 이미 준비된 벡터 스토어에서 관련 문서를 찾은 뒤 그 결과만 LLM에 넣어 답을 생성합니다.
-
-=== 파이프라인: 인덱싱 -\> 검색 -\> 생성
-
-#align(center)[#image("../../assets/diagrams/png/rag_end_to_end.png", width: 76%, height: 148mm, fit: "contain")]
-
-파이프라인을 두 개의 시간 축으로 나눠 보면 이해가 쉬워집니다. _인덱싱 단계_ 는 미리 준비하는 오프라인 작업이고, _질의 단계_ 는 사용자의 질문이 들어올 때마다 반복되는 온라인 작업입니다. 이 구분을 기억하면 청킹/임베딩 최적화와 검색/생성 최적화를 분리해서 설계할 수 있습니다.
-
-=== 5가지 핵심 구성 요소
+=== 5가지 빌딩 블록
 
 #table(
   columns: 2,
@@ -64,91 +38,56 @@ RAG를 처음 볼 때는 _오프라인 인덱싱_ 과 _온라인 질의 처리_ 
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[구성 요소],
+  text(weight: "bold")[빌딩 블록],
   text(weight: "bold")[역할],
-  [_Document Loaders_],
-  [외부 소스(Google Drive, Notion 등)에서 데이터를 표준 Document 객체로 수집],
-  [_Text Splitters_],
-  [대규모 문서를 컨텍스트 윈도우에 맞는 청크로 분할],
-  [_Embedding Models_],
-  [텍스트를 의미적으로 유사한 내용이 가까이 모이는 벡터로 변환],
-  [_Vector Stores_],
-  [임베딩을 저장하고 유사도 검색을 수행하는 전문 데이터베이스],
+  [_Document loaders_],
+  [Google Drive, Slack, Notion 등 외부 소스에서 표준화된 `Document` 객체로 데이터 수집],
+  [_Text splitters_],
+  [큰 문서를 컨텍스트 윈도우에 맞는 청크로 분할],
+  [_Embedding models_],
+  [텍스트를 벡터로 변환. 의미적으로 유사한 콘텐츠가 가까운 위치에 군집화],
+  [_Vector stores_],
+  [임베딩을 저장하고 유사도 기반으로 검색하는 전문 데이터베이스],
   [_Retrievers_],
-  [비정형 쿼리를 기반으로 관련 문서를 반환],
+  [비정형 쿼리에 대해 관련 문서를 반환하는 통일된 인터페이스],
 )
 
-=== 세 가지 RAG 아키텍처
-
-#align(center)[#image("../../assets/diagrams/png/rag_architecture_choices.png", width: 74%, height: 170mm, fit: "contain")]
-
-#diagram-guide-box[
-아래에서 위로 비교하지 말고, 각 박스를 독립 패턴으로 보면 됩니다. *2-Step RAG*는 가장 단순하고, *Agentic RAG*는 검색 시점과 횟수를 에이전트가 결정하며, *LangGraph Custom RAG*는 검색 이후의 평가와 재시도 규칙까지 명시합니다.
-]
+=== 3가지 RAG 아키텍처
 
 #table(
-  columns: 5,
+  columns: 6,
   align: left,
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[접근법],
   text(weight: "bold")[아키텍처],
-  text(weight: "bold")[LLM 호출],
+  text(weight: "bold")[설명],
+  text(weight: "bold")[레이턴시],
   text(weight: "bold")[유연성],
-  text(weight: "bold")[적합한 경우],
+  text(weight: "bold")[제어성],
+  text(weight: "bold")[적합 사례],
   [_2-Step RAG_],
-  [검색 후 즉시 생성],
-  [단일],
+  [검색 후 생성. 예측 가능한 순서],
+  [빠름],
   [낮음],
-  [FAQ, 문서 봇 (빠르고 예측 가능)],
+  [높음],
+  [FAQ, 문서 봇],
   [_Agentic RAG_],
-  [에이전트가 검색 시점/방법 결정],
-  [다중],
+  [에이전트가 추론 중 검색 여부와 방법을 결정],
+  [가변],
   [높음],
-  [복잡한 리서치, 다중 도구 접근],
+  [중간],
+  [리서치 어시스턴트],
   [_Hybrid RAG_],
-  [쿼리 강화 + 검색 검증 + 답변 품질 체크],
-  [다중],
+  [두 방식 결합 + 쿼리 강화·검색 검증·답변 품질 체크 등 반복 단계 추가],
+  [가변],
   [높음],
-  [반복적 정제가 필요한 경우],
+  [높음],
+  [프로덕션 어시스턴트],
 )
 
-=== Agent vs Chain 접근 (LangChain 구현)
+이 노트북에서는 _Agentic RAG_(LangChain `create_agent` + retriever tool)와 _Hybrid RAG_(LangGraph `StateGraph` Rewrite → Retrieve → Agent 3-노드 패턴)를 모두 구현합니다.
 
-#table(
-  columns: 4,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[접근법],
-  text(weight: "bold")[아키텍처],
-  text(weight: "bold")[LLM 호출],
-  text(weight: "bold")[적합한 경우],
-  [_RAG Agent_],
-  [에이전트 + retriever 도구],
-  [다중],
-  [복잡한 쿼리, 쿼리 재구성 필요],
-  [_RAG Chain_],
-  [미들웨어 주입 컨텍스트],
-  [단일],
-  [단순 Q&A, 예측 가능한 비용],
-  [_LangGraph 커스텀_],
-  [StateGraph + 커스텀 노드],
-  [다중],
-  [관련성 평가, 리라이트 등 세밀한 제어],
-)
-
-#note-box[_선택 기준 요약_
-- _Agent_ 는 검색 횟수나 도구 사용을 스스로 결정해야 할 때 적합합니다.
-- _Chain_ 은 비용과 지연 시간을 예측 가능하게 유지해야 할 때 가장 단순합니다.
-- _Graph_ 는 관련성 평가, 재작성, 재시도 규칙을 명시적으로 통제해야 할 때 선택합니다.]
-
-#note-box[_언제 쓰지 않을까?_
-- *RAG Chain*으로 충분한 질문을 Agent로 만들면 비용과 동작 편차가 불필요하게 늘어납니다.
-- *RAG Agent*는 유연하지만, 검색 횟수와 도구 선택을 통제해야 하는 요구가 강하면 오히려 Graph가 더 안전합니다.
-- *LangGraph 커스텀 RAG*는 가장 강력하지만, 단순 문서 Q&A에 적용하면 구현/운영 복잡도가 빠르게 커집니다.]
 
 == 5.3 문서 로딩 & 청킹
 
@@ -182,9 +121,7 @@ RAG를 처음 볼 때는 _오프라인 인덱싱_ 과 _온라인 질의 처리_ 
 )
 
 === 텍스트 분할 (Text Splitting)
-`RecursiveCharacterTextSplitter`는 `\n\n` -\> `\n` -\> ` ` -\> `""` 순으로 재귀적으로 분할하여 의미적 연관성을 유지합니다. 가장 범용적인 분할기로 권장됩니다. 분할 순서가 중요한 이유는, 가능한 한 단락 단위로 분할하여 _의미가 끊기지 않는 청크_를 만들기 위해서입니다. 단락 경계(`\n\n`)에서 분할할 수 없을 만큼 긴 텍스트만 문장 경계(`\n`)로 넘어가고, 그래도 안 되면 공백 경계로 내려갑니다.
-
-#tip-box[`chunk_size`와 `chunk_overlap`의 최적값은 데이터와 사용 사례에 따라 달라집니다. 일반적으로 FAQ 봇에는 작은 청크(500자)가 정밀한 검색에 유리하고, 보고서 생성에는 큰 청크(1500~2000자)가 맥락 보존에 효과적입니다. 시작 시 chunk_size=1000, chunk_overlap=200을 권장하며, 검색 품질 평가를 통해 조정하세요.]
+`RecursiveCharacterTextSplitter`는 `\n\n` -\> `\n` -\> ` ` -\> `""` 순으로 재귀적으로 분할하여 의미적 연관성을 유지합니다. 가장 범용적인 분할기로 권장됩니다.
 
 #table(
   columns: 3,
@@ -257,13 +194,9 @@ print(f"총 청크 수: {len(splits)}")
 총 청크 수: 2
 `````)
 
-문서가 청크로 분할되었으니, 다음 단계는 이 청크들을 벡터로 변환하여 검색 가능한 형태로 저장하는 것입니다. 이 과정이 _인덱싱_이며, RAG 파이프라인의 오프라인 준비 단계에 해당합니다.
-
 == 5.4 벡터 스토어 구축
 
-벡터 스토어는 임베딩을 인덱싱하고 유사도 검색을 수행하는 전문 데이터베이스입니다. `InMemoryVectorStore`는 개발/테스트용으로 적합합니다. 벡터 스토어의 핵심 원리는 _의미적 유사도 검색_입니다. 전통적인 키워드 검색이 정확한 단어 매칭에 의존하는 반면, 벡터 검색은 임베딩 공간에서의 거리(코사인 유사도, 유클리드 거리 등)를 기준으로 의미적으로 가까운 문서를 찾습니다. 예를 들어 "LLM 애플리케이션 구축"이라는 쿼리는 "AI 시스템 개발"이라는 문서와도 높은 유사도를 보일 수 있습니다.
-
-#warning-box[`InMemoryVectorStore`는 프로세스 종료 시 모든 데이터가 소멸합니다. 프로덕션에서는 반드시 영속적 벡터 스토어(Chroma, FAISS, Pinecone 등)를 사용하세요. 또한 대규모 데이터셋(수만 건 이상)에서는 인프로세스 벡터 스토어의 메모리 사용량이 급격히 증가하므로, 클라이언트-서버 아키텍처의 벡터 스토어를 고려해야 합니다.]
+벡터 스토어는 임베딩을 인덱싱하고 유사도 검색을 수행하는 전문 데이터베이스입니다. `InMemoryVectorStore`는 개발/테스트용으로 적합합니다.
 
 === 주요 벡터 스토어 비교
 
@@ -328,8 +261,6 @@ print(f"벡터 스토어 준비 완료. 문서 {len(splits)}개.")
 벡터 스토어 준비 완료. 문서 2개.
 `````)
 
-벡터 스토어가 구축되었으니, 에이전트가 이를 활용하여 문서를 검색할 수 있도록 _도구(tool)_ 형태로 래핑해야 합니다. 에이전트는 도구를 통해서만 외부 시스템과 상호작용하므로, 벡터 스토어를 도구로 정의하는 것이 RAG 통합의 핵심입니다.
-
 == 5.5 검색 도구 정의
 
 `response_format="content_and_artifact"`를 사용하면 도구 출력을 두 부분으로 분리합니다:
@@ -352,18 +283,14 @@ def retrieve(query: str):
     return serialized, docs
 `````)
 
-== 5.6 LangChain RAG Agent -- `create_agent` + `\@tool`
+== 5.6 LangChain RAG Agent — `create_agent` + `\@tool` (Agentic RAG)
 
-가장 간단한 방법: retriever를 도구로 등록하고 에이전트가 필요할 때 호출합니다.
+가장 단순한 Agentic RAG 구현입니다. retriever 를 `@tool` 로 노출하고, 에이전트가 _언제 검색할지 / 어떤 쿼리로 검색할지_ 를 자율적으로 결정합니다.
 
-=== 다중 단계 검색 흐름
-RAG Agent는 자동으로 다중 검색 단계를 실행할 수 있습니다:
-+ _초기 검색_ -- 사용자 질문 기반 쿼리 생성
-+ _결과 평가_ -- 검색된 문서가 질문에 충분한지 판단
-+ _재구성 및 재검색_ -- 결과가 부족하면 쿼리를 수정하여 재검색
-+ _통합_ -- 모든 검색 결과를 결합하여 최종 답변 생성
+- `create_agent` 가 도구 호출 루프를 관리
+- 검색 호출 자체가 도구이므로, 다른 도구(웹 검색, 계산기 등)와 자연스럽게 조합 가능
+- 검색이 필요 없는 질문은 LLM 이 곧바로 답변 — 2-Step RAG 와의 가장 큰 차이
 
-이 접근법은 복잡한 리서치 질문에 적합하지만, 여러 번의 LLM 호출로 비용과 지연이 증가합니다.
 
 == 5.7 LangChain RAG Chain -- `\@dynamic_prompt` 미들웨어
 
@@ -398,7 +325,7 @@ RAG Agent는 자동으로 다중 검색 단계를 실행할 수 있습니다:
   [컨텍스트 주입이 암묵적],
 )
 
-_고급 활용_: `@dynamic_prompt`로 기본 컨텍스트를 주입하면서 동시에 retriever 도구를 제공하여 두 접근법을 결합할 수도 있습니다.
+_고급 활용_: `@dynamic_prompt`로 기본 컨텍스트를 주입하면서 retriever 도구를 함께 제공하여 두 접근법을 결합할 수도 있습니다.
 
 #code-block(`````python
 from langchain.agents.middleware import dynamic_prompt
@@ -412,57 +339,34 @@ def rag_prompt(request):
     return f"컨텍스트를 기반으로 답변하세요:\n\n{ctx}"
 `````)
 
-RAG Agent와 RAG Chain은 각각 유연성과 단순성에서 장점이 있습니다. 그러나 검색 결과의 품질을 자동으로 평가하고, 부적합한 경우 쿼리를 리라이트하여 재검색하는 _적응형 RAG_를 구현하려면 LangGraph `StateGraph`가 필요합니다. 이것이 Agentic RAG의 핵심입니다: retrieve → grade → generate → hallucination check의 순환 루프를 통해 답변 품질을 보장합니다.
+== 5.8 LangGraph 커스텀 RAG — StateGraph 구축
 
-== 5.8 LangGraph 커스텀 RAG -- StateGraph 구축
+`docs/langchain/23-custom-workflow.md` 의 _Rewrite → Retrieve → Agent_ 3-노드 패턴을 일반화하여, 검색 품질 검증과 질문 리라이트를 추가한 Hybrid RAG 를 구현합니다.
 
-LangGraph `StateGraph`로 세밀한 제어가 가능한 RAG 에이전트를 직접 구축합니다. 이 방식의 핵심 장점은 _조건부 라우팅_을 통해 검색 결과의 관련성을 평가하고, 관련 없는 경우 쿼리를 리라이트하여 재검색하는 등의 세밀한 흐름 제어가 가능하다는 것입니다.
-
-=== 아키텍처
-
-#align(center)[#image("../../assets/diagrams/png/rag_architecture_choices.png", width: 74%, height: 170mm, fit: "contain")]
-
-이 장의 LangGraph 구현은 위 세 번째 패턴에 해당합니다. 즉, 검색 자체보다도 _검색 이후의 판단_ — 관련성 평가, 재작성, 종료 조건 — 을 그래프로 명시하는 데 의미가 있습니다.
-
-#code-block(`````python
-        [generate_query_or_respond]
-             /              \
-       (tool call)       (no tool call)
-           |                  |
-      [retrieve]           [END]
-           |
-   [grade_documents]
-      /          \
-(relevant)    (not relevant)
-    |              |
-[generate]   [rewrite_question]
-    |              |
-  [END]    [generate_query_or_respond]
-`````)
-
-=== 각 노드의 역할
+=== 노드 구성
 
 #table(
-  columns: 2,
+  columns: 3,
   align: left,
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[노드],
+  text(weight: "bold")[노드 유형],
+  text(weight: "bold")[노드 이름],
   text(weight: "bold")[역할],
-  [`generate_query_or_respond`],
-  [진입 노드. 검색할지 직접 응답할지 결정],
-  [`retrieve`],
-  [`ToolNode`로 검색 실행],
-  [`grade_documents`],
-  [구조화 출력(`GradeDocuments`)으로 문서 관련성 평가],
+  [_Model node (Rewrite)_],
   [`rewrite_question`],
-  [관련 없는 결과 시 더 구체적인 쿼리로 리라이트],
-  [`generate_answer`],
-  [관련 문서 기반 최종 답변 생성],
+  [검색에 더 적합한 형태로 질문을 재작성 (구조화 출력 사용 가능)],
+  [_Deterministic node (Retrieve)_],
+  [`retrieve` (`ToolNode`)],
+  [벡터 유사도 검색을 수행],
+  [_Agent node (Generate)_],
+  [`generate_query_or_respond` / `generate_answer`],
+  [검색 결과를 추론하고 필요 시 추가 도구 호출],
 )
 
-#warning-box[`rewrite_question` → `generate_query_or_respond` 순환이 발생할 수 있습니다. `retry_count`를 State에 추가하여 최대 재시도 횟수를 제한하는 것이 권장됩니다. 기본적으로 2~3회 재시도 후 가용한 정보로 답변하는 전략이 효과적입니다.]
+이 패턴은 노드 단위로 검증/재시도/분기를 쉽게 추가할 수 있어 Hybrid RAG 구현에 적합합니다.
+
 
 #code-block(`````python
 from langgraph.graph import MessagesState
@@ -483,9 +387,7 @@ AgentState 키: ['messages', 'relevance']
 
 == 5.10 `grade_documents` 노드 -- 구조화 출력으로 관련성 평가
 
-Agentic RAG에서 가장 핵심적인 노드입니다. 검색된 문서가 사용자 질문과 실제로 관련이 있는지를 LLM이 평가합니다. 이 평가가 없으면 에이전트는 관련 없는 문서를 기반으로 환각(hallucination)을 생성할 위험이 있습니다. `GradeDocuments` 스키마로 LLM이 문서 관련성을 평가하며, `with_structured_output`으로 구조화된 응답을 받아 프로그래밍적으로 후속 처리를 결정합니다.
-
-#tip-box[`GradeDocuments`에 `reasoning` 필드를 포함하면 LLM이 평가 이유를 명시하게 됩니다. 이는 디버깅에 유용할 뿐 아니라, Chain-of-Thought 효과로 평가 정확도 자체도 향상시킵니다. 프로덕션에서는 이 이유를 로깅하여 검색 품질 분석에 활용할 수 있습니다.]
+`GradeDocuments` 스키마로 LLM이 문서 관련성을 평가합니다. `with_structured_output`으로 구조화된 응답을 받습니다.
 
 #code-block(`````python
 from pydantic import BaseModel, Field
@@ -527,21 +429,17 @@ def grade_documents(state: AgentState):
     }
 `````)
 
-문서 관련성 평가에서 "not_relevant"이 반환되면, 단순히 실패로 처리하지 않고 _쿼리를 개선하여 재검색_하는 전략을 취합니다. 이것이 Agentic RAG가 단순 RAG와 차별화되는 핵심 메커니즘입니다.
-
 == 5.11 `rewrite_question` 노드
 
-검색된 문서가 관련 없을 때, 원래 질문을 더 구체적으로 리라이트하여 검색 품질을 향상시킵니다. 리라이트 전략은 다양합니다: 모호한 용어를 구체화하거나, 질문의 범위를 좁히거나, 동의어를 사용하여 다른 각도에서 검색할 수 있습니다. LLM이 원래 질문의 의도를 파악하여 벡터 검색에 더 적합한 형태로 변환합니다.
+검색된 문서가 관련 없을 때, 원래 질문을 더 구체적으로 리라이트하여 검색 품질을 높입니다.
 
 == 5.12 `generate_answer` 노드
 
 관련 문서가 확인되면, 검색 결과와 원본 질문을 결합하여 최종 답변을 생성합니다.
 
-개별 노드가 모두 정의되었으니, 이제 이들을 하나의 그래프로 조립하는 마지막 단계입니다. LangGraph의 핵심 강점은 이러한 노드들을 _선언적으로_ 연결하여 복잡한 흐름을 명확하게 표현할 수 있다는 것입니다.
-
 == 5.13 그래프 조립 & 실행
 
-모든 노드를 `StateGraph`에 등록하고, 조건부 엣지(`tools_condition`, `relevance_router`)로 연결합니다. 그래프 조립 과정은 세 단계로 이루어집니다: (1) 노드 등록 -- 각 함수를 이름과 함께 그래프에 추가, (2) 엣지 연결 -- 노드 간의 고정 경로 설정, (3) 조건부 엣지 -- 상태에 따른 동적 라우팅 설정. `compile()` 호출 후에는 그래프가 실행 가능한 상태가 됩니다.
+모든 노드를 `StateGraph`에 등록하고, 조건부 엣지(`tools_condition`, `relevance_router`)로 연결합니다.
 
 #code-block(`````python
 from langgraph.graph import StateGraph, START, END
@@ -651,5 +549,3 @@ print("그래프 컴파일 성공.")
   [루프 제어],
   [`rewrite_question` -\\\> `gen_query` 순환],
 )
-
-Agentic RAG는 비정형 문서에서 정보를 검색하는 패턴입니다. 그러나 기업 데이터의 상당 부분은 정형 데이터베이스에 저장되어 있습니다. 다음 장에서는 자연어를 SQL로 변환하여 데이터베이스에 질의하는 SQL 에이전트를 구축합니다.

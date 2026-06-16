@@ -5,11 +5,9 @@
 
 #chapter(6, "미들웨어와 가드레일")
 
-에이전트의 모든 요청과 응답이 지나가는 _파이프라인_에 로직을 삽입하고 싶을 때가 있습니다 — 입력을 검증하거나, 모델 호출 전에 컨텍스트를 추가하거나, 응답에서 민감 정보를 제거하는 등. LangChain v1의 미들웨어 시스템은 바로 이 목적을 위해 설계되었습니다. 이 장에서는 미들웨어 훅의 종류와 가드레일 구현 패턴을 학습합니다.
+LangChain v1 에이전트의 _미들웨어(Middleware)_ 시스템과 _가드레일(Guardrails)_을 학습합니다.
 
-앞 장에서 메모리와 스트리밍으로 에이전트의 기본 인프라를 완성했습니다. 그러나 프로덕션 환경에서는 에이전트가 "무엇을 할 수 있는가"뿐 아니라 "무엇을 하면 안 되는가"도 중요합니다. 미들웨어는 에이전트 실행의 각 단계에 _가로채기(interception)_ 로직을 삽입하여, 로깅·검증·필터링·캐싱 등 횡단 관심사(cross-cutting concerns)를 깔끔하게 처리합니다. 웹 프레임워크의 미들웨어와 유사한 개념입니다.
-
-#learning-header()
+== 학습 목표
 #learning-objectives([_미들웨어 개념:_ 에이전트 실행 파이프라인의 각 단계에 훅(hook)을 추가하는 방법을 이해합니다.], [_빌트인 미들웨어:_ `SummarizationMiddleware` 등 기본 제공 미들웨어를 사용합니다.], [_커스텀 미들웨어:_ `@before_model`, `@after_model`, `@wrap_model_call`, `@dynamic_prompt` 데코레이터로 커스텀 미들웨어를 구현합니다.], [_가드레일:_ 안전하지 않은 입력/출력을 차단하는 방법을 배웁니다.])
 
 == 6.1 환경 설정
@@ -27,21 +25,12 @@ model = ChatOpenAI(
 
 print("모델 준비 완료:", model.model_name)
 `````)
-#output-block(`````
-모델 준비 완료: gpt-5.4
-`````)
 
 == 6.2 미들웨어 개념
 
-미들웨어의 동작 원리를 이해하기 위해, 에이전트의 실행 파이프라인을 시각적으로 살펴봅니다.
+미들웨어는 에이전트 실행 파이프라인의 _각 단계에 훅(hook)을 추가_하여 동작을 제어하는 메커니즘입니다.
 
-미들웨어는 에이전트 실행 파이프라인의 _각 단계에 훅(hook)을 추가_하여 동작을 제어하는 메커니즘입니다. `create_agent()`의 `middleware` 매개변수에 미들웨어 리스트를 전달하면, 에이전트의 매 실행 주기마다 해당 훅이 자동으로 호출됩니다. 미들웨어의 훅 종류는 `prompt`, `before_model`, `after_model`, `before_tool`, `after_tool`, `wrap_model_call` 등이 있으며, 아래 다이어그램에서 각 훅이 파이프라인의 어느 시점에 실행되는지 확인할 수 있습니다.
-
-#align(center)[#image("../../assets/diagrams/png/middleware_pipeline.png", width: 72%, height: 156mm, fit: "contain")]
-
-#diagram-guide-box[
-왼쪽에서 오른쪽으로 읽으면 됩니다. 요청이 들어오면 먼저 *before* 계열 훅이 개입하고, 모델 호출을 중심으로 *wrap* 훅이 감싸며, 결과가 나오면 *after* 계열 훅이 후처리를 담당합니다.
-]
+#image("../../assets/images/middleware_pipeline.png")
 
 _5가지 미들웨어 훅:_
 
@@ -73,9 +62,7 @@ _5가지 미들웨어 훅:_
 
 == 6.3 빌트인 미들웨어
 
-훅의 종류를 확인했으니, 가장 쉽게 시작할 수 있는 _빌트인 미들웨어_부터 살펴봅니다. LangChain v1은 자주 사용되는 패턴을 빌트인 미들웨어로 제공합니다. `SummarizationMiddleware`는 대화가 길어지면 자동으로 이전 메시지를 요약하여 토큰 사용량을 줄입니다. 5장에서 `trim_messages()`로 수동 트리밍을 했다면, 이 미들웨어는 _자동 요약_ 방식으로 컨텍스트를 압축합니다. `trigger=("messages", 10)` 설정은 메시지가 10개를 초과하면 요약을 트리거합니다.
-
-#tip-box[모든 빌트인 미들웨어의 _크기 트리거_는 `ContextSize` 튜플 형태로 통일되어 있습니다 --- `("tokens", 100_000)`, `("messages", 20)`, `("fraction", 0.8)`(컨텍스트 윈도우의 80%) 세 가지를 그대로 받아 사용합니다.]
+LangChain v1은 자주 쓰는 패턴을 _빌트인 미들웨어_로 제공합니다. `SummarizationMiddleware`는 대화가 길어지면 이전 메시지를 자동으로 요약하여 토큰 사용량을 줄입니다.
 
 #code-block(`````python
 from langchain.agents import create_agent
@@ -106,98 +93,137 @@ print("SummarizationMiddleware 에이전트 생성 완료")
 SummarizationMiddleware 에이전트 생성 완료
 `````)
 
-==== 프롬프트 캐싱 미들웨어
+=== 빌트인 미들웨어 카탈로그
 
-Anthropic·Bedrock 모델은 프롬프트 캐싱으로 토큰 비용을 크게 줄일 수 있습니다. LangChain은 두 제공자 모두를 위한 빌트인 미들웨어를 제공합니다.
+`SummarizationMiddleware` 외에도 v1 은 자주 쓰는 패턴을 빌트인으로 제공합니다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[미들웨어],
+  text(weight: "bold")[용도],
+  text(weight: "bold")[비고],
+  [`SummarizationMiddleware`],
+  [대화 요약],
+  [`trigger=("messages", N)` 또는 `("tokens", N)`],
+  [`AnthropicPromptCachingMiddleware`],
+  [Anthropic 프롬프트 캐싱],
+  [시스템 메시지·도구 정의 캐시 → 비용 절감],
+  [`BedrockPromptCachingMiddleware`],
+  [AWS Bedrock 프롬프트 캐싱],
+  [Anthropic 모델을 Bedrock 으로 호출할 때],
+  [`ModelFallbackMiddleware`],
+  [모델 폴백],
+  [첫 모델 실패 시 다음 모델로 자동 전환],
+  [`ContextEditingMiddleware`],
+  [컨텍스트 동적 편집],
+  [오래된 tool_use 메시지 제거 등],
+  [`PatchToolCallsMiddleware`],
+  [도구 호출 후처리],
+  [Deep Agents 의 핵심 컴포넌트 — tool call 결과를 상태에 반영],
+)
+
+`ContextSize` 트리거 튜플은 어디서나 동일한 형식입니다:
+- `("tokens", 100_000)` — 토큰 수 임계값
+- `("messages", 20)` — 메시지 개수 임계값
+- `("fraction", 0.8)` — 모델 `.profile["max_input_tokens"]` 대비 비율
 
 #code-block(`````python
+# Anthropic / Bedrock 프롬프트 캐싱 — 시스템 프롬프트가 크거나 도구가 많을 때 효과적
 from langchain.agents.middleware import (
     AnthropicPromptCachingMiddleware,
     BedrockPromptCachingMiddleware,
 )
-from langchain_anthropic import ChatAnthropic
 
-claude = ChatAnthropic(model="claude-sonnet-4-6")
-agent = create_agent(
-    model=claude,
-    tools=[search],
-    middleware=[AnthropicPromptCachingMiddleware()],
-)
-# Bedrock도 동일하게 BedrockPromptCachingMiddleware()를 끼우면 됩니다.
+# Anthropic 직접 호출 (claude-sonnet-4-6 등)
+anthropic_cache = AnthropicPromptCachingMiddleware()
+# Bedrock 경유 호출
+bedrock_cache = BedrockPromptCachingMiddleware()
+
+# 예: Anthropic 모델 + 프롬프트 캐싱
+# from langchain_anthropic import ChatAnthropic
+# anthropic_model = ChatAnthropic(model="claude-sonnet-4-6")
+# agent_cached = create_agent(
+#     model=anthropic_model,
+#     tools=[search],
+#     system_prompt="...",
+#     middleware=[anthropic_cache],
+# )
+
+print("Anthropic/Bedrock 프롬프트 캐싱 미들웨어 생성 완료")
 `````)
 
-==== ContextEditingMiddleware
-
-도구 호출 결과가 컨텍스트를 잠식하기 시작할 때, `ContextEditingMiddleware`는 _오래된 도구 출력_을 자동으로 비워(`ClearToolUsesEdit`) 토큰을 회수합니다. `trigger`는 임계값, `keep`은 유지할 최근 메시지 수입니다.
-
 #code-block(`````python
-from langchain.agents.middleware import (
-    ContextEditingMiddleware,
-    ClearToolUsesEdit,
-)
-
-context_edit = ContextEditingMiddleware(
-    edits=[
-        ClearToolUsesEdit(
-            trigger=("tokens", 100_000),
-            keep=("messages", 3),
-        )
-    ],
-)
-`````)
-
-==== ModelFallbackMiddleware
-
-`ModelFallbackMiddleware`는 첫 모델이 실패할 경우 _순서대로 다음 모델을 호출_합니다. 첫 인자가 기본 모델이고, 이어지는 가변 인자가 폴백 후보입니다.
-
-#code-block(`````python
+# ModelFallbackMiddleware — 첫 모델 호출이 실패하면 추가 모델로 순차 폴백
 from langchain.agents.middleware import ModelFallbackMiddleware
-from langchain_openai import ChatOpenAI
 
 primary = ChatOpenAI(model="gpt-5.4")
-backup = ChatOpenAI(model="gpt-5-nano")
+backup_1 = ChatOpenAI(model="gpt-5-nano")
+# backup_2 = ChatAnthropic(model="claude-sonnet-4-6")  # 다른 프로바이더 폴백도 가능
 
-fallback = ModelFallbackMiddleware(primary, backup)
-agent = create_agent(model=primary, tools=[search], middleware=[fallback])
+fallback = ModelFallbackMiddleware(primary, backup_1)
+
+agent_fallback = create_agent(
+    model=primary,
+    tools=[search],
+    system_prompt="당신은 유용한 어시스턴트입니다.",
+    middleware=[fallback],
+)
+print("ModelFallbackMiddleware 에이전트 생성 완료 — primary 실패 시 backup_1 로 폴백")
 `````)
 
-==== PatchToolCallsMiddleware (Deep Agents 핵심)
+#code-block(`````python
+# ContextEditingMiddleware — 토큰 임계값 초과 시 오래된 tool_use 메시지를 자동 제거
+# trigger=("tokens", 100_000) 처럼 ContextSize 튜플로 시점을 결정합니다.
+from langchain.agents.middleware import ContextEditingMiddleware, ClearToolUsesEdit
 
-`PatchToolCallsMiddleware`는 모델이 _잘못된 형식의 도구 호출_(잘못된 JSON, 누락된 인자 등)을 만들었을 때 자동으로 보정·재호출합니다. Deep Agents가 서브에이전트와 파일시스템 도구를 안정적으로 실행하기 위해 내부에서 활용하는 컴포넌트로, 도구 호출 실패율이 높은 환경에서 특히 유용합니다.
+context_editor = ContextEditingMiddleware(
+    edits=[
+        ClearToolUsesEdit(
+            trigger=("tokens", 100_000),   # 100K 토큰 넘으면 발동
+            keep=("messages", 3),           # 가장 최근 3개 메시지의 tool_use 는 유지
+        ),
+    ],
+)
+
+agent_edited = create_agent(
+    model=model,
+    tools=[search],
+    system_prompt="당신은 유용한 어시스턴트입니다.",
+    middleware=[context_editor],
+)
+print("ContextEditingMiddleware 에이전트 생성 완료")
+print("  → 100K 토큰 초과 시 최근 3개 외 오래된 tool_use 메시지를 자동 제거")
+`````)
 
 == 6.4 커스텀 미들웨어: \@before_model
 
-빌트인 미들웨어로 해결되지 않는 요구사항이 있을 때, 커스텀 미들웨어를 작성합니다. 가장 많이 사용되는 훅은 `@before_model`입니다.
-
-`@before_model` 데코레이터는 _모델이 호출되기 전_에 실행됩니다. 이 훅의 함수는 메시지 리스트를 받아 수정된 메시지 리스트를 반환합니다. 메시지를 추가하거나, 필터링하거나, 변환할 수 있습니다.
+`@before_model` 데코레이터는 _모델이 호출되기 전_에 실행됩니다.
 
 주요 용도:
 - 입력 메시지 로깅
 - 메시지 수정 또는 필터링
 - 입력 검증 (가드레일)
-- 컨텍스트 추가 (현재 시간, 사용자 프로필 등)
+- 컨텍스트 추가
 
 == 6.5 커스텀 미들웨어: \@after_model
 
-`@before_model`이 입력 쪽을 제어한다면, `@after_model`은 출력 쪽을 제어합니다. `@after_model` 데코레이터는 _모델 응답이 생성된 후_에 실행됩니다. 이 훅의 함수는 `AIMessage`를 받아 수정된 `AIMessage`를 반환합니다.
+`@after_model` 데코레이터는 _모델 응답이 생성된 후_에 실행됩니다.
 
 주요 용도:
-- 모델 출력 로깅 및 모니터링
-- 응답에서 민감 정보(PII) 제거
-- 도구 호출 감시 및 차단
-- 출력 품질 검증 (환각 탐지 등)
+- 모델 출력 로깅
+- 응답 필터링 또는 수정
+- 도구 호출 감시
+- 출력 품질 검증
 
 == 6.6 \@wrap_model_call
 
-`@before_model`과 `@after_model`은 모델 호출의 전/후에 각각 동작하지만, 모델 호출 _자체_를 대체하거나 감싸야 할 때가 있습니다. 예를 들어 응답을 캐싱하거나, 실패 시 다른 모델로 폴백하는 경우입니다.
-
 `@wrap_model_call` 데코레이터는 _모델 호출 자체를 감싸서_ 재시도, 폴백, 캐싱 등의 로직을 구현할 수 있습니다.
 
-`handler` 함수를 통해 원래의 모델 호출을 실행하며, 이 호출 전후로 커스텀 로직을 추가합니다. `handler(request)`를 호출하지 않으면 모델이 전혀 호출되지 않으므로, 캐시 히트 시 저장된 응답을 바로 반환하는 식으로 활용할 수 있습니다.
-
-==== 타입 어노테이션과 request.override
-
-커스텀 미들웨어를 작성할 때는 `ModelRequest`/`ModelResponse` 타입을 명시해 IDE 보조와 정적 분석을 활성화하는 것이 좋습니다. `request.override(...)`는 _이번 호출에 한해서_ 메시지·도구·시스템 프롬프트·구조화 출력 스키마를 갈아끼웁니다(transient).
+`handler` 함수로 원래의 모델 호출을 실행하며, 이 호출 전후에 커스텀 로직을 추가합니다.
 
 #code-block(`````python
 from langchain.agents.middleware import (
@@ -205,26 +231,16 @@ from langchain.agents.middleware import (
     ModelRequest,
     ModelResponse,
 )
-
-@wrap_model_call
-def restrict_for_guest(request: ModelRequest, handler) -> ModelResponse:
-    if request.runtime.context.role == "guest":
-        # 이번 턴만 시스템 프롬프트·도구 제한 (다음 턴에는 원본 복귀)
-        patched = request.override(
-            system_message="읽기 전용 모드입니다.",
-            tools=[t for t in request.tools if t.name.startswith("read_")],
-        )
-        return handler(patched)
-    return handler(request)
-`````)
-
-#code-block(`````python
-from langchain.agents.middleware import wrap_model_call
 import time
 
+
 @wrap_model_call
-def retry_on_error(request, handler):
-    """실패 시 지수 백오프로 모델 호출을 재시도합니다."""
+def retry_on_error(request: ModelRequest, handler) -> ModelResponse:
+    """실패 시 지수 백오프로 모델 호출을 재시도합니다.
+
+    - request: ModelRequest — messages / tools / system_message / response_format 보유
+    - handler: 다음 단계를 실행하는 콜러블 (request 를 받아 ModelResponse 반환)
+    """
     max_retries = 2
     for attempt in range(max_retries + 1):
         try:
@@ -245,27 +261,56 @@ agent_retry = create_agent(
 )
 print("재시도 미들웨어 에이전트 생성 완료")
 `````)
-#output-block(`````
-재시도 미들웨어 에이전트 생성 완료
+
+=== request.override — 요청을 변경해서 핸들러로 전달
+
+`ModelRequest` 는 불변(immutable)에 가까운 객체로 다뤄지므로, 일부 필드만 바꾸려면 `request.override(...)` 로 새 객체를 만들어 핸들러에 넘깁니다. 변경 가능한 필드:
+
+- `messages` — 메시지 리스트
+- `tools` — 사용 가능한 도구 리스트
+- `system_message` — 시스템 프롬프트
+- `response_format` — 구조화 출력 스키마
+
+#code-block(`````python
+# request.override 로 시스템 메시지·도구 필터를 동적으로 조정
+from langchain.agents.middleware import wrap_model_call, ModelRequest, ModelResponse
+
+
+@wrap_model_call
+def restrict_tools_for_anonymous(request: ModelRequest, handler) -> ModelResponse:
+    """비로그인 사용자에게는 검색 도구만 허용하고 시스템 프롬프트도 교체합니다."""
+    user_id = request.runtime.context.get("user_id") if hasattr(request, "runtime") else None
+
+    if not user_id:
+        # 비로그인 — 도구 화이트리스트 적용 + 시스템 메시지 교체
+        safe_tools = [t for t in request.tools if t.name == "search"]
+        new_request = request.override(
+            tools=safe_tools,
+            system_message="당신은 비로그인 사용자를 돕는 제한된 어시스턴트입니다.",
+        )
+        return handler(new_request)
+
+    return handler(request)
+
+
+print("request.override 패턴 미들웨어 등록 준비 완료")
 `````)
 
 == 6.7 \@dynamic_prompt
 
-지금까지의 미들웨어가 메시지나 모델 호출을 제어했다면, `@dynamic_prompt`는 에이전트의 _근본적인 행동 지침_ --- 시스템 프롬프트 --- 를 런타임에 변경합니다.
-
-`@dynamic_prompt` 데코레이터는 _런타임에 시스템 프롬프트를 동적으로 변경_합니다. 이 훅의 함수는 런타임 컨텍스트를 받아 새로운 시스템 프롬프트 문자열을 반환합니다.
+`@dynamic_prompt` 데코레이터는 _런타임에 시스템 프롬프트를 동적으로 변경_합니다.
 
 주요 용도:
-- 현재 날짜/시간 정보 추가 (예: "오늘은 2026년 3월 8일입니다")
-- 사용자별 맞춤 프롬프트 (역할, 권한 레벨에 따라)
-- 상태에 따른 행동 변경 (예: 오류 발생 시 보수적 모드)
-- A/B 테스트 (다른 프롬프트의 효과 비교)
+- 현재 날짜/시간 정보 추가
+- 사용자별 맞춤 프롬프트
+- 상태에 따른 행동 변경
+- A/B 테스트
 
 == 6.8 \@wrap_tool_call
 
-모델 호출뿐 아니라 _도구 호출_도 감쌀 수 있습니다. `@wrap_tool_call` 데코레이터는 _도구 호출 자체를 감싸서_ 실행 전후에 커스텀 로직을 추가할 수 있습니다.
+`@wrap_tool_call` 데코레이터는 _도구 호출 자체를 감싸서_ 실행 전후에 커스텀 로직을 추가할 수 있습니다.
 
-`@wrap_model_call`이 모델 호출을 감싸는 것처럼, `@wrap_tool_call`은 도구 실행을 감쌉니다. `handler` 함수를 호출하면 원래 도구가 실행되며, 그 전후로 타이밍 측정, 로깅, 에러 핸들링 등을 구현할 수 있습니다.
+`@wrap_model_call`이 모델 호출을 감싸듯, `@wrap_tool_call`은 도구 실행을 감쌉니다. `handler` 함수를 호출하면 원래 도구가 실행되며, 그 전후로 타이밍 측정, 로깅, 에러 핸들링 등을 구현할 수 있습니다.
 
 주요 용도:
 - _실행 시간 측정:_ 도구별 성능 모니터링
@@ -275,41 +320,48 @@ print("재시도 미들웨어 에이전트 생성 완료")
 
 == 6.9 가드레일
 
-미들웨어의 모든 훅을 배웠으니, 이를 조합하여 에이전트의 _안전성_을 확보하는 방법을 다룹니다. 가드레일은 _안전하지 않은 입력이나 출력을 차단_하는 메커니즘입니다. 미들웨어를 활용하여 구현하며, 금지된 키워드 감지, 프롬프트 인젝션 방어, 민감 정보(PII) 필터링 등에 사용됩니다.
+가드레일은 _안전하지 않은 입력이나 출력을 차단_하는 메커니즘입니다. 미들웨어로 구현하며, 금지된 키워드 감지, 프롬프트 인젝션 방어, 민감 정보 필터링 등에 씁니다.
 
-가드레일은 `@before_model` 훅에서 구현하는 것이 가장 효과적입니다. 모델에 전달되기 전에 위험한 입력을 차단할 수 있기 때문입니다. 출력 가드레일은 `@after_model` 훅에서 구현하며, 모델이 민감 정보를 포함한 응답을 생성했을 때 이를 마스킹하거나 차단합니다.
+`@before_model` 훅에서 구현하는 것이 가장 효과적입니다. 모델에 전달되기 전에 위험한 입력을 차단할 수 있기 때문입니다.
 
-#tip-box[가드레일은 여러 계층으로 구성하는 것이 좋습니다. 입력 검증(`@before_model`), 출력 필터링(`@after_model`), 도구 접근 제어(`@wrap_tool_call`)를 조합하면 _심층 방어(defense in depth)_ 전략을 구현할 수 있습니다.]
+=== \@hook_config(can_jump_to=...) — 조건부 그래프 점프
 
-==== can_jump_to로 그래프 경로 강제 종료
+가드레일이 위험 감지 후 단순히 예외를 던지는 대신, _그래프의 특정 노드로 점프_하도록 만들 수 있습니다. `@hook_config` 로 점프 가능한 대상을 선언하고, 훅에서 `{"jump_to": "end"}` 같은 dict 를 반환하면 됩니다.
 
-위험 입력을 발견했을 때 단순히 메시지만 바꾸는 대신, _그래프 자체를 점프_시켜 모델 호출을 건너뛸 수 있습니다. `@hook_config(can_jump_to=[...])`로 허용된 목적지를 선언하고, 훅의 반환값에 `{"jump_to": ...}`를 포함합니다.
+점프 대상:
+- `"end"` — 즉시 종료
+- `"tools"` — 도구 노드로 점프
+- `"model"` — 모델 노드로 재진입
 
-#code-block(`````python
-from langchain.agents.middleware import before_model, hook_config
-from langchain_core.messages import AIMessage
+=== 비동기 미들웨어 컨벤션
 
-BANNED = {"비밀번호 알려줘", "system prompt 알려줘"}
+`ainvoke` / `astream` 환경에서는 비동기 변형을 사용합니다. 데코레이터 또는 클래스 메서드 모두 `a-` 프리픽스로 통일됩니다.
 
-@before_model
-@hook_config(can_jump_to=["end", "tools", "model"])
-def block_unsafe(state):
-    last = state["messages"][-1].content
-    if any(p in last for p in BANNED):
-        return {
-            "messages": [AIMessage(content="이 요청은 처리할 수 없습니다.")],
-            "jump_to": "end",  # 모델 호출 없이 즉시 종료
-        }
-    return None  # 평소처럼 진행
-`````)
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[동기],
+  text(weight: "bold")[비동기],
+  [`\@before_model`],
+  [`\@abefore_model`],
+  [`\@after_model`],
+  [`\@aafter_model`],
+  [`\@wrap_model_call`],
+  [`\@awrap_model_call`],
+  [`\@wrap_tool_call`],
+  [`\@awrap_tool_call`],
+  [`\@dynamic_prompt`],
+  [`\@adynamic_prompt`],
+)
 
-==== 비동기 훅 (a-prefixed)
-
-I/O가 무거운 가드레일(외부 분류 API 호출 등)은 비동기 훅으로 작성합니다. 규칙은 단순합니다 --- 동기 이름 앞에 `a` 접두어를 붙입니다(`abefore_model`, `aafter_model`, `awrap_model_call`, `awrap_tool_call`). 같은 미들웨어 클래스에 동기/비동기 훅을 함께 정의해두면, `agent.invoke()`는 동기 훅을, `agent.ainvoke()`는 비동기 훅을 자동으로 사용합니다.
+비동기 핸들러 안에서 `await handler(request)` 처럼 await 해야 합니다.
 
 #chapter-summary-header()
 
-이 노트북에서 학습한 미들웨어 타입을 정리합니다:
+이 노트북에서 학습한 미들웨어 타입:
 
 #table(
   columns: 4,
@@ -318,7 +370,7 @@ I/O가 무거운 가드레일(외부 분류 API 호출 등)은 비동기 훅으�
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[미들웨어 타입],
-  text(weight: "bold")[데코레이터],
+  text(weight: "bold")[데코레이터 / 클래스],
   text(weight: "bold")[실행 시점],
   text(weight: "bold")[주요 용도],
   [_Before Model_],
@@ -341,21 +393,35 @@ I/O가 무거운 가드레일(외부 분류 API 호출 등)은 비동기 훅으�
   [`\@dynamic_prompt`],
   [프롬프트 생성 시],
   [런타임 프롬프트 변경],
-  [_Builtin_],
+  [_Builtin (요약)_],
   [`SummarizationMiddleware`],
-  [자동],
+  [trigger 충족 시],
   [대화 요약],
-  [_Guardrail_],
-  [`\@before_model` 활용],
+  [_Builtin (캐싱)_],
+  [`AnthropicPromptCachingMiddleware`, `BedrockPromptCachingMiddleware`],
   [모델 호출 전],
-  [안전성 확보],
+  [프롬프트 캐싱 비용 절감],
+  [_Builtin (폴백)_],
+  [`ModelFallbackMiddleware(primary, *backups)`],
+  [모델 호출 실패 시],
+  [다른 모델로 자동 폴백],
+  [_Builtin (편집)_],
+  [`ContextEditingMiddleware(edits=[...])`],
+  [트리거 충족 시],
+  [오래된 tool_use 제거],
+  [_Builtin (Deep Agents)_],
+  [`PatchToolCallsMiddleware`],
+  [도구 호출 후],
+  [tool 결과를 상태에 반영],
+  [_Guardrail_],
+  [`\@hook_config(can_jump_to=[...])` + `{"jump_to": "end"}`],
+  [모델 호출 전],
+  [위험 입력 시 그래프 점프],
 )
 
 _핵심 포인트:_
-- 미들웨어는 에이전트 실행 파이프라인의 각 단계를 제어합니다.
-- 여러 미들웨어를 조합하여 복잡한 로직을 구현할 수 있습니다.
-- `@wrap_tool_call`을 사용하면 도구 실행을 감싸서 타이밍 측정, 로깅, 에러 핸들링 등을 구현할 수 있습니다.
-- 가드레일은 `@before_model` 훅에서 구현하는 것이 가장 효과적입니다.
-- `@dynamic_prompt`를 사용하면 런타임 정보를 시스템 프롬프트에 주입할 수 있습니다.
-
-이 장에서는 에이전트 실행 파이프라인의 모든 단계를 제어하는 미들웨어 시스템을 학습했습니다. 다음 장에서는 에이전트가 _위험한 작업을 실행하기 전에 사람의 승인을 받는_ Human-in-the-Loop 패턴과, `ToolRuntime`을 통한 런타임 컨텍스트 주입, 그리고 MCP를 통한 외부 도구 서버 연동을 다룹니다.
+- `ModelRequest` 는 `request.override(messages=..., tools=..., system_message=..., response_format=...)` 로 부분 변경합니다.
+- `ContextSize` 트리거 튜플은 `("tokens", N)` / `("messages", N)` / `("fraction", 0~1)` 형식이며 `model.profile["max_input_tokens"]` 와 결합해 동적 임계값을 만들 수 있습니다.
+- 가드레일은 예외 대신 `@hook_config(can_jump_to=[...])` + `{"jump_to": "end"}` 패턴이 더 안전합니다 (사용자에게 거절 메시지를 남길 수 있음).
+- 비동기 환경에서는 `@abefore_model`, `@aafter_model`, `@awrap_model_call` 처럼 `a-` 프리픽스 변형을 씁니다.
+- 커스텀 미들웨어 시그니처: `def hook(request: ModelRequest, handler) -> ModelResponse`.

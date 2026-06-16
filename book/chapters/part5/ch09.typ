@@ -5,7 +5,7 @@
 
 #chapter(9, "프로덕션 배포", subtitle: "- 테스트, 관측성, 배포")
 
-Part 5의 마지막 장입니다. 앞선 장들에서 미들웨어, 멀티에이전트, 컨텍스트 엔지니어링, RAG, SQL, 데이터 분석, 보이스 에이전트를 학습했습니다. 이 모든 에이전트를 실제 사용자에게 제공하려면 _테스트 → 관측성 → 배포_의 프로덕션 파이프라인이 필수입니다. 에이전트를 프로덕션에 배포하기 위한 전체 파이프라인을 다룹니다. 단위 테스트와 LangSmith 평가로 품질을 보장하고, 트레이싱으로 관측성을 확보한 뒤, LangGraph Platform으로 배포합니다.
+에이전트를 프로덕션에 배포하기 위한 전체 파이프라인을 다룹니다. 단위 테스트와 LangSmith 평가로 품질을 보장하고, 트레이싱으로 관측성을 확보한 뒤, LangGraph Platform으로 배포합니다.
 
 #code-block(`````python
 개발 -> 테스트 (단위 + 평가) -> 관측성 (트레이싱) -> 배포 (LangGraph Platform)
@@ -21,7 +21,7 @@ Part 5의 마지막 장입니다. 앞선 장들에서 미들웨어, 멀티에이
 
 따라서 단순한 단위 테스트를 넘어 _궤적(trajectory) 평가_, _LLM-as-Judge_, _트레이스 기반 모니터링_ 등 에이전트 전용 품질 보장 기법이 필요합니다.
 
-#learning-header()
+== 학습 목표
 이 노트북을 완료하면 다음을 수행할 수 있습니다:
 
 + _단위 테스트_ -- `GenericFakeChatModel`로 LLM 응답을 모킹하여 결정적 테스트를 작성할 수 있다
@@ -30,30 +30,15 @@ Part 5의 마지막 장입니다. 앞선 장들에서 미들웨어, 멀티에이
 + _LangGraph Studio_ -- 시각적 디버깅 도구로 에이전트 실행 흐름을 분석할 수 있다
 + _배포 옵션_ -- LangGraph Platform, 셀프호스트, Cloud 배포 간 차이를 이해할 수 있다
 + _langgraph.json_ -- 배포 설정 파일을 구성하고 배포 명령어를 실행할 수 있다
-
-#chapter-question-box[
-이 장의 질문은 _"에이전트가 잘 동작한다는 것을 어떻게 증명하고, 운영 중 문제를 어떻게 다시 개발 프로세스로 되돌릴 것인가?"_ 입니다.
-]
-
-#chapter-key-points((
-  [에이전트 프로덕션은 개발→평가→트레이싱→배포→운영 피드백의 닫힌 루프로 봐야 합니다.],
-  [단위 테스트만으로는 부족하고, trajectory 평가와 tracing이 함께 필요합니다.],
-  [배포는 끝이 아니라 다음 개선 사이클의 시작점입니다.],
-))
++ _Runtime rubric_ -- Deep Agents `RubricMiddleware`로 실행 중 품질 게이트를 구성할 수 있다
 
 == 9.1 환경 설정
 
-테스트, 관측성, 배포에 필요한 패키지를 설치합니다. 이 장에서는 `pytest`, `agentevals`, `langsmith`, `langgraph-cli`, `langgraph-sdk`를 활용합니다. 각 패키지는 프로덕션 파이프라인의 서로 다른 단계를 담당합니다.
-
-에이전트를 실제 서비스로 운영하기 위해서는 "동작한다"는 것만으로는 부족합니다. _얼마나 잘 동작하는지_, _언제 문제가 발생하는지_, _어떻게 확장할 것인지_를 체계적으로 관리해야 합니다. 이것이 프로덕션 파이프라인의 핵심 목적입니다.
+테스트, 관측성, 배포에 필요한 패키지를 설치합니다.
 
 == 9.2 프로덕션 파이프라인 개요
 
 에이전트의 비결정적 특성 때문에 전통적인 소프트웨어 테스트만으로는 품질을 보장할 수 없습니다.
-
-#align(center)[#image("../../assets/diagrams/png/production_lifecycle_flow.png", width: 76%, height: 148mm, fit: "contain")]
-
-이 흐름도는 프로덕션 운영을 _개발 → 검증 → 관측 → 배포 → 운영_ 의 닫힌 루프로 보여줍니다. 에이전트는 배포 후에도 계속 프롬프트, 도구, 평가셋이 수정되므로, 마지막 운영 단계가 다시 테스트와 개발로 되돌아가는 구조를 의도적으로 가져가야 합니다.
 
 #table(
   columns: 3,
@@ -66,10 +51,10 @@ Part 5의 마지막 장입니다. 앞선 장들에서 미들웨어, 멀티에이
   text(weight: "bold")[도구],
   [_개발_],
   [에이전트 구현 및 로컬 테스트],
-  [LangGraph, LangGraph Studio],
+  [LangGraph, LangSmith Studio],
   [_테스트_],
-  [단위 테스트 + LLM 기반 평가],
-  [pytest, agentevals, LangSmith],
+  [단위 / 통합 / Evals 3단 테스트],
+  [`pytest`, `GenericFakeChatModel`, `agentevals`, LangSmith],
   [_관측성_],
   [트레이싱, 메트릭, 에러 추적],
   [LangSmith Tracing],
@@ -78,14 +63,9 @@ Part 5의 마지막 장입니다. 앞선 장들에서 미들웨어, 멀티에이
   [LangGraph Platform],
 )
 
-=== 테스트 전략
+=== 테스트 3분류 (Unit / Integration / Evals)
 
-에이전트 테스트는 두 가지 접근을 병행해야 합니다:
-
-+ _개발 단계_ — 로컬 재현성과 회귀 검증 확보
-+ _평가 단계_ — 실제 궤적과 답변 품질을 데이터셋으로 측정
-+ _추적 단계_ — 운영 중 실패 사례와 비용 상승을 트레이스로 발견
-+ _배포 단계_ — 설정, 체크포인터, 환경 변수까지 함께 검증
+`docs/langchain/27-test.md` 는 에이전트 테스트를 3개 축으로 정리합니다.
 
 #table(
   columns: 3,
@@ -96,30 +76,28 @@ Part 5의 마지막 장입니다. 앞선 장들에서 미들웨어, 멀티에이
   text(weight: "bold")[유형],
   text(weight: "bold")[특징],
   text(weight: "bold")[적합 대상],
-  [_Unit_],
-  [`GenericFakeChatModel`로 LLM 응답을 모킹해 격리된 결정적 테스트 수행. API 호출 없이 빠르게 실행],
-  [개별 도구, 파서, 프롬프트 포맷팅, 상태 변환 로직],
-  [_Integration_],
-  [실제 네트워크 호출로 컴포넌트 간 협업 검증. `pytest` + `vcrpy` 카세트로 재현성 확보],
-  [전체 에이전트 흐름, 도구 호출 시퀀스, 외부 API 연동],
+  [_Unit tests_],
+  [`GenericFakeChatModel` / `InMemorySaver` 로 외부 호출 없이 결정적 검증. 빠르고 저렴],
+  [개별 도구, 파서, 프롬프트 포맷팅, 상태 전이],
+  [_Integration tests_],
+  [실제 네트워크 호출로 컴포넌트 협업, 자격 증명, 레이턴시 검증],
+  [전체 에이전트 흐름, 도구 호출 시퀀스],
   [_Evals_],
-  [LangSmith 데이터셋과 `agentevals` 궤적 평가자로 응답 품질·도구 호출 순서를 정량화],
-  [응답 정확도, trajectory match, LLM-as-Judge 루브릭],
+  [`agentevals` 패키지로 trajectory 평가. trajectory match 또는 LLM-as-judge],
+  [행동 패턴, 응답 품질 회귀],
 )
 
-#tip-box[테스트는 세 종류 모두 필요합니다 — _Unit_ 은 회귀 방지, _Integration_ 은 외부 API 계약 검증, _Evals_ 는 비결정적 응답 품질 측정. 셋 다 CI 에서 돌리되 Evals 만 _샘플 데이터셋_ 으로 자주, _풀 데이터셋_ 으로 야간에 돌리는 식의 이원화가 일반적입니다.]
+`agentevals` 는 다음 두 평가 전략을 제공합니다:
 
-에이전트 시스템은 다중 컴포넌트가 체이닝되어 동작하므로, 일반적으로 통합 테스트의 비중이 더 높습니다. 단위 테스트로 개별 컴포넌트의 정확성을 확인하고, 통합 테스트로 전체 흐름의 품질을 평가합니다.
+- _Trajectory match_ — 기대 시퀀스와 단계별 비교. 매칭 모드 4종 (`strict` / `unordered` / `subset` / `superset`)
+- _LLM-as-judge_ — 루브릭 기반 정성 평가. 유연하지만 LLM 비용 + 비결정성
 
-단위 테스트로 개별 컴포넌트를 검증한 다음, 전체 에이전트의 행동 패턴을 평가하는 통합 테스트가 필요합니다. LangSmith는 에이전트 전용 평가 인프라를 제공합니다.
+대규모 평가, 결과 추적, 실험 비교에는 _LangSmith_ 를 사용합니다. CI/CD 비용 절감용으로는 `vcrpy` + `pytest-recording` 으로 HTTP 응답을 녹화·재생합니다.
 
-단위 테스트가 개별 컴포넌트의 정확성을 검증한다면, LangSmith 평가는 에이전트의 _전체 행동 패턴_을 평가합니다. 전통적인 소프트웨어에서는 입출력 비교로 충분하지만, 에이전트는 같은 결과에 다른 경로로 도달할 수 있으므로 _궤적 기반 평가_가 필수적입니다.
 
 == 9.3 에이전트 테스트 -- LangSmith 평가
 
-`agentevals` 패키지는 에이전트 궤적(trajectory) 전용 평가자를 제공합니다.
-
-#tip-box[LangSmith 평가를 CI/CD 파이프라인에 통합하면, 코드 변경이나 프롬프트 수정 후 자동으로 에이전트 품질을 검증할 수 있습니다. 데이터셋에 다양한 시나리오(정상 케이스, 엣지 케이스, 다국어 입력 등)를 포함하여 회귀 테스트를 구성하세요. 평가 결과의 점수 추이를 모니터링하면 품질 저하를 조기에 감지할 수 있습니다.] 궤적이란 에이전트가 최종 응답에 도달하기까지의 모든 단계(도구 호출, 중간 추론, 의사결정)를 의미합니다. 전통적인 입출력 비교 테스트와 달리, 궤적 평가는 에이전트가 _올바른 과정_을 거쳤는지까지 검증합니다. 궤적이란 에이전트가 최종 응답에 도달하기까지의 모든 단계(도구 호출, 중간 추론, 의사결정)를 의미합니다.
+`agentevals` 패키지는 에이전트 궤적(trajectory) 전용 평가자를 제공합니다. 궤적이란 에이전트가 최종 응답에 도달하기까지의 모든 단계(도구 호출, 중간 추론, 의사결정)를 의미합니다.
 
 #table(
   columns: 4,
@@ -212,13 +190,45 @@ except Exception as e:
 평가자 생성 건너뜀 (LLM API 키 필요): create_trajectory_llm_as_judge() got an unexpected keyword argument 'rubric'
 `````)
 
-LangSmith 평가가 통합 테스트라면, 단위 테스트는 에이전트의 개별 구성 요소를 격리하여 검증합니다. 특히 도구 함수, 상태 변환 로직, 프롬프트 포맷팅은 단위 테스트로 빠르게 검증해야 하는 핵심 대상입니다.
+=== 9.3.5 Runtime RubricMiddleware — 실행 중 품질 게이트
+
+`agentevals`와 LangSmith 평가는 배포 전/후 회귀를 확인하는 _오프라인 평가_에 가깝습니다. Deep Agents의 `RubricMiddleware`는 실제 요청 처리 중에 judge 모델을 호출해 답변을 점검하고, 기준을 만족하지 못하면 추가 수정을 유도하는 _런타임 품질 게이트_입니다.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[사용 지점],
+  text(weight: "bold")[권장 기준],
+  [외부 전송 직전],
+  [근거, 금지 표현, 개인정보 누락 여부],
+  [긴 분석 리포트],
+  [숫자·출처·결론 일관성],
+  [고위험 도구 실행 후],
+  [작업 결과와 사용자 요청의 일치 여부],
+)
+
+모든 요청에 붙이면 비용과 지연이 커지므로, 실패 비용이 큰 구간에 선택적으로 적용합니다.
+
+#code-block(`````python
+try:
+    from deepagents import RubricMiddleware
+
+    rubric = RubricMiddleware(
+        model="openai:gpt-5.4-mini",
+        system_prompt="정확성, 근거, 안전성 기준으로 평가하고 부족하면 수정 지시",
+        max_iterations=2,
+    )
+    print("RubricMiddleware 준비됨:", type(rubric).__name__)
+except ImportError:
+    print("deepagents>=0.6.10 필요: pip install -U deepagents")
+`````)
 
 == 9.4 단위 테스트 패턴
 
 `GenericFakeChatModel`을 사용하면 API 호출 없이 LLM 응답을 모킹하여 결정적 테스트를 작성할 수 있습니다. 응답 이터레이터를 받아 호출마다 하나씩 반환합니다.
-
-#warning-box[`GenericFakeChatModel`은 _도구 호출 응답_도 모킹할 수 있지만, 이 경우 AIMessage의 `tool_calls` 필드를 올바르게 구성해야 합니다. 도구 호출 형식이 맞지 않으면 에이전트 루프가 정상적으로 동작하지 않으므로, 실제 LLM 응답의 형식을 먼저 확인한 후 모킹 데이터를 작성하세요.]
 
 === 왜 모킹이 필요한가?
 
@@ -253,7 +263,7 @@ test_search_tool()
 
 === HTTP 요청 녹화/재생
 
-CI/CD에서 API 비용을 줄이기 위해 `vcrpy`와 `pytest-recording`으로 HTTP 요청을 녹화하고 재생할 수 있습니다. 첫 실행 시 실제 API 호출을 녹화(cassette 파일로 저장)하고, 이후 실행에서는 녹화된 응답을 재생하여 네트워크 호출 없이 테스트합니다.
+CI/CD에서 API 비용을 줄이려면 `vcrpy`와 `pytest-recording`으로 HTTP 요청을 녹화하고 재생할 수 있습니다. 첫 실행 시 실제 API 호출을 녹화(cassette 파일로 저장)하고, 이후 실행에서는 녹화된 응답을 재생하여 네트워크 호출 없이 테스트합니다.
 
 이 방식의 장점:
 - _첫 실행_: 실제 API와의 통합을 검증 (통합 테스트 역할)
@@ -273,15 +283,9 @@ def test_agent_with_recorded_responses():
     assert "framework" in result.lower()
 `````)
 
-테스트는 배포 _전_의 품질 보장입니다. 배포 _후_에는 실제 사용자 트래픽에 대한 지속적 모니터링이 필요합니다. 이를 관측성(Observability)이라 합니다.
+== 9.5 관측성 — LangSmith 트레이싱
 
-테스트는 배포 _전_의 품질 보장 수단입니다. 하지만 에이전트는 실제 사용자의 다양한 입력에 노출되면 예상치 못한 행동을 보일 수 있습니다. 배포 _후_ 지속적으로 에이전트의 건강 상태를 모니터링하는 것이 관측성(Observability)입니다.
-
-== 9.5 관측성 -- LangSmith 트레이싱
-
-LangSmith 트레이싱은 에이전트 실행의 _모든 단계_를 기록합니다.
-
-#tip-box[트레이싱은 환경 변수 2개만으로 활성화되며, 코드 수정이 전혀 필요 없습니다. 프로덕션에서는 항상 트레이싱을 켜두되, `tracing_context`로 _특정 실행만_ 상세 트레이싱하는 것이 비용과 성능의 균형을 맞추는 좋은 전략입니다. 예를 들어, 정상 요청은 기본 트레이싱만, 오류 발생 시에만 상세 트레이싱을 활성화할 수 있습니다.] 트레이스(trace)는 초기 사용자 입력부터 최종 응답까지, 모든 모델 호출, 도구 사용, 의사결정 포인트를 포함하는 에이전트 실행의 완전한 기록입니다.
+LangSmith 트레이싱은 에이전트 실행의 _모든 단계_를 기록합니다. 트레이스(trace)는 초기 사용자 입력부터 최종 응답까지, 모든 모델 호출·도구 사용·의사결정 포인트를 포함하는 에이전트 실행의 완전한 기록입니다.
 
 === 트레이스에 기록되는 정보
 
@@ -307,51 +311,43 @@ LangSmith 트레이싱은 에이전트 실행의 _모든 단계_를 기록합니
   [실패한 단계와 에러 메시지],
 )
 
-=== 활성화 방법
+=== 활성화 방법 — `LANGSMITH_*` 환경 변수
 
-환경 변수 2개만 설정하면 _추가 코드 없이_ 자동 트레이싱됩니다:
+LangChain 1.x 부터 표준 환경 변수 이름은 `LANGSMITH_*` 입니다. 환경 변수 2개만 설정하면 _추가 코드 없이_ 자동 트레이싱됩니다:
 
 #code-block(`````bash
 export LANGSMITH_TRACING=true
 export LANGSMITH_API_KEY=<your-api-key>
+# 선택
+export LANGSMITH_PROJECT=my-project
 `````)
 
-`create_agent`로 생성한 에이전트는 환경 변수 설정 시 자동으로 실행 데이터를 LangSmith에 전송합니다. LangChain의 모든 컴포넌트(LLM, 체인, 도구 등)가 내장 계측(instrumentation)을 포함하고 있어 별도의 코드 수정이 필요 없습니다.
+=== 선택적 트레이싱 — `tracing_context`
 
-=== 선택적 트레이싱 & PII 익명화 (`tracing_context` + `LangChainTracer`)
-
-`tracing_context` 는 특정 코드 블록만 선택적으로 트레이싱하거나, 프로젝트·태그·메타데이터를 _런타임에 동적으로_ 바꿔 끼울 수 있습니다. 프로덕션에서는 보통 `LangChainTracer` 를 직접 인스턴스화해서 _anonymizer_ 콜백을 끼워 넣어, 트레이스로 전송되기 전 단계에서 PII(이메일·전화·주민번호 등) 를 마스킹합니다.
+`tracing_context` 컨텍스트 매니저로 특정 코드 블록만 트레이싱하거나, 블록별로 프로젝트·태그·메타데이터를 분리할 수 있습니다.
 
 #code-block(`````python
-import re
-from langsmith import tracing_context
-from langchain.callbacks.tracers import LangChainTracer
+import langsmith as ls
 
-EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
-PHONE_RE = re.compile(r"\b\d{2,3}-\d{3,4}-\d{4}\b")
-
-def anonymize(payload: dict) -> dict:
-    """트레이스 전송 전에 PII를 마스킹합니다."""
-    text = str(payload)
-    text = EMAIL_RE.sub("<email>", text)
-    text = PHONE_RE.sub("<phone>", text)
-    return {**payload, "redacted": text}
-
-tracer = LangChainTracer(
-    project_name="production-agent",
-    client_kwargs={"hide_inputs": anonymize,
-                   "hide_outputs": anonymize},
-)
-
-with tracing_context(
-    project_name="production-agent",
-    tags=["v2.1", "experiment-A"],
-    metadata={"user_tier": "premium"},
-):
-    agent.invoke({"messages": [...]}, config={"callbacks": [tracer]})
+with ls.tracing_context(enabled=True, project_name="debug-session"):
+    agent.invoke({"messages": [...]})
 `````)
 
-#warning-box[PII 마스킹은 _트레이스가 LangSmith 로 전송되기 전_ 의 단계에서 처리해야 합니다. 모델에는 원본을 그대로 전달하고, 외부에 기록되는 트레이스에만 마스킹된 사본이 남도록 분리하는 것이 핵심입니다.]
+=== `LangChainTracer` + anonymizer — PII 마스킹
+
+민감 데이터가 트레이스에 그대로 흘러가는 것을 막으려면 `LangChainTracer` 의 `anonymizer` 콜백을 사용합니다. 모든 input/output 직렬화 전 후크에서 PII 를 마스킹할 수 있습니다.
+
+#code-block(`````python
+from langchain_core.tracers import LangChainTracer
+
+def anonymizer(value):
+    # 이메일, 전화번호, SSN 등 마스킹
+    return mask_pii(value)
+
+tracer = LangChainTracer(anonymizer=anonymizer)
+agent.invoke({"messages": [...]}, config={"callbacks": [tracer]})
+`````)
+
 
 == 9.6 트레이스 분석
 
@@ -425,9 +421,13 @@ except Exception as e:
 태그된 트레이싱 활성화됨
 `````)
 
-== 9.7 LangGraph Studio -- 시각적 디버깅
+== 9.7 LangSmith Studio — 시각적 디버깅
 
-LangGraph Studio는 에이전트의 실행 흐름을 _시각적으로_ 디버깅할 수 있는 무료 도구입니다. 로컬 머신에서 에이전트를 개발하고 테스트하는 데 최적화되어 있습니다.
+LangSmith Studio 는 로컬 머신에서 LangChain 에이전트를 개발·테스트하기 위한 무료 시각 인터페이스입니다. 별도 배포 없이 `langgraph dev` 가 띄운 로컬 서버 (`http://127.0.0.1:2024`) 에 Studio UI 가 연결되어 동작합니다.
+
+=== Studio Key Features
+
+`docs/langchain/26-studio.md` 가 정의하는 Studio 의 핵심 가시성 항목 7가지:
 
 #table(
   columns: 2,
@@ -437,66 +437,53 @@ LangGraph Studio는 에이전트의 실행 흐름을 _시각적으로_ 디버깅
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[기능],
   text(weight: "bold")[설명],
-  [_그래프 시각화_],
-  [에이전트의 노드/엣지 구조를 실시간 확인. 현재 실행 중인 노드를 하이라이트],
-  [_단계별 실행_],
-  [각 노드의 입출력 데이터를 검사하며 디버깅. 프롬프트, 도구 호출, 결과를 단계별로 확인],
-  [_상태 검사 & 편집_],
-  [메시지 히스토리·체크포인트를 탐색하고, 노드 입력값을 _즉석에서 수정_ 한 뒤 재실행],
-  [_Time Travel_],
-  [이전 체크포인트로 되돌아가 다른 분기/도구 호출을 시도하는 분기 디버깅],
-  [_HITL 인터럽트 처리_],
-  [`interrupt()` 로 멈춘 그래프에 Studio UI 에서 직접 `Command(resume=...)` 입력],
-  [_스레드 관리_],
-  [`thread_id` 별 대화 트리를 좌측 패널에 표시, 과거 실행 비교 가능],
-  [_실시간 스트리밍_],
-  [에이전트 실행 과정을 실시간으로 관찰. 토큰/레이턴시 메트릭 제공],
+  [_Each step the agent executes_],
+  [에이전트가 실행하는 모든 스텝을 노드 단위로 추적],
+  [_Prompts sent to models_],
+  [모델에 실제 전송된 프롬프트 원문 확인],
+  [_Tool calls and their results_],
+  [호출된 도구·인자·반환값을 노드별로 검사],
+  [_Final outputs_],
+  [최종 응답을 단일 뷰로 확인],
+  [_Intermediate states for inspection_],
+  [모든 노드 진입·종료 시점의 상태를 검사],
+  [_Token and latency metrics_],
+  [노드별 토큰 사용량과 레이턴시를 시각화],
+  [_Hot-reloading / Thread replay / Exception capture_],
+  [코드 수정 즉시 반영, 스레드를 임의 단계에서 재실행, 예외 시 주변 상태 자동 캡처],
 )
 
 === 로컬 개발 서버 설정
 
-Studio를 사용하려면 LangGraph CLI로 로컬 개발 서버를 시작합니다:
-
 #code-block(`````bash
-# LangGraph CLI 설치 (Python 3.11+ 필요)
-pip install --upgrade "langgraph-cli[inmem]"
-
-# 개발 서버 시작
+pip install --upgrade "langgraph-cli[inmem]"   # Python 3.11+
 langgraph dev
 `````)
 
-서버가 시작되면 `https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024` 에서 Studio UI에 접근할 수 있습니다.
+UI 접근: `https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024`
 
-=== Studio에서 확인 가능한 정보
+Safari 사용자는 `--tunnel` 플래그가 필요합니다. 로컬 데이터를 LangSmith 로 보내고 싶지 않으면 `LANGSMITH_TRACING=false` 로 설정하세요.
 
-- 에이전트에게 전송되는 프롬프트
-- 각 도구 호출과 그 결과
-- 최종 출력
-- 중간 상태 (검사 및 수정 가능)
-- 토큰 사용량과 레이턴시 메트릭
+=== 연동 UI — Agent Chat UI
 
-=== 채팅 UI 스캐폴드 -- `npx create-agent-chat-app`
-
-Studio 가 _개발자_ 의 디버깅 도구라면, 최종 사용자를 위한 채팅 UI 는 별도의 프런트엔드가 필요합니다. LangChain 팀이 제공하는 `create-agent-chat-app` 템플릿은 배포된 LangGraph 에이전트에 곧바로 연결되는 Next.js 채팅 앱을 한 줄로 생성합니다.
+대화형 인터페이스가 필요하면 `docs/langchain/28-ui.md` 의 Agent Chat UI 를 함께 사용합니다.
 
 #code-block(`````bash
-npx create-agent-chat-app@latest my-agent-ui
-cd my-agent-ui
-# .env.local 에 NEXT_PUBLIC_API_URL, NEXT_PUBLIC_ASSISTANT_ID, LANGSMITH_API_KEY 설정
+npx create-agent-chat-app --project-name my-chat-ui
+cd my-chat-ui
+pnpm install
 pnpm dev
 `````)
 
-이 템플릿은 `/runs/stream` SSE 스트리밍, `thread_id` 기반 대화 이력, `interrupt()` 인터럽트 UI 까지 기본 탑재하고 있어 _배포된 그래프의 외피_ 로 빠르게 활용할 수 있습니다.
+연결 시 입력 항목:
+- _Graph ID_ — `langgraph.json` 의 그래프 이름
+- _Deployment URL_ — 로컬 서버 또는 배포 URL
+- _LangSmith API key_ — 클라우드 배포에서만 필요
 
-테스트와 관측성이 준비되었다면, 마지막 단계는 실제 배포입니다. 에이전트 배포는 전통적인 웹 애플리케이션 배포와 다른 고려사항이 있습니다.
 
 == 9.8 배포 옵션
 
-에이전트는 _상태를 유지하는 장기 실행 프로세스_이므로 일반 웹앱 호스팅과 다른 접근이 필요합니다.
-
-#tip-box[배포 직전 체크포인트는 4가지만 확인하면 됩니다: `1)` 상태 저장소가 실제 영속적인가, `2)` 트레이싱이 켜져 있는가, `3)` 재시도/타임아웃 정책이 정의되었는가, `4)` 배포 후 동일한 평가셋으로 스모크 테스트를 다시 돌렸는가.] 체크포인터를 통한 상태 영속화, 백그라운드에서의 장시간 실행, WebSocket 기반 스트리밍 등은 전통적인 요청-응답 모델의 웹 호스팅에서는 지원이 어렵습니다. LangGraph Platform은 이러한 에이전트 특유의 요구사항을 처음부터 고려하여 설계된 배포 인프라입니다.
-
-#warning-box[LangGraph Cloud에 배포할 때 `.env` 파일에 포함된 API 키는 Cloud 환경의 환경 변수로 _별도로_ 설정해야 합니다. `langgraph.json`의 `env` 필드는 로컬 개발 시 사용되며, 클라우드 배포 시에는 LangSmith 대시보드의 환경 변수 설정에서 관리합니다. API 키를 GitHub 리포지토리에 커밋하지 않도록 주의하세요.] 전통적인 stateless 웹 애플리케이션 호스팅(예: Vercel, Heroku)은 에이전트의 지속적 상태 관리, 백그라운드 실행, 체크포인팅에 적합하지 않습니다.
+에이전트는 _상태를 유지하는 장기 실행 프로세스_이므로 일반 웹앱 호스팅과 다른 접근이 필요합니다. 전통적인 stateless 웹 애플리케이션 호스팅(예: Vercel, Heroku)은 에이전트의 지속적 상태 관리, 백그라운드 실행, 체크포인팅에 적합하지 않습니다.
 
 #table(
   columns: 3,
@@ -635,7 +622,7 @@ Functional API의 핵심 특징:
 
 == 9.10 배포 명령어
 
-LangGraph CLI를 사용한 빌드, 로컬 서버, 클라우드 배포 명령어입니다.
+LangGraph CLI 를 사용한 빌드, 로컬 서버, 클라우드 배포 명령어입니다.
 
 === 1. Docker 이미지 빌드
 
@@ -647,7 +634,7 @@ langgraph build -t my-agent:latest
 
 === 2. 로컬 서버 실행
 
-로컬에서 에이전트를 실행하여 테스트합니다. Studio UI와 연동하여 시각적 디버깅이 가능합니다:
+로컬에서 에이전트를 실행하여 테스트합니다. Studio UI 와 연동하여 시각적 디버깅이 가능합니다:
 
 #code-block(`````bash
 # 프로덕션 모드 (Docker 기반)
@@ -660,14 +647,37 @@ langgraph dev
 === 3. 클라우드 배포
 
 LangSmith 대시보드에서:
-+ Deployments -\> "+ New Deployment"
++ Deployments → `+ New Deployment`
 + GitHub 저장소 연결
 + 리포지토리 선택 후 제출 (약 15분 소요)
 + 배포 완료 후 API URL 복사
 
-=== Python SDK로 배포된 에이전트 접근
+=== Python SDK 로 배포된 에이전트 호출
 
-`langgraph-sdk`를 사용하면 배포된 에이전트와 프로그래밍 방식으로 통신할 수 있습니다. 스트리밍, 스레드 관리, 상태 조회 등 모든 기능을 SDK로 제어합니다.
+`langgraph-sdk` 의 `client.runs.stream()` 으로 배포된 에이전트를 호출합니다. `stream_mode="updates"` 는 각 노드가 끝날 때마다 상태 변경분만 받아오므로 UI/로그에 적합합니다.
+
+#code-block(`````python
+from langgraph_sdk import get_sync_client   # 비동기는 get_client
+
+client = get_sync_client(
+    url="your-deployment-url",
+    api_key="your-langsmith-api-key",
+)
+
+for chunk in client.runs.stream(
+    None,                              # threadless run
+    "agent",                           # langgraph.json 의 그래프 이름
+    input={"messages": [
+        {"role": "human", "content": "What is LangGraph?"},
+    ]},
+    stream_mode="updates",
+):
+    print(f"event: {chunk.event}")
+    print(chunk.data)
+`````)
+
+threaded run 으로 다중 턴 대화를 유지하려면 `client.threads.create()` 로 thread 를 만들고 첫 인자에 thread_id 를 넘깁니다.
+
 
 #code-block(`````python
 try:
@@ -689,30 +699,9 @@ except Exception as e:
 LANGSMITH_API_KEY 미설정. 클라이언트 연결 건너뜀.
 `````)
 
-==== `client.runs.stream(...)` 으로 스트리밍 호출
-
-SDK 의 `runs.stream(...)` 는 배포된 에이전트로부터 토큰·메시지·도구 호출을 _Server-Sent Events_ 로 받습니다. `stream_mode` 는 `"values"`, `"updates"`, `"messages"`, `"events"` 를 조합할 수 있으며, `thread_id` 를 함께 넘기면 동일 세션의 대화 이력이 유지됩니다.
-
-#code-block(`````python
-from langgraph_sdk import get_client
-
-client = get_client(url="https://your-deployment.langsmith.com",
-                    api_key=api_key)
-
-async for chunk in client.runs.stream(
-    thread_id="user-42",
-    assistant_id="agent",
-    input={"messages": [
-        {"role": "user", "content": "최근 5분 매출 요약"}
-    ]},
-    stream_mode=["updates", "messages"],
-):
-    print(chunk.event, chunk.data)
-`````)
-
 === REST API로 접근
 
-배포된 에이전트는 REST API로도 접근할 수 있습니다. 이를 통해 어떤 프로그래밍 언어/프레임워크에서도 에이전트와 통신 가능합니다:
+배포된 에이전트는 REST API로도 접근할 수 있습니다. 어떤 프로그래밍 언어/프레임워크에서도 에이전트와 통신 가능합니다:
 
 #code-block(`````bash
 curl --request POST \
@@ -769,6 +758,8 @@ curl --request POST \
   [단위 테스트(`GenericFakeChatModel`) + 통합 테스트(`agentevals`) 병행],
   [_LangSmith 평가_],
   [Trajectory Match (strict/unordered/subset/superset), LLM-as-Judge],
+  [_Runtime Rubric_],
+  [`RubricMiddleware`로 고위험 요청에 실행 중 품질 게이트 적용],
   [_관측성_],
   [`LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY`로 자동 트레이싱],
   [_트레이스 분석_],
@@ -782,5 +773,3 @@ curl --request POST \
   [_배포 명령어_],
   [`langgraph build` -\\\> `langgraph up` -\\\> LangSmith Deploy],
 )
-
-Part 5를 통해 v1 마이그레이션부터 프로덕션 배포까지, 에이전트 개발의 전체 라이프사이클을 학습했습니다. Part 6에서는 이 모든 지식을 종합하여 RAG, SQL, 데이터 분석, 머신러닝, 딥 리서치 에이전트를 실전 프로젝트로 구현합니다.

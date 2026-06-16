@@ -5,19 +5,15 @@
 
 #chapter(11, "MCP (Model Context Protocol)")
 
-에이전트가 사용할 수 있는 도구를 일일이 코드로 작성하는 대신, 표준화된 프로토콜을 통해 외부 도구 서버에 연결할 수 있다면 어떨까요? MCP(Model Context Protocol)는 바로 이 목적을 위해 만들어진 개방형 표준입니다. 이 장에서는 MCP의 아키텍처를 이해하고, `langchain-mcp-adapters`를 사용하여 LangChain 에이전트에 MCP 서버의 도구를 통합하는 방법을 학습합니다.
-
-MCP의 핵심 가치는 _도구 제공자와 도구 소비자의 분리_입니다. 데이터베이스 관리자가 MCP 서버를 한 번 구현하면, Claude, ChatGPT, LangChain 에이전트 등 MCP를 지원하는 모든 호스트 애플리케이션이 별도의 통합 코드 없이 해당 도구를 사용할 수 있습니다. 이는 USB가 다양한 장치를 표준화된 인터페이스로 연결하는 것과 유사합니다.
-
-#learning-header()
-MCP를 통해 외부 도구와 컨텍스트를 에이전트에 연결하는 방법을 알아봅니다.
+== 학습 목표
+MCP(Model Context Protocol)로 외부 도구와 컨텍스트를 에이전트에 연결하는 방법을 알아봅니다.
 
 이 노트북에서 다루는 내용:
 - MCP의 개념과 아키텍처(서버/클라이언트/호스트)를 이해한다
 - `langchain-mcp-adapters` 패키지로 MCP 서버에 연결한다
-- `create_agent(model=..., tools=await client.get_tools())` 패턴으로 에이전트와 MCP 도구를 통합한다
-- Stdio와 SSE 전송 방식의 차이를 안다
-- 다중 MCP 서버를 연결하는 방법을 익힌다
+- `create_agent(model=..., tools=await client.get_tools())` 패턴으로 MCP 도구를 에이전트에 주입한다
+- Stdio와 streamable-http 전송 방식의 차이를 안다
+- 다중 MCP 서버를 연결하고 인증·Elicitation·인터셉터로 확장한다
 
 == 11.1 환경 설정
 
@@ -33,9 +29,6 @@ model = ChatOpenAI(
 )
 
 print("환경 준비 완료.")
-`````)
-#output-block(`````
-환경 준비 완료.
 `````)
 
 == 11.2 MCP 개념
@@ -72,14 +65,10 @@ _MCP(Model Context Protocol)_는 외부 도구와 컨텍스트를 _표준화된 
 
 === 왜 MCP인가?
 
-MCP 이전에는 각 도구마다 개별적으로 연결 코드를 작성해야 했습니다. MCP는 이를 _하나의 표준 프로토콜_로 통합하여:
-- 도구 제공자는 한 번만 MCP 서버를 구현하면 됩니다
+MCP 이전에는 각 도구마다 연결 코드를 따로 작성해야 했습니다. MCP는 이를 _하나의 표준 프로토콜_로 통합합니다:
+- 도구 제공자는 MCP 서버를 한 번만 구현하면 됩니다
 - LLM 호스트는 MCP 클라이언트 하나로 모든 도구에 접근할 수 있습니다
 - 생태계 전체에서 도구를 재사용할 수 있습니다
-
-MCP의 3계층 아키텍처를 좀 더 자세히 살펴보면: _호스트(Host)_는 사용자의 LangChain 에이전트 애플리케이션입니다. 호스트 안에서 _클라이언트(Client)_가 MCP 프로토콜을 사용하여 외부 _서버(Server)_와 통신합니다. 클라이언트는 서버에 "어떤 도구를 제공하는가?"라고 물어 도구 목록을 동적으로 발견(discover)하고, LLM이 도구 호출을 결정하면 해당 서버에 실행 요청을 보냅니다.
-
-이제 LangChain에서 이 프로토콜을 어떻게 사용하는지 살펴보겠습니다.
 
 == 11.3 langchain-mcp-adapters 설치
 
@@ -88,140 +77,141 @@ LangChain에서 MCP를 사용하려면 `langchain-mcp-adapters` 패키지가 필
 #code-block(`````python
 # MCP 어댑터 설치 명령어
 print("MCP 어댑터 설치:")
-print("  pip install langchain-mcp-adapters")
+print("  uv add langchain-mcp-adapters mcp")
 print()
-print("주요 컴포넌트:")
-print("  - MultiServerMCPClient: 여러 MCP 서버를 관리하는 클라이언트")
-print("  - client.get_tools(): MCP 서버에서 도구를 LangChain Tool로 변환")
-print("  - client.get_resources(): MCP 서버에서 리소스를 LangChain Blob으로 변환")
-`````)
-#output-block(`````
-MCP 어댑터 설치:
-  pip install langchain-mcp-adapters
+print("주요 진입점 시그니처:")
+print("  - MultiServerMCPClient(connections, *, tool_interceptors=None)")
+print("      .get_tools(server_name: str | None = None) -> list[BaseTool]")
+print("      .get_resources(server_name: str, uris: list[str] | None = None) -> list[Blob]")
+print("      .get_prompt(server_name: str, prompt_name: str, arguments: dict | None = None) -> list[BaseMessage]")
+print("      .session(server_name: str) -> async contextmanager[ClientSession]")
+print("  - load_mcp_tools(session: ClientSession) -> list[BaseTool]")
+print("  - load_mcp_resources(session: ClientSession, *, uris: list[str] | None = None) -> list[Blob]")
+print("  - FastMCP: 데코레이터로 MCP 서버를 빠르게 구축")
 
-주요 컴포넌트:
-  - MultiServerMCPClient: 여러 MCP 서버를 관리하는 클라이언트
-  - client.get_tools(): MCP 서버에서 도구를 LangChain Tool로 변환
-  - client.get_resources(): MCP 서버에서 리소스를 LangChain Blob으로 변환
 `````)
-
-MCP 어댑터를 설치했으면, 실제로 MCP 서버와 통신하는 두 가지 전송 방식을 알아보겠습니다. 전송 방식의 선택은 MCP 서버의 위치(로컬 vs 원격)에 따라 달라집니다.
 
 == 11.4 Stdio 전송
 
-_Stdio(Standard I/O)_ 전송은 로컬 서브프로세스를 통해 MCP 서버와 통신합니다. 클라이언트가 MCP 서버를 자식 프로세스로 직접 실행하고, `stdin`/`stdout`을 통해 JSON-RPC 메시지를 교환합니다. 별도의 네트워크 설정이 불필요하고 프로세스 생명주기가 클라이언트에 의해 자동 관리되므로, 개발 및 테스트 환경에 적합합니다.
+_Stdio(Standard I/O)_ 전송은 로컬 서브프로세스로 MCP 서버와 통신합니다. 개발 및 테스트 환경에 적합합니다.
 
 #code-block(`````python
-# Stdio 전송 설정 예시 (실제 실행하지 않음)
-stdio_config = {
-    "math_server": {
-        "transport": "stdio",
-        "command": "python",
-        "args": ["math_server.py"],
-    }
-}
-
-print("Stdio 전송 설정:")
-import json
-print(json.dumps(stdio_config, indent=2))
-print()
-print("사용 패턴:")
-print("  async with MultiServerMCPClient(stdio_config) as client:")
-print("      tools = client.get_tools()")
-print()
-print("특징:")
-print("  - 로컬 서브프로세스로 통신 (stdin/stdout)")
-print("  - 개발/테스트 환경에 적합")
-print("  - 별도 서버 실행 불필요 — 자동으로 프로세스 시작")
+from pathlib import Path; import json, tempfile, sys
+server_path = Path(tempfile.gettempdir()) / "lc_mcp_math_server.py"
+server_path.write_text('from mcp.server.fastmcp import FastMCP\nmcp = FastMCP("math")\n@mcp.tool()\ndef add(a: int, b: int) -> int:\n    return a + b\nif __name__ == "__main__":\n    mcp.run(transport="stdio")')
+stdio_config = {"math": {"transport": "stdio", "command": sys.executable, "args": [str(server_path)]}}
+print("Stdio 전송 설정:"); print(json.dumps(stdio_config, indent=2))
+print(f"\n서버 파일: {server_path}")
 `````)
-#output-block(`````
-Stdio 전송 설정:
-{
-  "math_server": {
-    "transport": "stdio",
-    "command": "python",
-    "args": [
-      "math_server.py"
-    ]
-  }
-}
-
-사용 패턴:
-  async with MultiServerMCPClient(stdio_config) as client:
-      tools = client.get_tools()
-
-특징:
-  - 로컬 서브프로세스로 통신 (stdin/stdout)
-  - 개발/테스트 환경에 적합
-  - 별도 서버 실행 불필요 — 자동으로 프로세스 시작
-`````)
-
-Stdio가 로컬 개발에 적합하다면, 프로덕션 환경에서는 원격 서버와 통신할 수 있는 HTTP 기반 전송이 필요합니다.
 
 == 11.5 SSE/HTTP 전송
 
-_HTTP(streamable-http)_ 전송은 웹 기반 통신으로, 원격 MCP 서버에 연결할 때 사용합니다. 인증 헤더와 커스텀 설정을 지원합니다. `streamable_http`는 최신 MCP 사양에서 권장하는 전송 방식이며, 기존의 SSE(Server-Sent Events) 전송은 레거시로 분류되었으나 여전히 지원됩니다.
-
-#tip-box[`streamable_http`와 `sse`의 차이: `streamable_http`는 단일 HTTP 엔드포인트에서 요청/응답과 서버 푸시를 모두 처리하며, `sse`는 이벤트 스트리밍과 요청을 별도 채널로 분리합니다. 새로운 프로젝트에서는 `streamable_http`를 사용하세요.]
+_HTTP(streamable-http)_ 전송은 웹 기반 통신으로, 원격 MCP 서버에 연결할 때 사용합니다. 인증 헤더와 커스텀 설정을 지원합니다.
 
 #code-block(`````python
-# HTTP/streamable-http 전송 설정 예시 (실제 실행하지 않음)
+# HTTP/streamable-http 전송 설정 예시
+http_config = {
+    "weather_server": {"transport": "streamable_http", "url": "https://weather-mcp.example.com/mcp", "headers": {"Authorization": "Bearer YOUR_API_KEY"}}
+}
+import json; print("HTTP 전송 설정:"); print(json.dumps(http_config, indent=2))
+print("\n사용 패턴: client = MultiServerMCPClient(http_config) -> await client.get_tools()")
+`````)
+
+=== 인증 — 두 가지 트랙
+
+원격 MCP 서버에 붙을 때는 _정적 헤더_(가장 단순)와 _OAuth2 흐름_(만료·갱신 자동) 두 트랙이 자주 쓰입니다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[트랙],
+  text(weight: "bold")[적합 시나리오],
+  text(weight: "bold")[구현],
+  [정적 헤더],
+  [API key·서비스 토큰],
+  [`headers={"Authorization": "Bearer ..."}`],
+  [`httpx.Auth`],
+  [사용자별 토큰·서명·만료 처리],
+  [커스텀 `httpx.Auth` 서브클래스],
+  [MCP OAuth2],
+  [사용자 동의 기반 third-party 서버],
+  [`mcp.client.auth.oauth2` 의 `OAuthClientProvider`],
+)
+
+
+#code-block(`````python
+# (A) httpx.Auth — 매 요청마다 토큰을 동적으로 주입
+auth_example_httpx = '''
+import httpx
+
+class BearerAuth(httpx.Auth):
+    def __init__(self, token_provider):
+        self._token_provider = token_provider
+
+    def auth_flow(self, request):
+        token = self._token_provider()             # 만료 시 새로 발급
+        request.headers["Authorization"] = f"Bearer {token}"
+        yield request
+
 http_config = {
     "weather_server": {
         "transport": "streamable_http",
         "url": "https://weather-mcp.example.com/mcp",
-        "headers": {
-            "Authorization": "Bearer YOUR_API_KEY"
-        },
+        "auth": BearerAuth(token_provider=lambda: get_fresh_token()),
     }
 }
+'''
 
-print("HTTP 전송 설정:")
-import json
-print(json.dumps(http_config, indent=2))
-print()
-print("사용 패턴:")
-print("  async with MultiServerMCPClient(http_config) as client:")
-print("      tools = client.get_tools()")
-print()
-print("전송 방식 비교:")
-print("  | 전송 방식        | 사용 사례         | 인증 지원 |")
-print("  |-----------------|------------------|----------|")
-print("  | stdio           | 로컬 개발/테스트   | N/A      |")
-print("  | streamable_http | 원격 서버 연결     | 헤더 지원  |")
-print("  | sse             | 레거시 SSE 서버   | 헤더 지원  |")
-`````)
-#output-block(`````
-HTTP 전송 설정:
-{
-  "weather_server": {
-    "transport": "streamable_http",
-    "url": "https://weather-mcp.example.com/mcp",
-    "headers": {
-      "Authorization": "Bearer YOUR_API_KEY"
+# (B) MCP Python SDK 의 기본 OAuth2 — 사용자 동의 기반
+auth_example_oauth = '''
+from mcp.client.auth.oauth2 import OAuthClientProvider, OAuthClientMetadata
+
+oauth_provider = OAuthClientProvider(
+    server_url="https://mcp.example.com",
+    client_metadata=OAuthClientMetadata(
+        client_name="my-agent",
+        redirect_uris=["http://localhost:3000/callback"],
+        scope="tools:read tools:execute",
+    ),
+)
+
+http_config = {
+    "calendar_server": {
+        "transport": "streamable_http",
+        "url": "https://mcp.example.com/mcp",
+        "auth": oauth_provider,
     }
-  }
 }
+'''
 
-사용 패턴:
-  async with MultiServerMCPClient(http_config) as client:
-      tools = client.get_tools()
-
-전송 방식 비교:
-  | 전송 방식        | 사용 사례         | 인증 지원 |
-  |-----------------|------------------|----------|
-  | stdio           | 로컬 개발/테스트   | N/A      |
-  | streamable_http | 원격 서버 연결     | 헤더 지원  |
-  | sse             | 레거시 SSE 서버   | 헤더 지원  |
+print(auth_example_httpx)
+print("---")
+print(auth_example_oauth)
 `````)
-
-전송 방식을 이해했으니, 이제 MCP 서버에서 가져온 도구를 실제로 에이전트에 연결하는 과정을 살펴보겠습니다.
 
 == 11.6 MCP 도구 로드 및 에이전트 통합
 
-MCP 서버에서 가져온 도구를 LangChain 에이전트에 바인딩하는 패턴입니다. 핵심은 `client.get_tools()` 메서드입니다. 이 메서드는 MCP 서버가 노출하는 도구 목록을 자동으로 발견하고, 각 도구의 이름, 설명, 파라미터 스키마를 LangChain의 `Tool` 객체로 변환합니다. 변환된 도구는 `create_agent(tools=mcp_tools)`에 그대로 전달할 수 있습니다.
+MCP 서버에서 가져온 도구를 LangChain 에이전트에 바인딩하는 패턴입니다.
 
-=== 주요 함수 시그니처
+== 11.7 다중 MCP 서버 연결
+
+`MultiServerMCPClient`는 이름 그대로 여러 MCP 서버를 동시에 관리할 수 있습니다.
+
+#code-block(`````python
+# 다중 MCP 서버 설정 예시
+import json, sys
+multi_server_config = {"math_server": {"transport": "stdio", "command": sys.executable, "args": [str(server_path)]}, "weather_server": {"transport": "streamable_http", "url": "https://weather-mcp.example.com/mcp"}, "database_server": {"transport": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-postgres"], "env": {"DATABASE_URL": "postgresql://..."}}}
+print("다중 MCP 서버 설정:"); print(json.dumps(multi_server_config, indent=2, ensure_ascii=False))
+print("\n사용 패턴: client = MultiServerMCPClient(multi_server_config) -> await client.get_tools()")
+print("참고: 기본적으로 stateless — 각 도구 호출마다 새 세션 생성 후 정리")
+`````)
+
+== 11.7b Elicitation — 서버가 사용자 입력을 요청
+
+MCP 서버가 도구 실행 중 _사용자에게 추가 정보_를 요청할 수 있습니다. 클라이언트는 콜백을 등록해 사용자에게 물어보고, `ElicitResult` 로 결과를 돌려줍니다.
 
 #table(
   columns: 2,
@@ -229,262 +219,42 @@ MCP 서버에서 가져온 도구를 LangChain 에이전트에 바인딩하는 �
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[함수],
-  text(weight: "bold")[설명],
-  [`client.get_tools()`],
-  [모든 등록 서버의 도구를 LangChain `Tool` 리스트로 반환],
-  [`client.get_resources(server_name)`],
-  [특정 서버의 리소스를 LangChain `Blob` 리스트로 반환],
-  [`client.get_prompt(server_name, prompt_name, arguments={...})`],
-  [서버에 등록된 프롬프트 템플릿을 가져옴],
-  [`load_mcp_tools(session)`],
-  [열린 세션에서 도구 목록을 LangChain `Tool`로 변환 (stateful 패턴)],
-  [`load_mcp_resources(session, uris=[...])`],
-  [열린 세션에서 지정한 URI의 리소스를 로드],
+  text(weight: "bold")[`action`],
+  text(weight: "bold")[의미],
+  [`accept`],
+  [사용자가 동의·값 입력 → `content` 에 값],
+  [`decline`],
+  [사용자가 거부 → 서버는 대체 흐름 진행],
+  [`cancel`],
+  [사용자가 취소 → 도구 실행 중단],
 )
 
-#code-block(`````python
-# MCP 도구를 에이전트에 통합하는 패턴 (개념 코드)
-print("MCP 도구 → 에이전트 통합 패턴:")
-print("=" * 50)
-print("""
-from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain.agents import create_agent
-
-mcp_config = {
-    "math": {
-        "transport": "stdio",
-        "command": "python",
-        "args": ["math_server.py"],
-    }
-}
-
-async with MultiServerMCPClient(mcp_config) as client:
-    # 1. MCP 서버에서 도구 가져오기
-    mcp_tools = await client.get_tools()
-
-    # 2. 에이전트에 도구 전달
-    agent = create_agent(
-        model="gpt-5.4",
-        tools=mcp_tools,
-    )
-
-    # 3. 에이전트 실행
-    result = agent.invoke(
-        {"messages": [{"role": "user", "content": "2 + 3은?"}]}
-    )
-""")
-print("핵심: client.get_tools()가 MCP 도구를 LangChain Tool로 자동 변환합니다.")
-`````)
-#output-block(`````
-MCP 도구 → 에이전트 통합 패턴:
-==================================================
-
-from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain.agents import create_agent
-
-mcp_config = {
-    "math": {
-        "transport": "stdio",
-        "command": "python",
-        "args": ["math_server.py"],
-    }
-}
-
-async with MultiServerMCPClient(mcp_config) as client:
-    # 1. MCP 서버에서 도구 가져오기
-    mcp_tools = await client.get_tools()
-
-    # 2. 에이전트에 도구 전달
-    agent = create_agent(
-        model="gpt-5.4",
-        tools=mcp_tools,
-    )
-
-    # 3. 에이전트 실행
-    result = agent.invoke(
-        {"messages": [{"role": "user", "content": "2 + 3은?"}]}
-    )
-
-핵심: client.get_tools()가 MCP 도구를 LangChain Tool로 자동 변환합니다.
-`````)
-
-단일 서버 연결을 마스터했다면, 실전에서는 여러 MCP 서버를 동시에 연결하는 경우가 더 많습니다. 수학 연산 서버, 날씨 API 서버, 데이터베이스 서버 등을 하나의 에이전트에서 모두 사용하는 시나리오를 살펴보겠습니다.
-
-== 11.7 다중 MCP 서버 연결
-
-`MultiServerMCPClient`는 이름 그대로 여러 MCP 서버를 동시에 관리할 수 있습니다. 설정 딕셔너리에 여러 서버를 나열하면, 클라이언트가 모든 서버에 동시에 연결하고 각 서버의 도구를 하나의 통합 리스트로 반환합니다.
-
-#warning-box[여러 MCP 서버의 도구가 같은 이름을 가질 수 있습니다. 예를 들어 두 서버 모두 `search`라는 도구를 제공하면 충돌이 발생합니다. `MultiServerMCPClient`는 기본적으로 서버 이름을 접두사로 붙여 이를 방지하지만, 명시적으로 도구 이름을 확인하는 것이 안전합니다.]
 
 #code-block(`````python
-# 다중 MCP 서버 설정 예시
-multi_server_config = {
-    "math_server": {
-        "transport": "stdio",
-        "command": "python",
-        "args": ["math_server.py"],
-    },
-    "weather_server": {
-        "transport": "streamable_http",
-        "url": "https://weather-mcp.example.com/mcp",
-    },
-    "database_server": {
-        "transport": "stdio",
-        "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-postgres"],
-        "env": {"DATABASE_URL": "postgresql://..."},
-    },
-}
-
-print("다중 MCP 서버 설정:")
-import json
-print(json.dumps(multi_server_config, indent=2, ensure_ascii=False))
-print()
-print("사용 패턴:")
-print("  async with MultiServerMCPClient(multi_server_config) as client:")
-print("      tools = client.get_tools()  # 모든 서버의 도구를 한 번에 로드")
-print("      # tools 리스트에 math, weather, database 도구가 모두 포함")
-print()
-print("참고: 기본적으로 stateless — 각 도구 호출마다 새 세션 생성 후 정리")
-`````)
-#output-block(`````
-다중 MCP 서버 설정:
-{
-  "math_server": {
-    "transport": "stdio",
-    "command": "python",
-    "args": [
-      "math_server.py"
-    ]
-  },
-  "weather_server": {
-    "transport": "streamable_http",
-    "url": "https://weather-mcp.example.com/mcp"
-  },
-  "database_server": {
-    "transport": "stdio",
-    "command": "npx",
-    "args": [
-      "-y",
-      "@modelcontextprotocol/server-postgres"
-    ],
-    "env": {
-      "DATABASE_URL": "postgresql://..."
-    }
-  }
-}
-
-사용 패턴:
-  async with MultiServerMCPClient(multi_server_config) as client:
-      tools = client.get_tools()  # 모든 서버의 도구를 한 번에 로드
-      # tools 리스트에 math, weather, database 도구가 모두 포함
-... (truncated)
-`````)
-
-=== Stateful sessions
-
-기본 `client.get_tools()`는 각 도구 호출마다 새 세션을 열고 닫는 _stateless_ 모드입니다. 같은 세션 안에서 여러 호출을 묶고 싶다면 `client.session(server_name)`으로 명시적 세션을 엽니다.
-
-#code-block(`````python
-async with client.session("math_server") as session:
-    tools = await load_mcp_tools(session)
-    # 같은 세션을 공유한 채 여러 도구 호출
-    result1 = await tools[0].ainvoke({"a": 1, "b": 2})
-    result2 = await tools[1].ainvoke({"a": 3, "b": 4})
-`````)
-
-== 11.8 MCP 인증
-
-원격 MCP 서버에 접속할 때는 두 가지 인증 트랙을 사용합니다.
-
-=== 트랙 A — 정적 헤더
-
-가장 단순한 방식으로, 헤더에 토큰을 직접 넣습니다. CI/CD 등 사전 발급된 키를 사용할 때 적합합니다.
-
-#code-block(`````python
-http_config = {
-    "weather_server": {
-        "transport": "streamable_http",
-        "url": "https://weather-mcp.example.com/mcp",
-        "headers": {"Authorization": "Bearer YOUR_API_KEY"},
-    }
-}
-`````)
-
-=== 트랙 B — `httpx.Auth` 인터페이스
-
-토큰 갱신·서명 등 동적 인증이 필요하면 `httpx.Auth` 구현체를 전달합니다.
-
-#code-block(`````python
-import httpx
-
-class BearerAuth(httpx.Auth):
-    def __init__(self, token: str):
-        self.token = token
-
-    def auth_flow(self, request):
-        request.headers["Authorization"] = f"Bearer {self.token}"
-        yield request
-
-http_config = {
-    "weather_server": {
-        "transport": "streamable_http",
-        "url": "https://weather-mcp.example.com/mcp",
-        "auth": BearerAuth(token="..."),
-    }
-}
-`````)
-
-=== 트랙 C — MCP SDK OAuth2
-
-MCP Python SDK가 제공하는 `mcp.client.auth.oauth2` 모듈을 사용하면 표준 OAuth2 흐름(authorization code, refresh token)을 그대로 따를 수 있습니다.
-
-#code-block(`````python
-from mcp.client.auth.oauth2 import OAuth2ClientCredentials
-
-auth = OAuth2ClientCredentials(
-    token_url="https://auth.example.com/token",
-    client_id="my-client",
-    client_secret="...",
-    scope="mcp.tools",
-)
-
-http_config = {
-    "secure_server": {
-        "transport": "streamable_http",
-        "url": "https://secure-mcp.example.com/mcp",
-        "auth": auth,
-    }
-}
-`````)
-
-== 11.9 Elicitation — 서버가 사용자 입력을 요청
-
-Elicitation은 MCP 서버가 도구 실행 중에 _추가 입력_을 클라이언트(호스트)에 요청하는 메커니즘입니다. 호스트가 사용자에게 보여 줄 폼을 띄우고, 응답을 `ElicitResult`로 돌려줍니다.
-
-#code-block(`````python
-from mcp import ElicitResult, Callbacks
+# Elicitation 콜백 — 클라이언트가 사용자에게 묻고 결과를 ElicitResult 로 회신
+elicit_example = '''
+from mcp.types import ElicitResult
+from langchain_mcp_adapters.client import MultiServerMCPClient, Callbacks
 
 async def on_elicitation(request):
-    # 호스트 측에서 사용자에게 폼을 보여주고 응답 수집
-    user_input = await show_form(request.schema)
-    return ElicitResult(
-        action="accept",   # "accept" | "decline" | "cancel"
-        content={"city": user_input["city"], "unit": "celsius"},
-    )
+    # request.message — 서버가 보낸 안내 문구
+    # request.requested_schema — 어떤 값을 원하는지(JSON Schema)
+    user_value = await ask_user_in_ui(request.message, request.requested_schema)
+    if user_value is None:
+        return ElicitResult(action="cancel")
+    return ElicitResult(action="accept", content={"value": user_value})
 
-callbacks = Callbacks(on_elicitation=on_elicitation)
-
-async with MultiServerMCPClient(config, callbacks=callbacks) as client:
-    tools = await client.get_tools()
+client = MultiServerMCPClient(
+    stdio_config,
+    callbacks=Callbacks(on_elicitation=on_elicitation),
+)
+'''
+print(elicit_example)
 `````)
 
-#tip-box[`action="accept"`는 사용자가 값을 제공한 경우, `"decline"`은 사용자가 거절한 경우, `"cancel"`은 도구 실행 자체를 중단하라는 신호로 사용합니다.]
+== 11.8 도구 인터셉터
 
-== 11.10 도구 인터셉터
-
-_Tool Interceptor_는 MCP 도구 호출을 가로채는 미들웨어입니다. 런타임 컨텍스트에 접근하거나, 요청/응답을 수정하거나, 재시도 로직을 구현할 수 있습니다.
+_Tool Interceptor_는 MCP 도구 호출을 가로채는 미들웨어입니다. 런타임 컨텍스트에 접근하거나 요청/응답을 수정하거나 재시도 로직을 구현할 수 있습니다.
 
 === 인터셉터 사용 사례
 
@@ -509,154 +279,56 @@ _Tool Interceptor_는 MCP 도구 호출을 가로채는 미들웨어입니다. �
 )
 
 #code-block(`````python
-# 도구 인터셉터 예시 (개념 코드)
-print("도구 인터셉터 패턴:")
-print("=" * 50)
-print("""
-from langchain_mcp_adapters.client import MultiServerMCPClient
-
-# 인터셉터 함수 정의
-async def auth_interceptor(request, context):
-    \"\"\"런타임 컨텍스트에서 사용자 토큰을 주입합니다.\"\"\" 
-    user_token = context.get("user_token", "")
-    request.params["auth_token"] = user_token
-    return request
-
-async def logging_interceptor(request, context):
-    \"\"\"도구 호출을 로깅합니다.\"\"\"
-    print(f"Tool call: {request.tool_name}")
-    return request
-
-# 인터셉터를 클라이언트에 전달
-async with MultiServerMCPClient(
-    config,
-    interceptors=[auth_interceptor, logging_interceptor],
-) as client:
-    tools = client.get_tools()
-""")
-print("인터셉터는 도구 호출 전에 순서대로 실행됩니다.")
-`````)
-
-=== 인터셉터에서 `Command` 반환
-
-인터셉터는 단순히 요청을 가공하는 것을 넘어, LangGraph의 `Command` 객체를 반환하여 _상태 업데이트_와 _다음 노드 지정_까지 수행할 수 있습니다.
-
-#code-block(`````python
+# 인터셉터에서 LangGraph Command 를 반환해 흐름을 조작
+# - 도구 호출 결과를 그대로 흘려보내는 대신, 상태 업데이트 + 다음 노드 지정까지 한 번에
+interceptor_cmd_example = '''
 from langgraph.types import Command
+from langchain_mcp_adapters.interceptors import ToolCallInterceptor
 
-async def logging_interceptor(request, context):
-    """도구 호출을 로깅하면서 상태에 트레이스를 누적."""
-    print(f"[interceptor] tool={request.tool_name}")
-    return Command(
-        update={"tool_calls_log": [request.tool_name]},
-        goto="tools",
-    )
+class RoutingInterceptor(ToolCallInterceptor):
+    async def __call__(self, request, handler):
+        result = await handler(request)
+        # 특정 도구가 완료되면 summary_agent 노드로 라우팅 + 상태 갱신
+        if request.name == "final_report":
+            return Command(
+                update={
+                    "messages": [result],
+                    "task_status": "completed",
+                },
+                goto="summary_agent",
+            )
+        return result
+'''
+print(interceptor_cmd_example)
 `````)
 
-이 패턴은 인터셉터에서 가드레일을 적용하다 위험 호출이 감지되면 `goto="human_review"`로 보내는 식의 분기 로직을 구현할 때 유용합니다.
+== 11.9b Stateful 세션 — 도구 호출 간 상태 공유
 
-#output-block(`````
-도구 인터셉터 패턴:
-==================================================
+기본 `client.get_tools()` 는 stateless(매 호출마다 새 세션) 입니다. 동일 세션에서 여러 도구를 연속 호출하며 서버 측 상태를 공유해야 하면 `client.session(...)` 컨텍스트로 묶고 `load_mcp_tools(session)` 으로 도구를 가져옵니다.
 
-from langchain_mcp_adapters.client import MultiServerMCPClient
-
-# 인터셉터 함수 정의
-async def auth_interceptor(request, context):
-    """런타임 컨텍스트에서 사용자 토큰을 주입합니다.""" 
-    user_token = context.get("user_token", "")
-    request.params["auth_token"] = user_token
-    return request
-
-async def logging_interceptor(request, context):
-    """도구 호출을 로깅합니다."""
-    print(f"Tool call: {request.tool_name}")
-    return request
-
-# 인터셉터를 클라이언트에 전달
-async with MultiServerMCPClient(
-    config,
-    interceptors=[auth_interceptor, logging_interceptor],
-) as client:
-    tools = client.get_tools()
-
-인터셉터는 도구 호출 전에 순서대로 실행됩니다.
-`````)
-
-지금까지 기존 MCP 서버에 연결하는 방법을 배웠습니다. 하지만 조직 내부의 API나 비즈니스 로직을 MCP 도구로 노출하려면 직접 MCP 서버를 작성해야 합니다.
-
-== 11.11 커스텀 MCP 서버 작성
-
-_FastMCP_ 라이브러리를 사용하면 데코레이터로 간편하게 MCP 서버를 구축할 수 있습니다. `@mcp.tool()` 데코레이터를 함수에 붙이면 해당 함수가 MCP 도구로 자동 등록되며, 함수의 타입 힌트와 독스트링이 도구의 파라미터 스키마와 설명으로 변환됩니다.
 
 #code-block(`````python
-# 커스텀 MCP 서버 예시 (FastMCP)
-print("커스텀 MCP 서버 작성 (FastMCP):")
-print("=" * 50)
-print("""
-# my_server.py
-from mcp.server.fastmcp import FastMCP
+# Stateful 세션 — 같은 세션 안에서 도구 N개를 연속 실행
+stateful_example = '''
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.tools import load_mcp_tools
 
-mcp = FastMCP("my-tools")
-
-@mcp.tool()
-def add(a: int, b: int) -> int:
-    \"\"\"두 수를 더합니다.\"\"\"
-    return a + b
-
-@mcp.tool()
-def multiply(a: int, b: int) -> int:
-    \"\"\"두 수를 곱합니다.\"\"\"
-    return a * b
-
-@mcp.resource("config://app")
-def get_config() -> str:
-    \"\"\"앱 설정을 반환합니다.\"\"\"
-    return '{"version": "1.0", "debug": false}'
-
-if __name__ == "__main__":
-    mcp.run(transport="stdio")
-""")
-print("실행 방법:")
-print("  1. Stdio: python my_server.py")
-print("  2. HTTP:  mcp.run(transport='streamable-http', port=8080)")
-print()
-print("LangChain 연결:")
-print('  config = {"my_tools": {"transport": "stdio", "command": "python", "args": ["my_server.py"]}}')
+async def run_with_session():
+    client = MultiServerMCPClient(stdio_config)
+    async with client.session("math") as session:
+        tools = await load_mcp_tools(session)            # 이 세션에 바인딩된 도구
+        # 동일 세션이 살아 있는 동안 도구 호출이 같은 상태를 공유합니다.
+        agent = create_agent(model=model, tools=tools)
+        return await agent.ainvoke(
+            {"messages": [{"role": "user", "content": "2와 3을 더하고 결과를 5와 곱해주세요."}]},
+        )
+'''
+print(stateful_example)
 `````)
-#output-block(`````
-커스텀 MCP 서버 작성 (FastMCP):
-==================================================
 
-# my_server.py
-from mcp.server.fastmcp import FastMCP
+== 11.9 커스텀 MCP 서버 작성
 
-mcp = FastMCP("my-tools")
-
-@mcp.tool()
-def add(a: int, b: int) -> int:
-    """두 수를 더합니다."""
-    return a + b
-
-@mcp.tool()
-def multiply(a: int, b: int) -> int:
-    """두 수를 곱합니다."""
-    return a * b
-
-@mcp.resource("config://app")
-def get_config() -> str:
-    """앱 설정을 반환합니다."""
-    return '{"version": "1.0", "debug": false}'
-
-if __name__ == "__main__":
-    mcp.run(transport="stdio")
-
-실행 방법:
-  1. Stdio: python my_server.py
-  2. HTTP:  mcp.run(transport='streamable-http', port=8080)
-
-... (truncated)
-`````)
+_FastMCP_ 라이브러리를 쓰면 데코레이터로 간편하게 MCP 서버를 구축할 수 있습니다.
 
 #chapter-summary-header()
 
@@ -686,7 +358,6 @@ if __name__ == "__main__":
   [`FastMCP`의 데코레이터로 간편하게 MCP 서버를 구축합니다],
 )
 
-MCP를 통해 에이전트의 도구 생태계를 외부로 확장하는 방법을 배웠습니다. 다음 장에서는 에이전트의 응답을 사용자에게 실시간으로 전달하는 _스트리밍_ 기법을 학습합니다. 백엔드의 `astream_events()`부터 프론트엔드의 React `useStream` 훅까지, 전체 스트리밍 파이프라인을 다룹니다.
 
 #references-box[
 - #link("../docs/langchain/16-mcp.md")[MCP (Model Context Protocol)]

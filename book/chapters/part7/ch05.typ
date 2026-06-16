@@ -3,10 +3,10 @@
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-#chapter(5, "딥 리서치 에이전트", subtitle: "병렬 서브에이전트와 5단계 워크플로")
+#chapter(5, "딥 리서치 에이전트", subtitle: "`create_deep_agent` + TodoList + 서브에이전트 dispatch")
 
 == 학습 목표
-#learning-objectives([병렬 서브에이전트 3개(researcher-1, researcher-2, fact-checker)를 구성한다], [`think_tool`로 전략적 반성(strategic reflection)을 구현한다], [5단계 워크플로(Plan → Delegate → Synthesize → Verify → Report)를 설계한다], [v1 미들웨어(SummarizationMiddleware, ModelCallLimitMiddleware, ModelFallbackMiddleware)를 적용한다])
+#learning-objectives([`create_deep_agent` 의 표준 구성(harness + 빌트인 도구 + 서브에이전트)으로 리서치 에이전트를 만든다], [빌트인 `write_todos` 로 _TodoList 기반 계획_을 세우고 `task` 도구로 서브에이전트에 dispatch 한다], [`think_tool` 로 전략적 반성(strategic reflection)을 구현한다], [5단계 워크플로(Plan → Delegate → Synthesize → Verify → Report)를 설계한다], [_AsyncSubAgent 5-tool 패턴_(`start_async_task` / `check_async_task` / `update_async_task` / `cancel_async_task` / `list_async_tasks`)을 안내한다], [v1 미들웨어(`SummarizationMiddleware`, `ModelCallLimitMiddleware`, `ModelFallbackMiddleware`)를 적용한다])
 
 == 개요
 
@@ -19,17 +19,25 @@
   text(weight: "bold")[항목],
   text(weight: "bold")[내용],
   [_프레임워크_],
-  [Deep Agents],
-  [_핵심 컴포넌트_],
-  [병렬 서브에이전트 3개, think_tool],
+  [Deep Agents 0.6+],
+  [_진입점_],
+  [`create_deep_agent(model, tools, subagents, ...)` — harness 가 빌트인 도구·서브에이전트를 자동 부착],
+  [_계획 도구_],
+  [빌트인 `write_todos` — TodoList 로 다단계 계획 작성/업데이트],
+  [_위임 도구_],
+  [빌트인 `task` — 동기 서브에이전트 dispatch (Plan → Delegate)],
+  [_반성 도구_],
+  [커스텀 `think_tool` — 검색 후 전략적 반성],
+  [_서브에이전트_],
+  [researcher-1, researcher-2, fact-checker (3개)],
   [_워크플로_],
-  [5단계: Plan → Delegate → Synthesize → Verify → Report],
+  [Plan → Delegate → Synthesize → Verify → Report],
   [_백엔드_],
   [`FilesystemBackend(root_dir=".", virtual_mode=True)`],
-  [_빌트인 도구_],
-  [`write_todos` (계획), `task` (서브에이전트 호출)],
   [_스킬_],
   [`skills/deep-research/SKILL.md` — 리서치 방법론 + 인용 규칙],
+  [_비동기 확장_],
+  [`AsyncSubAgent` 5-tool 패턴 (`docs/deepagents/12-async-subagents.md`)],
 )
 
 #code-block(`````python
@@ -90,33 +98,57 @@ def web_search(query: str) -> str:
 
 == 3단계: 5단계 리서치 워크플로 프롬프트
 
-`prompts.load_prompt` 가 프롬프트를 로드합니다 (LangSmith Hub → Langfuse → 기본값).
+`prompts.load_prompt()` 가 프롬프트를 로드합니다 (LangSmith Hub → Langfuse → 기본값).
 
 #table(
-  columns: 3,
+  columns: 4,
   align: left,
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[단계],
   text(weight: "bold")[이름],
+  text(weight: "bold")[사용 도구],
   text(weight: "bold")[설명],
   [1],
   [_Plan_],
-  [`write_todos`로 리서치 계획 작성],
+  [`write_todos`],
+  [TodoList 로 리서치 계획 작성],
   [2],
   [_Delegate_],
-  [서브에이전트에게 병렬 조사 위임 (최대 3개 동시)],
+  [`task`],
+  [서브에이전트에 dispatch (비교 분석 시 병렬 최대 3개)],
   [3],
   [_Synthesize_],
-  [수집된 정보를 통합],
+  [`think_tool`],
+  [수집 정보를 통합·요약],
   [4],
   [_Verify_],
-  [fact-checker가 사실 검증],
+  [`task(fact-checker)`],
+  [사실 검증],
   [5],
   [_Report_],
+  [(LLM)],
   [최종 보고서 작성],
 )
+
+=== TodoList + dispatch 패턴
+
+빌트인 `write_todos` 는 다단계 리서치에서 메인 에이전트의 _계획-기억-진행 상황_을 외부 상태로 분리합니다. 컨텍스트가 압축되어도 todos 가 살아남기 때문에, 긴 리서치 중에 어디까지 했는지 잃지 않습니다.
+
+#code-block(`````python
+write_todos([
+  {"content": "LangGraph 핵심 개념 조사", "status": "in_progress"},
+  {"content": "Deep Agents 핵심 개념 조사", "status": "pending"},
+  {"content": "fact-checker 로 사실 검증", "status": "pending"},
+  {"content": "최종 보고서 작성", "status": "pending"},
+])
+
+task(subagent_type="researcher-1", description="LangGraph 핵심 개념 조사 ...")
+task(subagent_type="researcher-2", description="Deep Agents 핵심 개념 조사 ...")
+`````)
+
+`task` 는 동기 서브에이전트 dispatch 도구입니다. 메인 에이전트는 서브에이전트 결과를 받아 todos 상태를 갱신하고 다음 단계로 넘어갑니다.
 
 #code-block(`````python
 from prompts import RESEARCH_AGENT_PROMPT
@@ -207,7 +239,7 @@ fact_checker = {
 
 == 5단계: 딥 리서치 에이전트 생성 (v1 미들웨어)
 
-모든 도구와 서브에이전트를 조합해 최종 에이전트를 생성합니다. v1 미들웨어로 안정성과 신뢰성을 끌어올립니다.
+모든 도구와 서브에이전트를 조합하여 최종 에이전트를 생성합니다. v1 미들웨어로 안정성과 신뢰성을 높입니다:
 
 #table(
   columns: 2,
@@ -217,15 +249,9 @@ fact_checker = {
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[미들웨어],
   text(weight: "bold")[역할],
-  [`SummarizationMiddleware`],
-  [긴 리서치 대화를 자동 요약해 컨텍스트 절약],
-  [`ModelCallLimitMiddleware`],
-  [리서치 루프 방지 — 최대 30회 모델 호출 제한],
-  [`ModelFallbackMiddleware`],
-  [주 모델 실패 시 백업 모델로 자동 전환],
 )
 
-`InMemorySaver`로 체크포인팅을 활성화하면 중단된 리서치를 재개할 수 있습니다.
+로 체크포인팅을 활성화하여 중단된 리서치를 재개할 수 있습니다.
 
 #code-block(`````python
 from deepagents import create_deep_agent
@@ -248,32 +274,10 @@ research_agent = create_deep_agent(
     middleware=[
         SummarizationMiddleware(model=model, trigger=("messages", 15)),
         ModelCallLimitMiddleware(run_limit=30),
-        ModelFallbackMiddleware("gpt-5.4-mini"),
+        ModelFallbackMiddleware("openai:gpt-5.4-mini"),
     ],
 )
 `````)
-
-== DeepAgents 패턴 — TodoList + dispatch + 5-tool async
-
-본 챕터의 딥 리서치 에이전트는 DeepAgents의 핵심 세 가지 패턴을 모두 사용합니다.
-
-#table(
-  columns: 2,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[패턴],
-  text(weight: "bold")[설명],
-  [_TodoList_],
-  [빌트인 `write_todos`로 Plan 단계에서 작업 목록을 명시 — 진행 상태가 메시지 히스토리에 박힘],
-  [_dispatch_],
-  [`task` 빌트인으로 서브에이전트에 위임 — 메인 에이전트는 결과 요약만 받아 컨텍스트 분리],
-  [_5-tool async_],
-  [`web_search` · `think_tool` · `write_todos` · `task` · `read/write_file` 다섯 도구로 비동기 워크플로 구성],
-)
-
-#tip-box[`AsyncSubAgent` 스펙을 `subagents`에 넘기면 `create_deep_agent`가 `AsyncSubAgentMiddleware`를 자동 부착해 서브에이전트를 병렬 비동기로 실행합니다 (`docs/deepagents/12-async-subagents.md`).]
 
 == 6단계: 리서치 실행
 
@@ -306,6 +310,79 @@ research_agent = create_deep_agent(
 )
 
 
+== 확장: AsyncSubAgent 5-tool 패턴
+
+본 노트북의 `task` 는 _동기_ dispatch 입니다. 서브에이전트가 끝날 때까지 메인 에이전트가 블록되며 사용자도 새 지시를 줄 수 없습니다. _장시간 리서치 + 도중 방향 전환 + 병렬 fan-out_ 이 필요하면 Deep Agents 0.5+ 의 `AsyncSubAgent` 로 전환하면 됩니다. `AsyncSubAgentMiddleware` 가 슈퍼바이저에게 다음 5개 도구를 주입합니다.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[도구],
+  text(weight: "bold")[역할],
+  [`start_async_task`],
+  [서브에이전트 백그라운드 기동, task id 즉시 반환 (non-blocking)],
+  [`check_async_task`],
+  [상태 조회, 완료 시 최종 출력 추출],
+  [`update_async_task`],
+  [같은 thread 에 새 지시 주입 (mid-flight steering)],
+  [`cancel_async_task`],
+  [실행 취소, 태스크를 `cancelled` 로 마킹],
+  [`list_async_tasks`],
+  [추적 중인 모든 태스크의 live status 일괄 조회],
+)
+
+#code-block(`````python
+from deepagents import AsyncSubAgent, create_deep_agent
+
+async_subagents = [
+    AsyncSubAgent(
+        name="researcher",
+        description="장시간 정보 수집과 종합이 필요한 리서치 작업",
+        graph_id="researcher",
+    ),
+]
+
+agent = create_deep_agent(
+    model=model,
+    subagents=async_subagents,
+    # AsyncSubAgentMiddleware 가 자동 부착됨
+)
+`````)
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[축],
+  text(weight: "bold")[`task` (Sync)],
+  text(weight: "bold")[AsyncSubAgent (Async)],
+  [실행],
+  [슈퍼바이저 블록],
+  [즉시 task id 반환, 슈퍼바이저 계속],
+  [결과 회수],
+  [자동 반환],
+  [`check_async_task` 폴링],
+  [Mid-task 지시],
+  [불가],
+  [`update_async_task` 로 가능],
+  [취소],
+  [불가],
+  [`cancel_async_task`],
+  [인프라 요구],
+  [없음],
+  [Agent Protocol 서버 (LangSmith Deployments / `langgraph dev`)],
+  [적합 작업],
+  [수초~수십초],
+  [분~시간 단위, 중간 개입],
+)
+
+상세 패턴(ASGI vs HTTP transport, mid-flight steering, `async_tasks` state channel)은 `docs/deepagents/12-async-subagents.md` 를 참고하세요.
+
 #chapter-summary-header()
 
 #table(
@@ -316,6 +393,12 @@ research_agent = create_deep_agent(
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[항목],
   text(weight: "bold")[핵심],
+  [_진입점_],
+  [`create_deep_agent(model, tools, subagents, ...)` — harness 가 빌트인 도구·서브에이전트 자동 부착],
+  [_TodoList_],
+  [빌트인 `write_todos` — 다단계 리서치 계획 외부 상태로 분리],
+  [_dispatch_],
+  [빌트인 `task` — 동기 서브에이전트 호출 (Plan → Delegate)],
   [_think_tool_],
   [전략적 반성 — 검색 후 분석, 다음 행동 계획],
   [_서브에이전트_],
@@ -324,12 +407,15 @@ research_agent = create_deep_agent(
   [Plan → Delegate → Synthesize → Verify → Report],
   [_컨텍스트 관리_],
   [서브에이전트 결과만 메인에 전달 — 중간 과정 격리],
+  [_비동기 확장_],
+  [`AsyncSubAgent` 5-tool: start / check / update / cancel / list],
 )
 
 
 #references-box[
 - `docs/deepagents/examples/02-deep-research.md`
-- `docs/deepagents/07-subagents.md`
+- `docs/deepagents/07-subagents.md` — 동기 서브에이전트
+- `docs/deepagents/12-async-subagents.md` — AsyncSubAgent 5-tool 패턴
 - `docs/deepagents/06-backends.md`
 _이전 단계:_ ← #link("./04_ml_agent.ipynb")[04_ml_agent.ipynb]: 머신러닝 에이전트
 ]

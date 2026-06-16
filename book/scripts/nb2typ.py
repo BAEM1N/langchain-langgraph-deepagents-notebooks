@@ -133,6 +133,8 @@ def convert_table(lines: list[str]) -> str:
             # Escape content that would break Typst brackets
             cell_text = cell_text.replace('\\', '\\\\')
             # Escape special chars in table cells
+            cell_text = cell_text.replace('#', '\\#')
+            cell_text = cell_text.replace('$', '\\$')
             cell_text = cell_text.replace('<', '\\<')
             cell_text = cell_text.replace('>', '\\>')
             cell_text = re.sub(r'@(?=\w)', '\\@', cell_text)
@@ -465,7 +467,7 @@ def convert_notebook(nb_path: str, output_path: str,
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     with open(output, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(parts))
+        f.write('\n'.join(parts).rstrip() + '\n')
 
     print(f"  OK {Path(nb_path).name} -> {output.name}")
 

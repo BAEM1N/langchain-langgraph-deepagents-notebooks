@@ -5,11 +5,7 @@
 
 #chapter(13, "가드레일")
 
-에이전트가 프로덕션 환경에서 사용자와 직접 상호작용하면, 악의적 입력(프롬프트 인젝션), 민감 정보 유출(PII), 부적절한 응답 등의 위험이 생깁니다. 가드레일은 에이전트의 입출력 경계에 검증과 필터링 로직을 배치하여 이러한 위험을 완화합니다. 이 장에서는 결정론적 가드레일과 모델 기반 가드레일의 차이, PII 감지, Human-in-the-Loop 승인 등 실전 가드레일 패턴을 학습합니다.
-
-가드레일은 에이전트의 _안전 경계(safety boundary)_를 정의합니다. LLM 자체의 안전 훈련(RLHF 등)만으로는 모든 위험을 커버할 수 없으며, 특히 도메인 특화 규칙(금융 컴플라이언스, 의료 면책 등)은 애플리케이션 레벨에서 명시적으로 구현해야 합니다. LangChain v1의 미들웨어 시스템은 가드레일을 에이전트 코드와 분리하여 재사용 가능한 컴포넌트로 관리할 수 있게 합니다.
-
-#learning-header()
+== 학습 목표
 에이전트의 입력과 출력을 검증하고 필터링하는 가드레일을 설정하는 방법을 알아봅니다.
 
 이 노트북에서 다루는 내용:
@@ -77,30 +73,15 @@ _가드레일(Guardrails)_은 에이전트 실행 과정에서 콘텐츠를 검�
 
 === 가드레일 적용 시점
 
-#align(center)[#image("../../assets/diagrams/png/guardrail_insertion_points.png", width: 82%, height: 132mm, fit: "contain")]
-
-가드레일은 _한 군데에서 모든 문제를 해결하는 필터_ 가 아니라, 실패 지점을 여러 층으로 나누어 관리하는 방식입니다. 입력 단계에서는 프롬프트 인젝션과 PII를 줄이고, 도구 단계에서는 위험한 행동을 승인 흐름으로 보내며, 출력 단계에서는 누출·환각·정책 위반을 마지막으로 걸러냅니다.
-
-#note-box[_실패 예시로 보면 더 쉽습니다_: *입력 단계*에서는 API 키/주민번호 같은 민감정보를 차단하고, *도구 단계*에서는 이메일 발송·DB 변경을 승인 대기로 보내며, *출력 단계*에서는 내부 시스템 프롬프트나 민감 필드를 마스킹합니다.]
-
 #code-block(`````python
 사용자 입력 → [입력 가드레일] → 에이전트 실행 → [출력 가드레일] → 응답
                   ↑                                    ↑
             before_agent                          after_agent
 `````)
 
-두 가지 접근법의 핵심적인 차이는 _검사 대상의 복잡도_입니다. "이메일 주소 포함 여부"처럼 명확한 패턴은 정규식으로 빠르게 처리하고, "우회적으로 개인정보를 유도하는 프롬프트"처럼 의미 해석이 필요한 경우에만 LLM 기반 검사를 적용합니다. 프로덕션에서는 두 방식을 조합하되, 빠르고 저렴한 결정론적 검사를 먼저 실행하여 명백한 위반을 조기에 차단하는 것이 비용 효율적입니다.
-
-#note-box[_실패 예시로 기억하기_
-- _입력 단계 실패_ — 이메일/주민번호가 포함된 요청을 마스킹하지 않고 모델에 전달
-- _도구 단계 실패_ — `send_email`, `execute_sql` 같은 민감 도구를 승인 없이 실행
-- _출력 단계 실패_ — 모델이 내부 정책, PII, 공격 프롬프트 일부를 그대로 응답
-
-가드레일은 세 단계가 각각 다른 실패를 막는다는 점을 기억하세요.]
-
 == 13.3 PII 감지 미들웨어
 
-_PIIMiddleware_는 이메일, 신용카드 번호, IP 주소 등 개인식별정보(PII)를 자동으로 감지하고 처리합니다. PII가 에이전트의 컨텍스트에 유입되면 LLM이 이를 학습하거나 출력에 포함시킬 위험이 있으므로, _모델에 전달되기 전_에 감지하여 처리하는 것이 중요합니다.
+_PIIMiddleware_는 이메일, 신용카드 번호, IP 주소 등 개인식별정보(PII)를 자동으로 감지하고 처리합니다.
 
 #table(
   columns: 2,
@@ -120,8 +101,6 @@ _PIIMiddleware_는 이메일, 신용카드 번호, IP 주소 등 개인식별정
   [감지 시 예외 발생],
 )
 
-#note-box[_적용 범위 파라미터_ — `PIIMiddleware` 는 `apply_to_input` (사용자 메시지), `apply_to_output` (모델 응답), `apply_to_tool_results` 세 지점에 독립적으로 적용 가능합니다. `apply_to_tool_results` 의 기본값은 *`False`* — 도구 반환값(예: 데이터베이스 조회 결과)에는 자동 적용되지 않으므로, 도구 출력에 PII 가 들어올 수 있다면 명시적으로 `apply_to_tool_results=True` 를 켜야 합니다.]
-
 #code-block(`````python
 # PII 감지 미들웨어 설정 예시
 print("PII 감지 미들웨어 설정:")
@@ -137,64 +116,38 @@ agent = create_agent(
         # 이메일 주소를 [REDACTED_EMAIL]로 대체
         PIIMiddleware("email",
             strategy="redact",
-            apply_to_input=True),
+            apply_to_input=True,
+            apply_to_output=False,         # default
+            apply_to_tool_results=False),  # default
 
         # 신용카드 번호를 부분 마스킹 (****-****-****-1234)
         PIIMiddleware("credit_card",
             strategy="mask",
-            apply_to_input=True),
+            apply_to_input=True,
+            apply_to_tool_results=False),  # default
 
         # API 키 감지 시 차단 (커스텀 정규식)
         PIIMiddleware("api_key",
             detector=r"sk-[a-zA-Z0-9]{32}",
             strategy="block",
-            apply_to_input=True),
+            apply_to_input=True,
+            apply_to_tool_results=False),  # default
     ],
 )
 """)
 print("내장 PII 타입: email, credit_card, ip, mac_address, url")
 print("커스텀 감지: detector 파라미터에 정규식 또는 함수 전달")
+print()
+print("apply_to_* 파라미터 (기본값 False):")
+print("  - apply_to_input          사용자 메시지 검사")
+print("  - apply_to_output         LLM 최종 응답 검사")
+print("  - apply_to_tool_results   도구 반환값 검사")
+print("→ 최소 하나는 True로 명시해야 미들웨어가 동작합니다.")
 `````)
-#output-block(`````
-PII 감지 미들웨어 설정:
-==================================================
-
-from langchain.agents import create_agent
-from langchain.agents.middleware import PIIMiddleware
-
-agent = create_agent(
-    model="gpt-5.4",
-    tools=[customer_service_tool, email_tool],
-    middleware=[
-        # 이메일 주소를 [REDACTED_EMAIL]로 대체
-        PIIMiddleware("email",
-            strategy="redact",
-            apply_to_input=True),
-
-        # 신용카드 번호를 부분 마스킹 (****-****-****-1234)
-        PIIMiddleware("credit_card",
-            strategy="mask",
-            apply_to_input=True),
-
-        # API 키 감지 시 차단 (커스텀 정규식)
-        PIIMiddleware("api_key",
-            detector=r"sk-[a-zA-Z0-9]{32}",
-            strategy="block",
-            apply_to_input=True),
-    ],
-)
-
-내장 PII 타입: email, credit_card, ip, mac_address, url
-커스텀 감지: detector 파라미터에 정규식 또는 함수 전달
-`````)
-
-PII 감지가 데이터의 _내용_을 검사하는 가드레일이라면, Human-in-the-Loop(HITL)은 에이전트의 _행동_을 제어하는 가드레일입니다. 특정 도구의 실행 전에 사람의 승인을 요구하여, 되돌릴 수 없는 작업의 안전성을 확보합니다.
 
 == 13.4 Human-in-the-Loop 가드레일
 
-_HumanInTheLoopMiddleware_는 민감한 작업을 실행하기 전에 _사람의 승인_을 요구합니다. 내부적으로 LangGraph의 `interrupt()` 메커니즘을 사용하여 그래프 실행을 일시 중단하고, 사용자의 승인 또는 거부 결정을 받은 후 `Command(resume=...)` 으로 실행을 재개합니다. 금융 거래, 데이터 삭제, 외부 통신 등 고위험 작업에 필수적입니다.
-
-#warning-box[HITL 가드레일은 반드시 `checkpointer`와 함께 사용해야 합니다. 체크포인터가 없으면 그래프 실행 상태를 저장할 수 없어, 중단 후 재개가 불가능합니다. 프로덕션에서는 `InMemorySaver` 대신 `SqliteSaver`나 `PostgresSaver` 같은 영속적 체크포인터를 사용하세요.]
+_HumanInTheLoopMiddleware_는 민감한 작업을 실행하기 전에 _사람의 승인_을 요구합니다. 금융 거래, 데이터 삭제, 외부 통신 등 고위험 작업에 씁니다.
 
 #code-block(`````python
 # Human-in-the-Loop 가드레일 예시
@@ -249,7 +202,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 agent = create_agent(
-    model="gpt-5.4",
+    model="gpt-4.1",
     tools=[search_tool, send_email_tool, delete_db_tool],
     middleware=[
         HumanInTheLoopMiddleware(
@@ -273,11 +226,9 @@ result = agent.invoke(
 ... (truncated)
 `````)
 
-내장 미들웨어(`PIIMiddleware`, `HumanInTheLoopMiddleware`)가 제공하지 않는 검증 로직이 필요한 경우, 커스텀 가드레일을 직접 작성할 수 있습니다. LangChain v1의 미들웨어 시스템은 `before_agent`(입력 가드레일)와 `after_agent`(출력 가드레일) 두 가지 훅 포인트를 제공합니다.
-
 == 13.5 커스텀 입력 가드레일 — before_agent
 
-`before_agent` 훅은 에이전트 실행 _시작 전_에 요청을 검증합니다. 이 훅이 `None`을 반환하면 정상적으로 에이전트가 실행되고, 딕셔너리를 반환하면서 `jump_to="end"`를 지정하면 에이전트 실행을 건너뛰고 즉시 응답합니다. 세션 수준의 인증, 비율 제한, 콘텐츠 필터링 등에 사용합니다.
+`before_agent` 훅은 에이전트 실행 _시작 전_에 요청을 검증합니다. 세션 수준의 인증, 비율 제한, 콘텐츠 필터링 등에 씁니다.
 
 #code-block(`````python
 # 커스텀 입력 가드레일 — ContentFilterMiddleware 클래스
@@ -357,13 +308,9 @@ class ContentFilterMiddleware(AgentMiddleware):
 ... (truncated)
 `````)
 
-입력 가드레일이 _요청의 적절성_을 검증한다면, 출력 가드레일은 에이전트가 생성한 _응답의 안전성과 품질_을 검증합니다.
-
 == 13.6 커스텀 출력 가드레일 — after_agent
 
-`after_agent` 훅은 에이전트 _실행 완료 후_ 최종 출력을 검증합니다. 모델 기반 안전성 검사, 품질 검증 등에 사용합니다. 출력 가드레일에서 응답 내용을 직접 수정하거나, `jump_to="end"`로 안전한 대체 응답을 반환할 수 있습니다.
-
-#tip-box[출력 가드레일에서 모델 기반 검사를 수행할 때는, 에이전트 본체보다 경량 모델(예: `gpt-5.4-mini`)을 사용하는 것이 비용과 지연 시간 면에서 유리합니다. 안전성 분류는 복잡한 추론이 필요하지 않으므로, 작은 모델로도 충분히 정확한 판별이 가능합니다.]
+`after_agent` 훅은 에이전트 _실행 완료 후_ 최종 출력을 검증합니다. 모델 기반 안전성 검사, 품질 검증 등에 씁니다.
 
 #code-block(`````python
 # 커스텀 출력 가드레일 — SafetyGuardrailMiddleware 클래스
@@ -431,7 +378,7 @@ class SafetyGuardrailMiddleware(AgentMiddleware):
 
     def __init__(self):
         super().__init__()
-        self.safety_model = init_chat_model("gpt-5.4-mini")
+        self.safety_model = init_chat_model("gpt-4.1-mini")
 
     @hook_config(can_jump_to=["end"])
     def after_agent(
@@ -448,11 +395,9 @@ class SafetyGuardrailMiddleware(AgentMiddleware):
 ... (truncated)
 `````)
 
-클래스 방식은 상태 관리와 초기화 로직이 필요한 복잡한 가드레일에 적합하지만, 단순한 검증 로직에는 과할 수 있습니다. 이런 경우 데코레이터 방식이 더 간결합니다.
-
 == 13.7 데코레이터 방식 가드레일
 
-클래스 대신 _데코레이터_를 사용하면 간결하게 가드레일을 정의할 수 있습니다. `@before_agent()`와 `@after_agent()` 데코레이터는 일반 함수를 미들웨어 호환 객체로 변환합니다.
+클래스 대신 _데코레이터_를 쓰면 간결하게 가드레일을 정의할 수 있습니다.
 
 #code-block(`````python
 # 데코레이터 방식 가드레일
@@ -540,11 +485,9 @@ def content_filter(
 ... (truncated)
 `````)
 
-개별 가드레일의 작성 방법을 익혔다면, 이제 여러 가드레일을 조합하여 _다층 방어(defense in depth)_ 전략을 구성하는 방법을 살펴보겠습니다. 보안에서는 단일 방어선에 의존하지 않는 것이 원칙이며, 가드레일도 마찬가지입니다.
-
 == 13.8 다중 가드레일 조합
 
-여러 가드레일을 `middleware` 리스트에 순서대로 추가하여 _다층 방어_를 구성합니다. `middleware` 리스트의 순서가 실행 순서를 결정하므로, 빠르고 저렴한 결정론적 가드레일을 앞에, 느리고 비용이 높은 모델 기반 가드레일을 뒤에 배치하는 것이 중요합니다.
+여러 가드레일을 `middleware` 리스트에 순서대로 추가하여 _다층 방어_를 구성합니다.
 
 #code-block(`````python
 # 다중 가드레일 조합
@@ -597,7 +540,7 @@ from langchain.agents.middleware import (
 )
 
 agent = create_agent(
-    model="gpt-5.4",
+    model="gpt-4.1",
     tools=[search_tool, send_email_tool],
     middleware=[
         # Layer 1: 결정론적 입력 필터
@@ -622,8 +565,6 @@ agent = create_agent(
 `````)
 
 == 13.9 프로덕션 가드레일 패턴
-
-지금까지 학습한 개별 가드레일 기법을 프로덕션 환경에 적용할 때 따라야 할 모범 사례와 도메인별 가이드라인을 정리합니다.
 
 === 모범 사례
 

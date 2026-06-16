@@ -5,10 +5,8 @@
 
 #chapter(3, "멀티에이전트: Handoffs & Router", subtitle: "상태 머신과 병렬 라우팅")
 
-멀티에이전트 시스템의 또 다른 핵심 패턴인 `Handoffs`와 `Router`를 다룹니다. `Handoffs`는 단일 에이전트가 상태 변수에 따라 프롬프트와 도구를 동적으로 교체하는 상태 머신 방식이며, `Router`는 쿼리를 분류하여 전문 에이전트들에게 `Send` API로 병렬 라우팅한 뒤 결과를 합성하는 방식입니다. 두 패턴을 비교하여 상황에 맞는 멀티에이전트 아키텍처를 선택할 수 있는 판단력을 기릅니다.
-
-#learning-header()
-#learning-objectives([Handoffs 패턴: 상태 변수 기반 동적 구성(프롬프트 + 도구 교체)을 구현한다], [`Command` 객체로 상태 전이를 도구에서 트리거한다], [Router 패턴: 구조화 출력 분류 → `Send` API 병렬 실행 → 결과 합성])
+== 학습 목표
+#learning-objectives([Handoffs 패턴(단일 에이전트 + `@wrap_model_call` + `request.override(system_prompt=, tools=)`) 으로 상태 기반 동적 구성을 구현한다], [핸드오프 도구가 `Command(update={"current_step": ..., "messages": [ToolMessage(tool_call_id=...)]})` 로 상태와 대화 히스토리를 동시에 업데이트하는 규약을 익힌다], [서브그래프 멀티 에이전트 경로(`Command.PARENT`)와 단일 에이전트 미들웨어 경로를 비교하고, 서브그래프 사이 핸드오프 시 `AIMessage` + `ToolMessage` 2개만 전달하는 규칙을 따른다], [Router 패턴(전용 분류 단계 → `Send` API fan-out → Reducer fan-in)으로 병렬 라우팅과 결과 합성을 구현한다], [Router 와 Supervisor(=Subagents)의 차이를 용어 수준에서 구분한다])
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == Part A — Handoffs: Customer Support 상태 머신
@@ -16,12 +14,9 @@
 
 == 3.1 환경 설정
 
-이전 장의 Subagents 패턴은 감독자가 서브에이전트를 도구로 호출하는 구조였습니다. 이 장에서 다루는 두 패턴은 근본적으로 다른 접근법을 취합니다:
-
-- _Part A — Handoffs_: 단일 에이전트가 상태 변수에 따라 동적으로 프롬프트와 도구를 교체하는 상태 머신 패턴. `Command(update={...})`로 상태 전이를 트리거합니다. 고객 지원처럼 _순차적 단계_를 거치는 워크플로에 적합합니다.
-- _Part B — Router_: 쿼리를 분류하여 전문 에이전트들에게 `Send` API로 병렬 라우팅하고 결과를 합성하는 패턴. 여러 지식 소스에서 _동시에_ 정보를 수집해야 할 때 적합합니다.
-
-이 두 패턴과 Subagents를 비교하여, 상황에 맞는 멀티에이전트 아키텍처를 선택하는 판단력을 기릅니다. 세 패턴의 핵심 차이는 _제어 흐름_에 있습니다: Subagents는 감독자가 제어하고, Handoffs는 상태가 제어하며, Router는 분류 결과가 제어합니다.
+이 노트북은 두 가지 멀티에이전트 패턴을 다룹니다:
+- _Part A — Handoffs_: 단일 에이전트가 상태 변수에 따라 동적으로 프롬프트와 도구를 교체하는 상태 머신 패턴
+- _Part B — Router_: 쿼리를 분류하여 전문 에이전트들에게 병렬로 라우팅하고 결과를 합성하는 패턴
 
 #code-block(`````python
 from dotenv import load_dotenv
@@ -34,15 +29,30 @@ model = ChatOpenAI(model="gpt-5.4")
 
 == 3.2 Handoffs 개요
 
-Handoffs 패턴은 _단일 에이전트_가 상태 변수에 따라 동적으로 행동을 바꾸는 아키텍처입니다. 여러 에이전트를 전환하는 것이 아니라, 하나의 에이전트가 단계(step)에 따라 다른 시스템 프롬프트와 도구 세트를 사용합니다. 이를 유한 상태 머신(Finite State Machine)에 비유할 수 있습니다. 각 상태는 에이전트의 "페르소나"를 정의하고, 전이 조건은 도구가 반환하는 `Command` 객체로 결정됩니다.
+Handoffs 패턴은 _단일 에이전트_가 상태 변수에 따라 동적으로 행동을 바꾸는 아키텍처입니다. 여러 에이전트를 전환하는 것이 아니라, 하나의 에이전트가 단계(step)에 따라 다른 시스템 프롬프트와 도구 세트를 사용합니다.
 
-#align(center)[#image("../../assets/diagrams/png/handoffs_state_machine.png", width: 72%, height: 156mm, fit: "contain")]
+#image("../../assets/images/handoffs_state_machine.png")
 
-#diagram-guide-box[
-이 그림은 단계 전이만 보면 됩니다. 각 상태는 현재 대화 단계이고, 상태 아래의 라벨은 다음 단계로 넘어가게 만드는 도구 호출 또는 `Command` 전이입니다.
-]
+=== 두 가지 구현 경로
 
-=== 핵심 메커니즘
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[경로],
+  text(weight: "bold")[구조],
+  text(weight: "bold")[사용 시점],
+  [_단일 에이전트 + 미들웨어_ (권장)],
+  [하나의 `create_agent` + `\@wrap_model_call` 이 `request.override(system_prompt=, tools=)` 로 단계별 구성 교체],
+  [대부분의 핸드오프 시나리오],
+  [_서브그래프 멀티 에이전트_],
+  [단계마다 독립 그래프, `Command(goto=..., graph=Command.PARENT)` 로 부모 그래프 사이 이동],
+  [각 단계가 자체 reflection/retrieval 등 복잡한 내부 그래프를 가질 때],
+)
+
+=== 핵심 메커니즘 (단일 에이전트 경로)
 
 #table(
   columns: 2,
@@ -53,33 +63,47 @@ Handoffs 패턴은 _단일 에이전트_가 상태 변수에 따라 동적으로
   text(weight: "bold")[메커니즘],
   text(weight: "bold")[설명],
   [`current_step`],
-  [현재 단계를 추적하는 상태 변수. 이 값에 따라 에이전트의 행동이 결정됩니다],
+  [현재 단계를 추적하는 상태 변수. 미들웨어가 이 값을 보고 다음 호출 구성을 결정],
   [`Command(update={...})`],
-  [도구가 반환하여 상태 전이를 트리거. `current_step` 변경 + 추가 데이터 저장],
-  [`\@wrap_model_call`],
-  [미들웨어가 `current_step`을 읽어 시스템 프롬프트와 사용 가능 도구를 동적으로 교체],
+  [핸드오프 도구가 반환. `current_step` 변경 + 필요한 데이터 저장 + `messages` 동기화],
+  [`\@wrap_model_call` + `request.override(...)`],
+  [LLM 호출 직전 `system_prompt` 와 `tools` 를 단계별 설정으로 단일 호출 한정 교체],
 )
 
-=== Handoffs의 핵심 특성
+=== 핸드오프 도구 시그니처
 
-- _상태 주도 행동(State-driven behavior)_: 추적된 상태 변수에 따라 설정이 조정됩니다
-- _도구 기반 전이(Tool-based transitions)_: 도구가 `Command` 객체를 반환하여 상태를 업데이트합니다
-- _직접 사용자 상호작용_: 각 단계에서 독립적으로 메시지를 처리합니다
-- _영속 상태(Persistent state)_: 상태가 대화 턴을 넘어 유지됩니다
+핸드오프 도구는 `ToolRuntime[None, SupportState]` 를 받아 `runtime.tool_call_id` 를 얻고, `Command.update.messages` 에 그 id 와 매칭되는 `ToolMessage` 를 함께 넣어야 합니다.
 
-#warning-box[도구가 `Command`를 통해 메시지를 업데이트할 때, 매칭되는 `tool_call_id`를 가진 `ToolMessage`를 포함해야 합니다.]
+#code-block(`````python
+from langchain.tools import tool, ToolRuntime
+from langgraph.types import Command
+from langchain.messages import ToolMessage
 
-=== 중요한 구현 세부사항
+@tool
+def transfer_to_resolve(runtime: ToolRuntime[None, SupportState]) -> Command:
+    return Command(update={
+        "current_step": "resolve_issue",
+        "messages": [ToolMessage(
+            content="Transferred to resolve step",
+            tool_call_id=runtime.tool_call_id,
+        )],
+    })
+`````)
 
-도구가 `Command`를 통해 메시지를 업데이트할 때, 매칭되는 `tool_call_id`를 가진 `ToolMessage`를 포함해야 합니다. LLM은 도구 호출과 응답이 쌍을 이루길 기대하므로, 이를 누락하면 대화 히스토리가 잘못된 형태(malformed)가 됩니다.
+`tool_call_id` 가 누락되거나 매칭되지 않으면 LLM 이 대화 히스토리를 malformed 로 거부합니다. (LangChain 의 도구 호출/응답 쌍 규약)
+
+=== 서브그래프 경로의 메시지 규칙
+
+서브그래프 멀티 에이전트로 갈 때는 핸드오프 경계를 정확히 _두 개의 메시지_로만 흘려보냅니다.
+
++ 송신 에이전트의 `AIMessage` — 원본 도구 호출 포함
++ 매칭되는 `tool_call_id` 가 들어간 `ToolMessage` — 핸드오프 ack
+
+이 외의 메시지가 더 끼거나 빠지면 수신 에이전트가 잘못된 컨텍스트로 시작합니다.
 
 === 사용 시점
 
-순차적 제약(sequential constraints)이 필요하거나, 각 상태에서 사용자와 직접 대화하거나, 다단계 플로우(예: 고객 지원)에서 정보를 특정 순서로 수집해야 할 때 적합합니다. 반면, 단계 간 순서가 유연하거나 병렬 실행이 필요한 경우에는 Subagents나 Router 패턴이 더 적합합니다.
-
-#tip-box[Handoffs vs. Subagents 선택 기준: 사용자가 각 단계에서 에이전트와 _직접_ 대화해야 하면 Handoffs, 사용자가 감독자와만 대화하고 서브에이전트는 백그라운드에서 동작하면 Subagents를 선택하세요.]
-
-개념을 이해했으니, 이제 고객 지원 시나리오를 예제로 Handoffs 패턴을 단계별로 구현합니다. 먼저 상태 스키마를 정의합니다.
+순차적 제약(sequential constraints)이 필요하거나, 각 상태에서 사용자와 직접 대화하거나, 다단계 플로우(예: 고객 지원)에서 정보를 특정 순서로 수집해야 할 때 적합합니다.
 
 == 3.3 SupportState 정의
 
@@ -97,8 +121,6 @@ class SupportState(AgentState):
         "resolve_issue", "close_ticket",
     ] = "identify_customer"
 `````)
-
-상태 스키마가 정의되었으므로, 이제 각 단계에서 사용할 도구를 정의합니다. 도구는 Handoffs 패턴에서 상태 전이를 트리거하는 핵심 메커니즘입니다.
 
 == 3.4 단계별 도구 정의
 
@@ -166,6 +188,27 @@ def mark_resolved(summary: str) -> Command:
 `````)
 
 #code-block(`````python
+# 정식 핸드오프 시그니처 — ToolRuntime.tool_call_id 를 ToolMessage 에 echo
+from langchain.tools import ToolRuntime
+from langchain.messages import ToolMessage
+
+@tool
+def transfer_to_resolve(
+    diagnosis: str,
+    runtime: ToolRuntime[None, SupportState],
+) -> Command:
+    """진단 후 해결 단계로 이동 (tool_call_id echo 패턴)."""
+    return Command(update={
+        "current_step": "resolve_issue",
+        "diagnosis": diagnosis,
+        "messages": [ToolMessage(
+            content=f"진단 완료: {diagnosis}. 해결 단계로 이동합니다.",
+            tool_call_id=runtime.tool_call_id,
+        )],
+    })
+`````)
+
+#code-block(`````python
 # --- Close Ticket ---
 @tool
 def send_satisfaction_survey(customer_id: str) -> str:
@@ -178,11 +221,9 @@ def close_ticket(ticket_id: str, notes: str) -> str:
     return f"티켓 {ticket_id} 종료됨."
 `````)
 
-모든 단계의 도구가 준비되었습니다. 이제 이 도구들을 `current_step` 상태에 따라 동적으로 할당하는 미들웨어를 구현합니다. 이 미들웨어가 Handoffs 패턴의 "두뇌" 역할을 합니다.
-
 == 3.5 \@wrap_model_call 미들웨어
 
-`@wrap_model_call` 미들웨어는 Handoffs 패턴의 핵심입니다. LLM 호출을 가로채어 `current_step`에 따라 시스템 프롬프트와 사용 가능 도구를 동적으로 교체합니다. Chapter 1에서 배운 `wrap_model_call`의 실전 적용 사례입니다.
+`@wrap_model_call` 미들웨어는 Handoffs 패턴의 핵심입니다. LLM 호출을 가로채어 `current_step`에 따라 시스템 프롬프트와 사용 가능 도구를 동적으로 교체합니다.
 
 _동작 순서:_
 + 미들웨어가 상태에서 `current_step` 값을 읽습니다
@@ -190,57 +231,7 @@ _동작 순서:_
 + `config`를 오버라이드하여 LLM에 전달합니다
 + `next_fn(state, config)`으로 수정된 설정으로 LLM을 호출합니다
 
-이것이 Handoffs의 핵심 메커니즘입니다: 단일 에이전트가 상태에 따라 완전히 다른 페르소나와 능력을 갖게 됩니다. 다중 에이전트를 만들 필요 없이, 미들웨어 하나로 동적 행동 변경을 달성합니다.
-
-=== 단일 에이전트 핸드오프 — `request.override(system_prompt=, tools=)`
-복수 에이전트를 만들고 `Command(goto=...)`로 그래프 노드 사이를 이동하는 _다중 에이전트 핸드오프_는 디버깅이 어렵고 상태 동기화 비용이 큽니다. v1에서는 `@wrap_model_call` 미들웨어 안에서 `request.override(system_prompt=, tools=)`만 호출하면, 동일한 그래프 노드를 유지하면서 _한 에이전트_가 단계별로 페르소나와 도구를 바꿔 끼울 수 있습니다. 메시지 히스토리도 그대로 보존되므로, 사용자 입장에서는 "한 명의 상담원"이 흐름을 이어가는 것처럼 보입니다.
-
-#code-block(`````python
-@wrap_model_call
-def step_middleware(request, handler):
-    """current_step에 따라 단일 에이전트의 system_prompt와 tools를 교체."""
-    step = request.state.get("current_step", "identify_customer")
-    cfg = STEP_CONFIG[step]
-    request = request.override(
-        system_prompt=cfg["system_prompt"],
-        tools=cfg["tools"],
-    )
-    return handler(request)
-`````)
-
-#warning-box[`request.override(...)`는 원본 `ModelRequest`를 변경하지 않고 _수정된 사본_을 반환합니다. 반드시 반환값을 새 `request` 변수에 할당한 뒤 `handler(request)`로 전달해야 합니다.]
-
-=== 서브그래프 메시지 규칙 — AIMessage + ToolMessage 페어
-도구가 `Command(update={"messages": [...]})`로 메시지를 직접 업데이트할 때, _도구 호출과 응답이 짝을 이뤄야_ 합니다. 구체적으로는 다음 2개 메시지를 모두 포함해야 합니다.
-
-+ `AIMessage` — `tool_calls=[{"id": ..., "name": ..., "args": ...}]` 형태로 도구 호출을 선언.
-+ `ToolMessage` — 동일한 `tool_call_id`를 가진 응답 메시지.
-
-이 페어를 누락하면 후속 모델 호출이 `Unmatched tool_call_id` 오류를 발생시킵니다. LangChain v1은 `Command(update={...}, result=...)` 헬퍼로 이 페어를 자동 생성해 주지만, 직접 `messages` 키를 수정할 때는 수동으로 두 메시지를 함께 넣어야 합니다.
-
-#code-block(`````python
-from langchain.messages import AIMessage, ToolMessage
-from langgraph.types import Command
-
-# Command.result를 쓰면 두 메시지가 자동 페어로 생성됨
-return Command(
-    update={"current_step": "diagnose_issue", "customer": {...}},
-    result="고객을 찾았습니다. 진단 단계로 이동합니다.",  # ToolMessage.content
-)
-
-# 직접 messages를 만들 때는 AIMessage + ToolMessage를 함께 넣어야 함
-return Command(update={
-    "current_step": "diagnose_issue",
-    "messages": [
-        AIMessage(content="", tool_calls=[{"id": "c1", "name": "handoff", "args": {}}]),
-        ToolMessage(content="진단 단계로 이동", tool_call_id="c1"),
-    ],
-})
-`````)
-
-#warning-box[`STEP_CONFIG`에 정의되지 않은 `current_step` 값이 설정되면 `KeyError`가 발생합니다. 프로덕션 코드에서는 반드시 디폴트 처리나 유효성 검증을 추가하세요. 예: `cfg = STEP_CONFIG.get(step, STEP_CONFIG["identify_customer"])`]
-
-다음 코드는 단계별 설정 딕셔너리와 이를 활용하는 미들웨어 구현입니다.
+Handoffs의 핵심 메커니즘이 바로 이것입니다: 단일 에이전트가 상태에 따라 완전히 다른 페르소나와 능력을 갖게 됩니다. 다중 에이전트 없이도 미들웨어 하나로 동적 행동 변경을 달성합니다.
 
 #code-block(`````python
 STEP_CONFIG = {
@@ -267,11 +258,15 @@ STEP_CONFIG["close_ticket"] = {
 `````)
 
 #code-block(`````python
-from langchain.agents.middleware import wrap_model_call
+from typing import Callable
+from langchain.agents.middleware import wrap_model_call, ModelRequest, ModelResponse
 
 @wrap_model_call
-def step_middleware(request, handler):
-    """current_step에 따라 에이전트를 동적으로 구성합니다."""
+def step_middleware(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ModelResponse:
+    """current_step 에 따라 system_prompt 와 tools 를 단일 호출 한정으로 교체."""
     step = request.state.get("current_step", "identify_customer")
     cfg = STEP_CONFIG[step]
     request = request.override(
@@ -331,21 +326,15 @@ support_agent = create_agent(
 # [resolve_issue] -> [close_ticket]
 `````)
 
-Part A에서는 단일 에이전트가 상태 전이를 통해 다단계 워크플로를 처리하는 Handoffs 패턴을 살펴보았습니다. Part B에서는 이와 대조적인 접근법인 Router 패턴을 다룹니다. Router는 _병렬 실행_이 핵심이며, 여러 지식 소스에서 동시에 정보를 수집하여 합성하는 데 최적화되어 있습니다.
-
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == Part B — Router: 병렬 라우팅과 결과 합성
 #line(length: 100%, stroke: 0.5pt + luma(200))
 
 == 3.7 Router 개요
 
-Router 패턴은 입력을 분류하여 전문 에이전트들에게 라우팅하는 아키텍처입니다. Subagents 패턴과 달리, Router는 _전용 분류 단계_(단일 LLM 호출 또는 규칙 기반 로직)를 거쳐 쿼리를 배분합니다. 이 패턴은 검색 엔진의 _fan-out/fan-in_ 아키텍처와 유사합니다. 쿼리를 여러 인덱스에 동시에 보내고(fan-out), 결과를 수집하여 통합합니다(fan-in).
+Router 패턴은 입력을 분류하여 전문 에이전트들에게 라우팅하는 아키텍처입니다. Subagents 패턴과 달리, Router는 _전용 분류 단계_(단일 LLM 호출 또는 규칙 기반 로직)를 거쳐 쿼리를 배분합니다.
 
-#align(center)[#image("../../assets/diagrams/png/router_fanout_fanin.png", width: 82%, height: 132mm, fit: "contain")]
-
-#diagram-guide-box[
-위쪽 Router가 먼저 입력을 분류하고, 가운데 전문 에이전트들이 병렬로 작업한 뒤, 마지막 Reducer가 결과를 다시 하나로 합칩니다. 즉 *분류 → 병렬 실행 → 합성* 구조로 이해하면 됩니다.
-]
+#image("../../assets/images/router_fanout_fanin.png")
 
 === 파이프라인
 
@@ -369,44 +358,39 @@ Router 패턴은 입력을 분류하여 전문 에이전트들에게 라우팅�
   [Reducer 노드 + LLM],
 )
 
-=== Router vs. Subagents (Supervisor) 비교
+=== Router vs. Supervisor — 용어 정리
 
-세 패턴은 _제어 흐름 주체_가 다릅니다. 잘못 선택하면 라우팅 비용이 폭증하거나 컨텍스트 격리가 깨집니다.
+LangChain 공식 분류는 다음과 같이 두 패턴을 명확히 구분합니다.
 
 #table(
-  columns: 4,
+  columns: 3,
   align: left,
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[패턴],
-  text(weight: "bold")[제어 주체],
-  text(weight: "bold")[실행 모드],
-  text(weight: "bold")[적합 시나리오],
-  [_Router_],
-  [별도 분류 단계 (LLM 또는 규칙)],
-  [병렬 fan-out + fan-in],
-  [지식 도메인 분리 + 병렬 검색],
-  [_Supervisor (Subagents)_],
-  [감독자 에이전트의 동적 도구 호출],
-  [순차 또는 병렬 (감독자 결정)],
-  [대화형 상호작용 + 여러 도메인 조율],
-  [_Handoffs_],
-  [상태 변수(`current_step`)],
-  [단일 에이전트가 페르소나 교체],
-  [순차적 다단계 워크플로],
+  text(weight: "bold")[항목],
+  text(weight: "bold")[Router],
+  text(weight: "bold")[Supervisor (= Subagents)],
+  [의사결정 위치],
+  [전용 라우팅 단계 — 단일 LLM 호출 또는 규칙 기반],
+  [대화 안에서 메인 에이전트(=감독자)가 매 턴 판단],
+  [대화 인식],
+  [기본 없음 (stateless), 도구 wrapping 으로 stateful 화],
+  [항상 stateful, 진행 맥락에 따라 다음 액션 결정],
+  [사용 시점],
+  [입력 카테고리가 분명, 결정적 경량 분류로 충분],
+  [유연한 대화 중심 오케스트레이션, 진행에 따라 다음 단계가 바뀌는 워크플로],
+  [병렬 fan-out],
+  [자연스럽게 `Send` 로 다중 소스 동시 조회],
+  [동시 호출 가능하지만 감독자 판단에 의존],
 )
 
-Router는 "전용 라우팅 단계(분류)"가 있고, Subagents는 "감독자 에이전트가 동적으로" 호출 대상을 결정합니다. 별개의 지식 도메인(vertical)이 명확히 구분되어 있고 병렬 조회가 필요할 때 Router가 적합합니다. 반면, 여러 도메인을 조율하면서 대화형 상호작용이 필요하면 Subagents가 더 적합합니다.
-
-#tip-box[Router의 분류 단계에서 `with_structured_output`을 사용하면 분류 결과가 Pydantic 모델로 반환되어 타입 안전한 라우팅이 가능합니다. 규칙 기반 분류(if/else)는 빠르지만 유연성이 떨어지고, LLM 기반 분류는 느리지만 복잡한 쿼리도 처리할 수 있습니다.]
+요컨대 _별개의 지식 도메인(vertical)이 명확히 구분되어 있고 병렬 조회가 필요할 때_가 Router 의 자리이고, 대화 흐름이 분기·재진입을 반복하면 Supervisor 가 적합합니다.
 
 === 아키텍처 모드
 
 - _Stateless_: 각 요청이 독립적으로 라우팅됩니다 (메모리 없음)
 - _Stateful_: 대화 히스토리를 유지하여 멀티턴 상호작용을 지원합니다. Stateless 라우터를 도구로 래핑하거나, 라우터 자체가 상태를 직접 관리하는 방식이 있습니다
-
-Router의 전체 아키텍처를 이해했으니, 이제 분류 스키마와 상태를 정의합니다. 분류 스키마의 품질이 라우팅의 정확도를 직접적으로 결정하므로, 필드 설계에 신중해야 합니다.
 
 == 3.8 RouterState 및 분류 스키마
 
@@ -476,19 +460,27 @@ class RouterState(AgentState):
 
 서브쿼리 생성이 중요합니다: "auth 서비스 배포"라는 원본 쿼리를 GitHub에는 `"auth service deployment scripts CI/CD pipeline"`, Notion에는 `"auth service deployment process procedure runbook"`으로 각각 최적화합니다.
 
-분류가 완료되면, 각 소스에 서브쿼리를 동시에 전달하는 병렬 라우팅 단계로 진입합니다. 이 단계가 Router 패턴의 성능 이점을 실현하는 핵심입니다.
-
 == 3.10 병렬 라우팅 (Send API)
 
-`Send` API는 분류된 각 소스에 동시에 서브쿼리를 디스패치합니다. `Send(node_name, payload)` 형태로, 그래프의 특정 노드에 데이터를 병렬로 전달합니다. LangGraph의 `Send`는 MapReduce 패턴의 Map 단계에 해당합니다.
+`Send` API는 분류된 각 소스에 동시에 서브쿼리를 디스패치합니다. `Send(node_name, payload)` 형태로, 그래프의 특정 노드에 데이터를 병렬로 전달합니다.
 
-이 병렬 실행이 Router 패턴의 핵심 강점입니다: 여러 지식 소스를 순차적으로 조회하면 지연 시간이 합산되지만, `Send`를 통한 병렬 실행은 가장 느린 소스의 응답 시간만큼만 걸립니다. 예를 들어, GitHub(2초), Notion(1초), Slack(3초)을 순차 조회하면 6초가 걸리지만, 병렬 실행하면 3초면 충분합니다.
+#code-block(`````python
+from langgraph.types import Command, Send
 
-#warning-box[`Send` API로 병렬 실행할 때, 각 에이전트 노드의 상태는 독립적입니다. 에이전트 간에 상태를 공유하려면 Reducer 노드에서 결과를 수집한 후 처리해야 합니다.]
+def dispatch(state):
+    classifications = state["classification"].sources
+    return [Send(c["agent"], {"messages": [...], "query": c["query"]}) for c in classifications]
+`````)
+
+Router 패턴의 핵심 강점이 바로 이 병렬 실행입니다. 여러 지식 소스를 순차적으로 조회하면 지연 시간이 합산되지만, `Send` 를 통한 fan-out 은 가장 느린 소스의 응답 시간만큼만 걸립니다. 각 `Send` 는 독립된 페이로드로 노드를 동시에 호출하므로, 부모 그래프는 모든 fan-out 결과가 reducer 에 도착할 때까지 한 번에 대기합니다.
+
+=== 단일 라우팅 vs 다중 fan-out
+
+- `Command(goto=agent)` — 하나의 에이전트로 라우팅 (분류 결과가 단일일 때)
+- `[Send(agent, payload), ...]` — 다중 에이전트 fan-out (분류 결과가 복수일 때)
 
 === 새로운 소스 추가하기
 
-Router 패턴은 확장이 간단합니다:
 + 소스별 도구를 정의합니다
 + 전문 에이전트를 생성합니다
 + `QueryClassification.sources`에 새 소스를 추가합니다
@@ -539,34 +531,27 @@ slack_agent = create_agent(
 `````)
 
 #code-block(`````python
-from langgraph.types import Send
+from langgraph.types import Command, Send
 
 def dispatch_to_agents(state):
-    """하위 쿼리를 에이전트들에게 병렬로 전달합니다."""
+    """하위 쿼리를 에이전트들에게 병렬로 전달합니다 (Send fan-out)."""
     cls = state["classification"]
     sq_dict = {sq.source: sq.query for sq in cls.sub_queries}
     return [
-        Send(src, {"messages": [{"role": "user", "content": sq_dict.get(src, "")}], "source": src})
+        Send(
+            src,
+            {
+                "messages": [{"role": "user", "content": sq_dict.get(src, "")}],
+                "source": src,
+            },
+        )
         for src in cls.sources
     ]
 `````)
 
-병렬 라우팅의 핵심은 분류 결과의 각 항목마다 `Send(노드_이름, 페이로드)` 객체를 _리스트로 반환_하는 것입니다. LangGraph는 이 리스트의 길이만큼 동시에 노드를 실행하고, 모든 분기가 끝나면 다음 노드로 모입니다. 분류 결과를 `[{"agent": "github", "query": "..."}, ...]` 형태의 dict 리스트로 받는다면 다음과 같이 작성할 수 있습니다.
-
-#code-block(`````python
-def dispatch_dict_form(state):
-    """분류 결과가 dict 리스트일 때의 fan-out."""
-    return [
-        Send(c["agent"], {"messages": [{"role": "user", "content": c["query"]}]})
-        for c in state["classification"]
-    ]
-`````)
-
-#tip-box[`Send`는 같은 노드를 _복수 번_ 호출할 수도 있습니다. 예를 들어 `[Send("github", q1), Send("github", q2)]`처럼 같은 에이전트에 두 개의 서로 다른 쿼리를 동시에 보내고 결과를 합치는 패턴도 가능합니다.]
-
 == 3.11 결과 합성
 
-모든 에이전트의 결과가 수집되면 Reducer 노드에서 통합 응답을 합성합니다. 이 단계는 MapReduce의 Reduce에 해당하며, 단순한 결과 나열이 아닌 _의미 있는 통합_이 목표입니다. Reducer는 LLM을 사용하여 통합된 응답을 합성합니다. 합성 시 각 정보의 출처(source)를 인용하여 사용자가 어디서 온 정보인지 파악할 수 있게 합니다.
+Reducer는 모든 에이전트의 결과를 수집하고, LLM으로 통합된 응답을 합성합니다. 합성 시 각 정보의 출처(source)를 인용하여 사용자가 어디서 온 정보인지 파악할 수 있게 합니다.
 
 합성 프롬프트에서는 소스를 명시하도록 지시합니다. 예를 들어, "배포 스크립트는 GitHub의 `payment-service` 레포에 있고(GitHub), 배포 절차는 Notion의 'Payment Service Ops' 문서를 참고하세요(Notion)"와 같이 응답합니다.
 
@@ -608,11 +593,15 @@ app = graph.compile()
   text(weight: "bold")[항목],
   text(weight: "bold")[핵심],
   [_패턴_],
-  [단일 에이전트 + `current_step` 기반 동적 구성],
+  [단일 에이전트 + `current_step` 기반 동적 구성 (권장) / 서브그래프 멀티 에이전트 (복잡 케이스)],
   [_전이_],
-  [`Command(update={"current_step": "next"})`],
+  [핸드오프 도구가 `Command(update={"current_step": ..., "messages": [ToolMessage(tool_call_id=...)]})` 반환],
+  [_도구 시그니처_],
+  [`ToolRuntime[None, SupportState]` 로 `runtime.tool_call_id` echo],
   [_동적 구성_],
-  [`\@wrap_model_call`로 프롬프트 + 도구 교체],
+  [`\@wrap_model_call` 미들웨어 + `request.override(system_prompt=, tools=)`],
+  [_서브그래프 규칙_],
+  [핸드오프 경계에 `AIMessage` + `ToolMessage` 정확히 2개만 전달],
 )
 
 === Part B — Router
@@ -627,13 +616,12 @@ app = graph.compile()
   text(weight: "bold")[핵심],
   [_분류_],
   [`with_structured_output(QueryClassification)`],
-  [_병렬_],
-  [`Send(source, payload)` API],
+  [_fan-out_],
+  [`from langgraph.types import Command, Send` → `[Send(agent, payload) for ...]`],
+  [_단일 라우팅_],
+  [`Command(goto=agent)`],
   [_합성_],
-  [Reducer 노드에서 LLM 통합 응답],
+  [Reducer 노드에서 LLM 통합 응답, 출처 인용],
+  [_Router vs Supervisor_],
+  [분류 전용 단계 vs 대화 중심 오케스트레이션],
 )
-
-Handoffs, Router, Subagents 세 가지 멀티에이전트 패턴을 모두 학습했습니다. 패턴 선택의 핵심 기준을 정리하면: _순차적 다단계 워크플로_에는 Handoffs, _중앙 집중 위임과 대화형 상호작용_에는 Subagents, _병렬 지식 검색과 결과 합성_에는 Router가 적합합니다. 실제 프로젝트에서는 이 패턴들을 조합하여 사용하는 경우도 많습니다. 예를 들어, 감독자(Subagents)가 Router를 서브에이전트로 호출하여 병렬 검색 후 결과를 통합하는 구성이 가능합니다.
-
-다음 장에서는 이 모든 패턴의 기반이 되는 컨텍스트 엔지니어링과 장기 메모리 시스템을 심층적으로 다룹니다.
-

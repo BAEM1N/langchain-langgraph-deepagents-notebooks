@@ -5,18 +5,12 @@
 
 #chapter(1, "미들웨어 시스템 심화", subtitle: "v1 최대 신기능")
 
-미들웨어는 LangGraph v1에서 가장 주목할 만한 신기능으로, 에이전트 실행 루프의 각 단계에 모니터링, 변환, 거버넌스 로직을 비침습적으로 삽입할 수 있게 합니다. 이 장에서는 7가지 빌트인 미들웨어의 동작 원리를 파악하고, 데코레이터 및 클래스 기반으로 커스텀 미들웨어를 작성하는 방법을 심층적으로 다룹니다. 다중 미들웨어 조합 시 실행 순서 제어까지 익히면, 프로덕션 수준의 에이전트 파이프라인을 설계할 수 있습니다.
-
-#learning-header()
-#learning-objectives([에이전트 루프에서 미들웨어 훅의 역할과 실행 흐름을 이해한다], [7가지 빌트인 미들웨어의 설정과 실전 사용법을 익힌다], [데코레이터/클래스 기반 커스텀 미들웨어를 작성할 수 있다], [다중 미들웨어 조합 시 실행 순서를 정확히 예측할 수 있다])
+== 학습 목표
+#learning-objectives([에이전트 루프의 6단계 미들웨어 훅(`before_agent` / `before_model` / `wrap_model_call` / `wrap_tool_call` / `after_model` / `after_agent`)을 이해한다], [프로바이더 무관 빌트인(Summarization, HITL, Model/Tool Call Limit, ModelFallback, PII, LLMToolSelector, ContextEditing)과 프로바이더 전용(AnthropicPromptCaching, BedrockPromptCaching, PatchToolCalls) 미들웨어를 구분해 사용한다], [`ModelRequest` / `ToolCallRequest` / `ModelResponse` / `ExtendedModelResponse` 타입을 활용해 데코레이터·클래스 기반 커스텀 미들웨어를 작성한다], [`request.override(...)`, `@hook_config(can_jump_to=...)`, `state_schema=` 옵션으로 동적 구성과 에이전트 점프를 구현한다], [다중 미들웨어 조합 시 실행 순서(`before` 순방향, `after` 역방향, `wrap` 중첩)를 정확히 예측한다])
 
 == 1.1 환경 설정
 
-웹 프레임워크(Express, Django 등)의 미들웨어가 HTTP 요청/응답 파이프라인에 로직을 삽입하듯, LangGraph v1의 미들웨어는 에이전트 실행 루프에 횡단 관심사(cross-cutting concerns)를 삽입합니다. 횡단 관심사란 로깅, 인증, 에러 처리, PII 마스킹처럼 여러 모듈에 걸쳐 공통으로 필요하지만, 핵심 비즈니스 로직과는 분리되어야 하는 기능을 말합니다.
-
-미들웨어 없이 이러한 기능을 구현하면, 도구 함수마다 로깅 코드를 넣고, 에이전트 호출마다 에러 핸들링을 감싸야 합니다. 미들웨어를 사용하면 이 로직을 에이전트 코어 로직과 분리하여, _단일 책임 원칙_을 유지하면서도 강력한 프로덕션 파이프라인을 구성할 수 있습니다. `create_agent` 함수의 `middleware` 파라미터에 미들웨어 인스턴스 리스트를 전달하여 사용합니다.
-
-다음 코드로 이 장에서 사용할 환경을 준비합니다.
+미들웨어는 에이전트 실행의 각 단계에 훅(hook)을 삽입하여 모니터링, 변환, 신뢰성, 거버넌스를 구현하는 v1의 핵심 기능입니다. `create_agent` 함수의 `middleware` 파라미터에 미들웨어 인스턴스 리스트를 전달해 사용합니다.
 
 #code-block(`````python
 from dotenv import load_dotenv
@@ -27,13 +21,54 @@ load_dotenv()
 model = ChatOpenAI(model="gpt-5.4")
 `````)
 
-환경 설정이 완료되었으므로, 미들웨어가 에이전트 루프의 어느 지점에 개입하는지 전체 아키텍처를 살펴보겠습니다.
-
 == 1.2 미들웨어 아키텍처 개요
 
-에이전트 루프는 _모델 호출 → 도구 선택 → 도구 실행 → 종료 판단_의 반복 사이클입니다. 이 사이클이 한 번 돌 때마다 에이전트는 사용자의 요청에 한 걸음 더 가까워집니다. 미들웨어는 이 사이클의 각 단계에 훅(hook)을 삽입하여 세밀한 제어를 가능하게 합니다. 훅은 특정 시점에 자동으로 호출되는 콜백 함수로, 개발자는 훅에 원하는 로직만 구현하면 됩니다.
+에이전트 루프는 _모델 호출 → 도구 선택 → 도구 실행 → 종료 판단_의 반복 사이클입니다. 미들웨어는 이 사이클의 6단계에 훅(hook)을 삽입해 세밀하게 제어합니다.
 
-=== 훅 유형
+=== 6단계 훅
+
+#table(
+  columns: 4,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[훅],
+  text(weight: "bold")[스타일],
+  text(weight: "bold")[실행 시점],
+  text(weight: "bold")[대표 용도],
+  [`before_agent`],
+  [node],
+  [에이전트 실행 시작 1회],
+  [인증, 사용자 컨텍스트 로드],
+  [`before_model`],
+  [node],
+  [매 모델 호출 직전],
+  [프롬프트 보강, 카운팅, 로깅],
+  [`wrap_model_call`],
+  [wrap],
+  [모델 호출 감싸기],
+  [재시도, 캐싱, `request.override(...)` 동적 구성],
+  [`wrap_tool_call`],
+  [wrap],
+  [도구 호출 감싸기],
+  [도구 재시도, 에러 변환, 감사 로그],
+  [`after_model`],
+  [node],
+  [매 모델 응답 직후],
+  [가드레일, `{"jump_to": "end"}` 점프],
+  [`after_agent`],
+  [node],
+  [에이전트 실행 종료 1회],
+  [정리, 메트릭 전송],
+)
+
+=== 두 가지 훅 스타일
+
+- _Node-style_ (`before_*`, `after_*`): 순차 실행. 로깅·검증·상태 업데이트에 적합.
+- _Wrap-style_ (`wrap_*`): 핸들러 호출 여부를 0/1/N 회로 제어. 재시도·캐싱·동적 라우팅에 적합.
+
+=== 시그니처와 타입
 
 #table(
   columns: 3,
@@ -41,43 +76,27 @@ model = ChatOpenAI(model="gpt-5.4")
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[훅 유형],
-  text(weight: "bold")[실행 시점],
-  text(weight: "bold")[대표 용도],
-  [`before_model`],
-  [모델 호출 직전],
-  [프롬프트 수정, 로깅, 상태 업데이트],
-  [`after_model`],
-  [모델 응답 직후],
-  [응답 검증, 가드레일, 결과 변환],
-  [`before_agent`],
-  [에이전트 실행 시작 시],
-  [초기화, 전처리],
-  [`after_agent`],
-  [에이전트 실행 종료 시],
-  [정리, 후처리],
-  [`wrap_model_call`],
-  [모델 호출 감싸기],
-  [재시도, 캐싱, 폴백],
-  [`wrap_tool_call`],
-  [도구 호출 감싸기],
-  [도구 재시도, 감사 로그, 에러 핸들링],
+  text(weight: "bold")[훅],
+  text(weight: "bold")[인자],
+  text(weight: "bold")[반환],
+  [`wrap_model_call(request, handler)`],
+  [`request: ModelRequest`, `handler: Callable[[ModelRequest], ModelResponse]`],
+  [`ModelResponse` 또는 `ExtendedModelResponse`],
+  [`wrap_tool_call(request, handler)`],
+  [`request: ToolCallRequest`, `handler: Callable[[ToolCallRequest], ToolMessage \\],
+  [Command]`],
+  [`ToolMessage` 또는 `Command`],
+  [`before_model(state, runtime)` / `after_model(state, runtime)`],
+  [`state: AgentState`, `runtime: Runtime`],
+  [`dict],
+  [None` (`jump_to` 지원)],
 )
 
-=== 두 가지 훅 스타일
+- `ModelRequest`는 `messages`, `tools`, `model`, `system_message`, `response_format`, `state`, `runtime` 필드를 노출합니다.
+- `ToolCallRequest`는 `tool_call`, `state`, `runtime` 필드를 노출합니다.
+- `ExtendedModelResponse`는 `model_response` + `command`로, `wrap_model_call`에서 영구 상태 업데이트를 보낼 때 씁니다.
 
-미들웨어 훅은 동작 방식에 따라 두 가지 스타일로 나뉩니다. 이 구분을 이해하는 것이 미들웨어 설계의 기초입니다.
-
-- _Node-style 훅_ (`before_*`, `after_*`): 순차적으로 실행되며, 로깅/검증/상태 업데이트에 적합합니다. 파이프라인의 특정 지점에서 "관찰"하거나 "검증"하는 용도입니다.
-- _Wrap-style 훅_ (`wrap_*`): 핸들러(`next_fn`) 호출 여부를 제어할 수 있습니다. 0회(차단), 1회(통과), 다회(재시도) 호출이 가능하여 재시도, 캐싱, 변환 로직에 적합합니다. Python의 데코레이터 패턴과 유사하게, 원래 함수를 감싸서 전후 처리를 추가합니다.
-
-미들웨어는 에이전트의 핵심 로직을 변경하지 않고도 모니터링, 변환, 신뢰성, 거버넌스 등 횡단 관심사(cross-cutting concerns)를 깔끔하게 분리할 수 있게 해줍니다. 7가지 빌트인 미들웨어(`SummarizationMiddleware`, `HumanInTheLoopMiddleware`, `ModelCallLimitMiddleware`, `ToolCallLimitMiddleware`, `ModelFallbackMiddleware`, `PIIMiddleware`, `LLMToolSelectorMiddleware`)가 제공되며, 데코레이터 또는 클래스 기반으로 커스텀 미들웨어를 작성할 수도 있습니다.
-
-#tip-box[빌트인 미들웨어는 프로덕션에서 반복적으로 필요한 패턴을 사전 구현한 것입니다. 커스텀 미들웨어를 작성하기 전에, 빌트인으로 해결 가능한지 먼저 확인하세요. 대부분의 프로덕션 요구사항은 빌트인의 조합만으로 충족됩니다.]
-
-다음 코드는 미들웨어를 에이전트에 적용하는 기본 패턴을 보여줍니다. `middleware` 파라미터에 인스턴스 리스트를 전달합니다.
-
-이제 각 빌트인 미들웨어를 하나씩 살펴보겠습니다. 먼저 장시간 대화에서 가장 빈번하게 필요한 `SummarizationMiddleware`부터 시작합니다.
+미들웨어는 에이전트의 핵심 로직을 건드리지 않고도 모니터링, 변환, 신뢰성, 거버넌스 등 횡단 관심사(cross-cutting concerns)를 깔끔하게 분리할 수 있게 해줍니다.
 
 #code-block(`````python
 from langchain.agents import create_agent
@@ -97,9 +116,7 @@ agent = create_agent(
 
 == 1.3 SummarizationMiddleware
 
-대화가 길어져 컨텍스트 윈도우를 초과할 때 자동으로 이전 대화를 요약하여 압축합니다. LLM의 컨텍스트 윈도우는 유한하므로, 수십 턴 이상의 대화에서는 오래된 메시지가 윈도우 밖으로 밀려나 맥락을 잃는 문제가 발생합니다. `SummarizationMiddleware`는 이 문제를 트리거 조건에 따라 자동으로 해결합니다.
-
-장시간 실행되는 대화, 다중 턴 대화, 전체 대화 맥락 보존이 필요한 애플리케이션에 필수적입니다.
+대화가 길어져 컨텍스트 윈도우를 초과할 때 이전 대화를 자동으로 요약·압축합니다. 장시간 실행되는 대화, 다중 턴 대화, 전체 대화 맥락을 보존해야 하는 애플리케이션에 적합합니다.
 
 === 주요 파라미터
 
@@ -131,8 +148,6 @@ agent = create_agent(
 
 `trigger`는 토큰 수, 메시지 수, 윈도우 비율 중 하나를 기준으로 설정할 수 있으며, 조건에 도달하면 `keep`에 지정된 최근 메시지를 제외한 나머지를 요약문으로 교체합니다.
 
-#tip-box[요약 모델로 `gpt-5.4-mini` 같은 경량 모델을 사용하면 비용을 절감할 수 있습니다. 요약의 목적은 핵심 맥락 보존이므로 메인 모델만큼의 추론 능력은 필요하지 않습니다.]
-
 #code-block(`````python
 from langchain.agents.middleware import SummarizationMiddleware
 
@@ -143,15 +158,11 @@ summarizer = SummarizationMiddleware(
 )
 `````)
 
-대화 컨텍스트 관리와 더불어, 프로덕션 에이전트에서 빠질 수 없는 요소가 인간 감독입니다. 다음 미들웨어는 고위험 작업에 대한 인간 승인 게이트를 제공합니다.
-
 == 1.4 HumanInTheLoopMiddleware
 
-자율적으로 동작하는 에이전트가 위험한 작업을 수행하기 전에 "잠깐, 이거 해도 되나요?"라고 물어보는 메커니즘입니다. 고위험 도구 호출 전에 에이전트 실행을 중단하고 인간 승인을 기다립니다. 데이터베이스 쓰기, 금융 거래, 이메일 전송 등 고위험 작업이나 컴플라이언스 워크플로우에서 인간 감독이 필요한 경우에 사용합니다.
+고위험 도구 호출 전에 에이전트 실행을 멈추고 인간 승인을 기다립니다. 데이터베이스 쓰기, 금융 거래, 이메일 전송 같은 고위험 작업이나 인간 감독이 필요한 컴플라이언스 워크플로우에 씁니다.
 
-*`checkpointer` 필수* — 중단 후 상태를 복원하기 위해 체크포인터가 반드시 필요합니다. 체크포인터 없이 HITL을 사용하면 중단 시점의 상태가 유실되어, 승인 후 에이전트가 처음부터 다시 실행됩니다.
-
-#warning-box[HITL 미들웨어는 에이전트 실행을 _완전히 중단_합니다. 웹 애플리케이션에서 사용할 때는 중단 상태를 클라이언트에 적절히 전달하고, 사용자 응답을 비동기로 처리하는 UI 설계가 필요합니다.]
+**`checkpointer` 필수** — 중단 후 상태를 복원하려면 체크포인터가 반드시 있어야 합니다.
 
 === 결정 유형
 
@@ -197,15 +208,13 @@ agent = create_agent(
 )
 `````)
 
-HITL이 인간의 판단을 에이전트 루프에 통합한다면, 다음 두 미들웨어는 에이전트의 _자원 소비_를 프로그래밍 방식으로 제한합니다. 에이전트가 무한 루프에 빠지거나 예상치 못한 고비용 경로를 탈 때 자동으로 제동을 거는 안전장치입니다.
-
 == 1.5 ModelCallLimitMiddleware & ToolCallLimitMiddleware
 
-에이전트가 복잡한 문제를 풀 때, 의도치 않게 무한 루프에 빠지거나 수백 번의 모델/도구 호출을 수행하여 예상치 못한 비용이 발생할 수 있습니다. 호출 제한 미들웨어는 이러한 상황에서 자동으로 제동을 거는 안전장치입니다.
+무한 루프나 과도한 API 비용을 막는 호출 제한 미들웨어입니다.
 
 === ModelCallLimitMiddleware
 
-에이전트가 모델을 호출하는 횟수를 제한합니다. 폭주하는 에이전트 방지, 프로덕션 비용 제어, 테스트 시 호출 예산 관리에 사용됩니다. `thread_limit`은 동일 스레드의 전체 생명주기에 걸친 제한이고, `run_limit`은 단일 `invoke()` 호출에 대한 제한입니다. 두 제한을 조합하면 세밀한 비용 관리가 가능합니다.
+에이전트가 모델을 호출하는 횟수를 제한합니다. 폭주하는 에이전트 방지, 프로덕션 비용 제어, 테스트 시 호출 예산 관리에 씁니다.
 
 === ToolCallLimitMiddleware
 
@@ -229,9 +238,7 @@ HITL이 인간의 판단을 에이전트 루프에 통합한다면, 다음 두 �
   [`"end"` (정상 종료), `"error"` (예외 발생), `"continue"` (에러 메시지와 함께 계속 — ToolCallLimit 전용)],
 )
 
-ToolCallLimitMiddleware는 추가로 `tool_name` 파라미터를 받아 특정 도구에만 제한을 적용할 수 있습니다. 예를 들어, 외부 API 호출 도구에는 엄격한 제한을, 로컬 계산 도구에는 느슨한 제한을 적용하는 차별화된 정책을 구현할 수 있습니다.
-
-다음 코드들은 모델 호출 제한과 도구 호출 제한을 각각 설정하는 예시입니다.
+ToolCallLimitMiddleware는 추가로 `tool_name` 파라미터를 받아 특정 도구에만 제한을 적용할 수 있습니다.
 
 #code-block(`````python
 from langchain.agents.middleware import ModelCallLimitMiddleware
@@ -257,17 +264,11 @@ search_limit = ToolCallLimitMiddleware(
 )
 `````)
 
-호출 제한은 비용과 안정성을 보호합니다. 그러나 모델 자체가 장애를 일으킬 수도 있습니다. 다음 미들웨어는 모델 레벨의 장애 복구를 자동화합니다.
-
-#tip-box[개발/테스트 환경에서는 `run_limit`을 낮게 설정(예: 3~5)하여 의도치 않은 폭주를 빠르게 감지하세요. 프로덕션에서는 태스크 복잡도에 맞게 적절히 높여야 합니다.]
-
-호출 제한으로 비용과 안정성을 보호했습니다. 그러나 모델 서비스 자체가 장애를 일으키는 경우도 대비해야 합니다. 다음 미들웨어는 모델 레벨의 장애 복구를 자동화합니다.
-
 == 1.6 ModelFallbackMiddleware
 
-주 모델 실패 시 대체 모델 체인으로 자동 전환합니다. 프로덕션 장애 대응, 비용 최적화(비싼 모델 → 저렴한 모델 폴백), 멀티 프로바이더 중복성(OpenAI + Anthropic 등) 확보에 유용합니다. 단일 프로바이더에 의존하면 해당 서비스 장애 시 전체 시스템이 중단되므로, 프로덕션 환경에서는 폴백 전략이 필수적입니다.
+주 모델 실패 시 대체 모델 체인으로 자동 전환합니다. 프로덕션 장애 대응, 비용 최적화(비싼 모델 → 저렴한 모델 폴백), 멀티 프로바이더 중복성(OpenAI + Anthropic 등) 확보에 유용합니다.
 
-생성자에 폴백 모델을 순서대로 전달하면, 주 모델 호출이 실패할 때 지정된 순서로 대체 모델을 시도합니다. 모든 폴백이 실패하면 최종 에러가 발생합니다. 폴백 체인은 비용 순서(고성능 → 저비용)로 구성하는 것이 일반적입니다.
+생성자에 폴백 모델을 순서대로 전달하면, 주 모델 호출이 실패할 때 지정된 순서로 대체 모델을 시도합니다. 모든 폴백이 실패하면 최종 에러가 발생합니다.
 
 #code-block(`````python
 from langchain.agents.middleware import ModelFallbackMiddleware
@@ -279,11 +280,9 @@ fallback = ModelFallbackMiddleware(
 )
 `````)
 
-모델 안정성 확보 다음으로 중요한 것은 데이터 보안입니다. 에이전트가 처리하는 메시지에 개인정보가 포함될 수 있으며, 이를 로그나 외부 API에 노출하면 법적 문제가 발생합니다.
-
 == 1.7 PIIMiddleware
 
-에이전트가 처리하는 메시지에는 이메일 주소, 신용카드 번호, 전화번호 등 개인 식별 정보(PII)가 포함될 수 있습니다. 이러한 정보가 로그, 외부 API, 또는 LLM 프로바이더에 노출되면 개인정보보호법(GDPR, CCPA 등) 위반이 될 수 있습니다. `PIIMiddleware`는 개인 식별 정보를 자동 탐지하고 설정된 전략에 따라 처리합니다. 의료/금융 컴플라이언스, 고객 서비스 에이전트의 로그 세정, 민감한 사용자 데이터 처리 등에 필수적입니다.
+개인 식별 정보(PII)를 자동 탐지하고 설정된 전략에 따라 처리합니다. 의료/금융 컴플라이언스, 고객 서비스 에이전트의 로그 세정, 민감한 사용자 데이터 처리에 씁니다.
 
 === 빌트인 PII 타입
 `email`, `credit_card`, `ip`, `mac_address`, `url`
@@ -319,12 +318,10 @@ fallback = ModelFallbackMiddleware(
 - `apply_to_tool_results`: 도구 실행 결과 검사
 
 === 커스텀 탐지기
-빌트인 PII 타입(email, credit_card, ip, mac_address, url)만으로는 도메인 특화된 민감 정보를 처리할 수 없습니다. 커스텀 탐지기는 세 가지 방식으로 만들 수 있으며, 복잡도에 따라 적절한 방식을 선택합니다:
-+ _정규식 문자열_: 간단한 패턴 매칭 (가장 간단)
-+ *컴파일된 정규식 (`re.compile`)*: 복잡한 정규식 (중간)
-+ _함수_: 검증 로직이 필요한 고급 탐지 (반환: `list[dict]` — `text`, `start`, `end` 키 포함, 가장 유연)
-
-다음 코드들은 각 방식의 예시를 순서대로 보여줍니다.
+빌트인 PII 타입 외에 세 가지 방식으로 커스텀 탐지기를 만들 수 있습니다:
++ _정규식 문자열_: 간단한 패턴 매칭
++ **컴파일된 정규식 (`re.compile`)**: 복잡한 정규식
++ _함수_: 검증 로직이 필요한 고급 탐지 (반환: `list[dict]` — `text`, `start`, `end` 키 포함)
 
 #code-block(`````python
 from langchain.agents.middleware import PIIMiddleware
@@ -366,15 +363,9 @@ def detect_ssn(content: str) -> list[dict]:
 ssn_pii = PIIMiddleware("ssn", detector=detect_ssn, strategy="hash")
 `````)
 
-PII 미들웨어로 데이터 보안을 확보했다면, 마지막 빌트인 미들웨어는 에이전트의 _도구 선택 정확도_를 높이는 최적화입니다.
-
-#warning-box[PII 탐지는 정규식 기반이므로 100% 정확하지 않을 수 있습니다. 높은 보안 수준이 필요한 시스템에서는 PII 미들웨어를 _방어 계층 중 하나_로 사용하고, 별도의 DLP(Data Loss Prevention) 솔루션과 병행하는 것을 권장합니다.]
-
-PII 미들웨어로 데이터 보안을 확보했다면, 마지막 빌트인 미들웨어는 에이전트의 _도구 선택 정확도_를 높이는 최적화입니다.
-
 == 1.8 LLMToolSelectorMiddleware
 
-도구가 10개 이상일 때, 경량 LLM이 사용자 쿼리를 분석하여 관련 도구만 선별합니다. 도구 수가 많아지면 LLM이 모든 도구의 description을 처리해야 하므로 입력 토큰이 급증하고, 잘못된 도구를 선택할 확률도 높아집니다. 이 미들웨어는 사전 필터링을 통해 두 문제를 동시에 해결합니다. 비유하자면, 도서관에서 책을 찾을 때 전체 서가를 훑는 대신, 사서에게 먼저 관련 섹션을 물어보는 것과 같습니다.
+도구가 10개 이상일 때, 경량 LLM이 사용자 쿼리를 분석해 관련 도구만 선별합니다. 불필요한 도구 설명으로 인한 토큰 낭비를 줄이고, 모델이 관련 도구에 집중해 정확도를 높입니다.
 
 === 주요 파라미터
 
@@ -401,7 +392,7 @@ PII 미들웨어로 데이터 보안을 확보했다면, 마지막 빌트인 미
   [`[]`],
 )
 
-선택 모델로 `gpt-5.4-mini` 같은 경량 모델을 사용하면 비용을 절감하면서도 효과적인 도구 필터링이 가능합니다.
+선택 모델로 `gpt-5.4-mini` 같은 경량 모델을 쓰면 비용을 절감하면서도 효과적인 도구 필터링이 가능합니다.
 
 #code-block(`````python
 from langchain.agents.middleware import LLMToolSelectorMiddleware
@@ -413,152 +404,108 @@ tool_selector = LLMToolSelectorMiddleware(
 )
 `````)
 
-7가지 빌트인 미들웨어만으로 대부분의 프로덕션 요구사항을 충족할 수 있지만, 컨텍스트 누적과 도구 호출 안정성 문제를 해결하는 두 가지 신규 빌트인 미들웨어도 살펴볼 가치가 있습니다.
+== 1.8b 신규 빌트인 — 프로바이더 캐싱·도구 호출 복구·컨텍스트 편집
 
-=== ContextEditingMiddleware
-긴 멀티턴 대화에서 누적된 도구 결과는 빠르게 컨텍스트 윈도우를 잠식합니다. `ContextEditingMiddleware`는 누적 토큰이 임계치를 넘으면 _오래된 도구 결과만_ 잘라내고 최근 N개를 보존합니다. `SummarizationMiddleware`가 _전체 요약_을 수행한다면, 이 미들웨어는 _도구 결과 단위로_ 청소합니다.
+기본 7종 외에 v1.1+에서 추가된 빌트인 미들웨어들입니다. 비용과 신뢰성에 직접 영향을 주므로 프로덕션 스택의 핵심입니다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[미들웨어],
+  text(weight: "bold")[패키지],
+  text(weight: "bold")[목적],
+  [`AnthropicPromptCachingMiddleware`],
+  [`langchain_anthropic.middleware`],
+  [Claude 시스템 프롬프트/도구 정의/이전 턴 캐시 히트화],
+  [`BedrockPromptCachingMiddleware`],
+  [`langchain_aws.middleware.prompt_caching`],
+  [Bedrock 호스팅 Claude에 동일 캐싱 적용],
+  [`PatchToolCallsMiddleware`],
+  [`deepagents.middleware.patch_tool_calls`],
+  [모델이 만든 잘못된 도구 호출(타입 오류, 알 수 없는 이름, 잘린 args)을 도구 노드 도달 전에 보정],
+  [`ModelFallbackMiddleware` (재)],
+  [`langchain.agents.middleware`],
+  [1차 모델 실패 시 순차 폴백],
+  [`ContextEditingMiddleware`],
+  [`langchain.agents.middleware`],
+  [토큰 한도 도달 시 오래된 도구 출력 정리],
+)
+
+`AnthropicPromptCachingMiddleware`의 `ttl`은 `"5m"` 또는 `"1h"`, `min_messages_to_cache`로 캐싱 활성화 메시지 수를 조정합니다. `PatchToolCallsMiddleware`는 `create_deep_agent(...)` 사용 시 기본 스택에 자동 포함됩니다.
 
 #code-block(`````python
+# AnthropicPromptCachingMiddleware — 긴 시스템 프롬프트/도구를 캐시 히트로
+from langchain_anthropic import ChatAnthropic
+from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
+from langchain.agents import create_agent
+
+cached_agent = create_agent(
+    model=ChatAnthropic(model="claude-sonnet-4-6"),
+    system_prompt="<긴 시스템 프롬프트>",
+    middleware=[AnthropicPromptCachingMiddleware(ttl="5m", min_messages_to_cache=0)],
+)
+`````)
+
+#code-block(`````python
+# BedrockPromptCachingMiddleware — Bedrock 호스팅 Claude 동일 캐싱
+from langchain_aws import ChatBedrockConverse
+from langchain_aws.middleware.prompt_caching import BedrockPromptCachingMiddleware
+
+bedrock_agent = create_agent(
+    model=ChatBedrockConverse(model="us.anthropic.claude-sonnet-4-5-20250929-v1:0"),
+    system_prompt="<긴 시스템 프롬프트>",
+    middleware=[BedrockPromptCachingMiddleware(ttl="1h")],
+)
+`````)
+
+#code-block(`````python
+# PatchToolCallsMiddleware — 잘못된 도구 호출을 도구 노드 도달 전에 보정
+from deepagents.middleware.patch_tool_calls import PatchToolCallsMiddleware
+
+patched_agent = create_agent(
+    model="claude-sonnet-4-6",
+    tools=[],
+    middleware=[PatchToolCallsMiddleware()],
+)
+# 참고: create_deep_agent(...) 사용 시 기본 미들웨어 스택에 자동 포함
+`````)
+
+#code-block(`````python
+# ContextEditingMiddleware — 토큰 임계 도달 시 오래된 도구 출력을 placeholder로 교체
 from langchain.agents.middleware import ContextEditingMiddleware, ClearToolUsesEdit
 
-agent = create_agent(
+ctx_edit_agent = create_agent(
     model="gpt-5.4",
-    tools=[search_tool],
+    tools=[],
     middleware=[
         ContextEditingMiddleware(
-            edits=[
-                ClearToolUsesEdit(
-                    trigger=100_000,   # 100K 토큰 누적 시 동작
-                    keep=3,            # 가장 최근 도구 결과 3건만 보존
-                    placeholder="[cleared]",
-                ),
-            ],
+            edits=[ClearToolUsesEdit(trigger=100_000, keep=3)],
         ),
     ],
 )
 `````)
 
-`ClearToolUsesEdit`의 주요 파라미터는 `trigger`(토큰 임계치), `keep`(보존 개수), `clear_at_least`(최소 회수 토큰), `clear_tool_inputs`(도구 인자도 비울지 여부), `exclude_tools`(정리에서 제외할 도구), `placeholder`(자리 표시 문자열)입니다.
-
-=== PatchToolCallsMiddleware (Deep Agents)
-일부 모델은 도구 호출 JSON에 사소한 결함(따옴표 누락, 잘못된 인자 타입 등)을 자주 만듭니다. `PatchToolCallsMiddleware`는 이러한 결함을 자동으로 보정하여 도구 호출이 그대로 실패하지 않도록 합니다. Deep Agents에서 멀티턴 도구 사용 안정성을 높이기 위해 자주 사용됩니다.
-
-#code-block(`````python
-from deepagents.middleware.patch_tool_calls import PatchToolCallsMiddleware
-
-agent = create_agent(
-    model="claude-sonnet-4-6",
-    tools=[search_tool, write_file],
-    middleware=[PatchToolCallsMiddleware()],
-)
-`````)
-
-#tip-box[`PatchToolCallsMiddleware`는 `deepagents` 패키지에서 제공되며, `wrap_model_call` 단계에서 도구 호출 페이로드를 후처리합니다. 도구 인자 검증 실패가 빈번한 모델에 우선 적용하세요.]
-
-7가지 빌트인 미들웨어만으로 대부분의 프로덕션 요구사항을 충족할 수 있지만, 비즈니스 고유의 로직이 필요한 경우 커스텀 미들웨어를 작성해야 합니다. 예를 들어, 도메인 특화 감사 로그, 커스텀 메트릭 수집, 비즈니스 규칙 기반 가드레일 등은 커스텀 미들웨어로 구현합니다.
-
 == 1.9 커스텀 미들웨어 작성
 
-두 가지 구현 방식이 있으며, 복잡도와 요구사항에 따라 선택합니다:
+두 가지 구현 방식이 있습니다:
 
 === 1. 데코레이터 방식
-단일 훅, 간단한 로직에 적합합니다. `@before_model`, `@after_model`, `@wrap_model_call`, `@wrap_tool_call` 데코레이터를 사용합니다. 함수 하나로 미들웨어를 정의할 수 있어 빠른 프로토타이핑에 유리합니다.
+단일 훅, 간단한 로직에 적합합니다. `@before_model`, `@after_model`, `@wrap_model_call`, `@wrap_tool_call` 데코레이터를 사용합니다.
 
 === 2. 클래스 방식 (`AgentMiddleware`)
-여러 훅을 조합하거나 설정이 필요한 경우 `AgentMiddleware`를 상속합니다. sync/async 구현을 동시에 제공할 수 있습니다. 생성자에서 설정을 받고, 여러 훅 메서드를 오버라이드하여 복합적인 동작을 정의할 수 있습니다.
+여러 훅을 조합하거나 설정이 필요한 경우 `AgentMiddleware`를 상속합니다. sync/async 구현을 동시에 제공할 수 있습니다.
 
 === 커스텀 상태
-미들웨어는 `NotRequired` 타입 힌트를 사용해 에이전트 상태를 확장할 수 있습니다. 이를 통해 실행 간 값 추적, 훅 간 데이터 공유, 레이트 리밋이나 감사 로깅 같은 횡단 관심사 구현이 가능합니다.
+미들웨어는 `NotRequired` 타입 힌트로 에이전트 상태를 확장할 수 있습니다. 실행 간 값 추적, 훅 간 데이터 공유, 레이트 리밋이나 감사 로깅 같은 횡단 관심사 구현에 활용합니다.
 
 === 에이전트 점프
-미들웨어의 강력한 기능 중 하나는 에이전트의 실행 흐름 자체를 변경할 수 있다는 것입니다. `after_model` 등에서 딕셔너리를 반환하여 에이전트 흐름을 제어할 수 있습니다:
-- `{"jump_to": "end"}` — 에이전트 즉시 종료 (가드레일 위반 시 강제 중단)
-- `{"jump_to": "tools"}` — 도구 실행 단계로 이동 (모델 응답을 무시하고 특정 도구 강제 실행)
-- `{"jump_to": "model"}` — 모델 호출 단계로 이동 (도구 결과를 바탕으로 재추론 요청)
-
-v1.2부터는 점프 가능 노드를 정적으로 선언하는 `@hook_config(can_jump_to=[...])` 데코레이터가 추가되었습니다. 컴파일 타임에 점프 대상이 검증되므로, 그래프에 존재하지 않는 노드로 점프하는 실수를 방지할 수 있습니다.
-
-#code-block(`````python
-from langchain.agents.middleware import after_model, hook_config, AgentState
-from langgraph.runtime import Runtime
-from langchain.messages import AIMessage
-
-@after_model
-@hook_config(can_jump_to=["end"])
-def block_unsafe(state: AgentState, runtime: Runtime) -> dict | None:
-    last = state["messages"][-1]
-    if "BLOCKED" in last.content:
-        return {
-            "messages": [AIMessage("응답할 수 없는 요청입니다.")],
-            "jump_to": "end",
-        }
-    return None
-`````)
-
-=== 타입 어노테이션 — `ModelRequest`/`ToolCallRequest`/`ModelResponse`
-`wrap_model_call`/`wrap_tool_call`에 정확한 타입을 부여하면 IDE 자동완성과 정적 분석 도구의 도움을 받을 수 있습니다. v1은 다음 데이터 타입을 제공합니다.
-
-- `ModelRequest` — `wrap_model_call` 입력. `messages`, `tools`, `model`, `system_message`, `response_format`, `state`, `runtime` 필드 보유.
-- `ToolCallRequest` — `wrap_tool_call` 입력. `tool_call`, `state`, `runtime` 필드 보유.
-- `ModelResponse` — 내부 핸들러의 반환 타입.
-- `ExtendedModelResponse` — `ModelResponse` + `Command`를 묶어 상태 업데이트를 영속화.
-
-#code-block(`````python
-from typing import Callable
-from langchain.agents.middleware import (
-    wrap_model_call, wrap_tool_call,
-    ModelRequest, ModelResponse, ToolCallRequest,
-)
-from langchain.messages import ToolMessage
-from langgraph.types import Command
-
-@wrap_model_call
-def add_cache_marker(
-    request: ModelRequest,
-    handler: Callable[[ModelRequest], ModelResponse],
-) -> ModelResponse:
-    cached = request.override(system_message=f"{request.system_message}\n[CACHE]")
-    return handler(cached)
-
-@wrap_tool_call
-def audit_tool(
-    request: ToolCallRequest,
-    handler: Callable[[ToolCallRequest], ToolMessage | Command],
-) -> ToolMessage | Command:
-    print(f"[audit] {request.tool_call['name']}")
-    return handler(request)
-`````)
-
-=== `request.override(...)` — 불변 요청 복사본
-`ModelRequest.override(...)`는 원본을 변경하지 않고 수정된 사본을 반환합니다. 같은 `wrap_model_call` 안에서 여러 미들웨어가 안전하게 협력하도록 _불변성을 보장_하는 패턴입니다. `messages`, `tools`, `model`, `system_message`, `system_prompt`, `response_format` 등이 모두 override 가능합니다.
-
-#code-block(`````python
-new_request = (
-    request
-    .override(system_prompt="새 시스템 프롬프트")
-    .override(tools=[restricted_tool])
-    .override(response_format=Weather)
-)
-return handler(new_request)
-`````)
-
-=== `ExtendedModelResponse` — 상태 업데이트 영속화
-`wrap_model_call`이 `Command` 기반 상태 업데이트를 영속적으로 적용해야 할 때 `ExtendedModelResponse`를 반환합니다. 일반 `ModelResponse`만 반환하면 모델 결과는 반영되지만 사이드 상태 변경은 누락될 수 있습니다.
-
-#code-block(`````python
-from langchain.agents.middleware import ExtendedModelResponse
-
-@wrap_model_call
-def track_tokens(request, handler) -> ExtendedModelResponse:
-    response = handler(request)
-    tokens = response.message.usage_metadata.get("total_tokens", 0)
-    return ExtendedModelResponse(
-        model_response=response,
-        command=Command(update={"total_tokens": tokens}),
-    )
-`````)
-
-다음 코드들은 데코레이터 방식과 클래스 방식의 커스텀 미들웨어 구현 예시를 보여줍니다.
+`after_model` 등에서 딕셔너리를 반환하여 에이전트 흐름을 제어할 수 있습니다:
+- `{"jump_to": "end"}` — 에이전트 즉시 종료
+- `{"jump_to": "tools"}` — 도구 실행 단계로 이동
+- `{"jump_to": "model"}` — 모델 호출 단계로 이동
 
 #code-block(`````python
 from langchain.agents.middleware import before_model
@@ -581,16 +528,95 @@ def validate_output(state, runtime):
 `````)
 
 #code-block(`````python
-from langchain.agents.middleware import wrap_model_call
+from typing import Callable
+from langchain.agents.middleware import wrap_model_call, ModelRequest, ModelResponse
 
 @wrap_model_call
-def retry_on_error(request, handler):
+def retry_on_error(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ModelResponse:
     """실패 시 모델 호출을 최대 2회 재시도합니다."""
     for attempt in range(3):
         try:
             return handler(request)
-        except Exception as e:
+        except Exception:
             if attempt == 2: raise
+`````)
+
+#code-block(`````python
+# wrap_tool_call — 도구 호출을 감싸 감사 로그/에러 변환
+from typing import Callable
+from langchain.agents.middleware import wrap_tool_call, ToolCallRequest
+from langchain.messages import ToolMessage
+from langgraph.types import Command
+
+@wrap_tool_call
+def audit_tool(
+    request: ToolCallRequest,
+    handler: Callable[[ToolCallRequest], ToolMessage | Command],
+) -> ToolMessage | Command:
+    """도구 호출 전후로 감사 로그를 남기고 예외를 ToolMessage 로 변환."""
+    name = request.tool_call["name"]
+    print(f"[AUDIT] tool={name} args={request.tool_call['args']}")
+    try:
+        return handler(request)
+    except Exception as e:
+        return ToolMessage(
+            content=f"도구 오류: {e}",
+            tool_call_id=request.tool_call["id"],
+        )
+`````)
+
+#code-block(`````python
+# request.override(...) — wrap_model_call 에서 모델/도구/시스템 프롬프트를 단일 호출 한정으로 교체
+@wrap_model_call
+def dynamic_config(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ModelResponse:
+    """상태 기반으로 모델 호출 시 system_prompt 와 tools 를 동적으로 교체."""
+    if request.state.get("expert_mode"):
+        request = request.override(
+            system_prompt="당신은 시니어 분석가입니다.",
+            # tools=[...specialist_tools],
+        )
+    return handler(request)
+`````)
+
+#code-block(`````python
+# @hook_config(can_jump_to=[...]) — after_model 에서 합법 점프 대상 선언
+from typing import Any
+from langchain.agents.middleware import after_model, hook_config, AgentState
+from langchain.messages import AIMessage
+from langgraph.runtime import Runtime
+
+@after_model
+@hook_config(can_jump_to=["end"])
+def block_forbidden(state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+    last = state["messages"][-1]
+    if "BLOCKED" in getattr(last, "content", ""):
+        return {
+            "messages": [AIMessage("요청에 응답할 수 없습니다.")],
+            "jump_to": "end",
+        }
+    return None
+`````)
+
+#code-block(`````python
+# ExtendedModelResponse — wrap_model_call 에서 모델 응답 + 영구 상태 업데이트를 함께 반환
+from langchain.agents.middleware import ExtendedModelResponse
+
+@wrap_model_call
+def track_tokens(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ExtendedModelResponse:
+    response = handler(request)
+    return ExtendedModelResponse(
+        model_response=response,
+        command=Command(update={"last_model_call_tokens": 150}),
+    )
 `````)
 
 #code-block(`````python
@@ -605,17 +631,13 @@ class AuditMiddleware(AgentMiddleware):
         print(f"[AUDIT] after -> {self.log_file}")
 `````)
 
-커스텀 미들웨어를 작성할 수 있게 되었으니, 여러 미들웨어를 함께 사용할 때의 실행 순서를 이해하는 것이 중요합니다. 순서에 따라 미들웨어 간 상호작용이 달라지기 때문입니다.
-
 == 1.10 미들웨어 실행 순서
 
-다중 미들웨어 등록 시 실행 순서를 정확히 이해해야 예상치 못한 동작을 방지할 수 있습니다.
-
-#warning-box[`before_*` 훅은 등록 순서(A → B → C)로 실행되지만, `after_*` 훅은 역순(C → B → A)으로 실행됩니다. 이는 함수 호출 스택의 LIFO(Last In, First Out) 원리와 동일합니다. `wrap_*` 훅은 중첩 래핑(A가 B를 감싸고, B가 C를 감싸는) 방식으로 동작합니다.]
+다중 미들웨어 등록 시 실행 순서를 정확히 이해해야 예상치 못한 동작을 막을 수 있습니다.
 
 `middleware=[A, B, C]` 등록 시:
 
-#align(center)[#image("../../assets/diagrams/png/middleware_execution_order.png", width: 88%, height: 112mm, fit: "contain")]
+#image("../../assets/images/middleware_execution_order.png")
 
 === 실전 팁
 - _PII 검출은 로깅보다 먼저_ 등록해야 로그에 PII가 포함되지 않습니다.
@@ -635,22 +657,11 @@ def mw_c(state, runtime): print("before C")
 # 실행: A -> B -> C (after_model이면 C -> B -> A)
 `````)
 
-실행 순서를 이해했다면, 이제 프로덕션에서 실제로 미들웨어를 어떻게 조합하는지 살펴보겠습니다.
-
 == 1.11 미들웨어 조합 (Stacking)
 
-프로덕션 환경에서는 여러 미들웨어를 함께 사용하여 종합적인 에이전트 거버넌스를 구현합니다. 미들웨어는 등록 순서에 따라 실행되므로, 배치 순서가 매우 중요합니다. 권장 순서는 다음과 같습니다:
+프로덕션 환경에서는 여러 미들웨어를 함께 사용해 종합적인 에이전트 거버넌스를 구현합니다. 미들웨어는 등록 순서에 따라 실행되므로, 보안(PII) → 신뢰성(폴백) → 비용 제어(호출 제한) → 컨텍스트 관리(요약) → 최적화(도구 선택) → 감독(HITL) 순으로 배치하는 것이 권장됩니다.
 
-+ *보안(PII)*: 가장 먼저 실행하여 민감 정보가 후속 미들웨어나 로그에 노출되지 않도록 합니다
-+ *신뢰성(폴백)*: 모델 장애 시 대체 모델로 자동 전환합니다
-+ *비용 제어(호출 제한)*: 호출 횟수를 제한하여 예산을 보호합니다
-+ *컨텍스트 관리(요약)*: 긴 대화를 자동 요약하여 윈도우 초과를 방지합니다
-+ *최적화(도구 선택)*: 관련 도구만 필터링하여 정확도를 높입니다
-+ *감독(HITL)*: 고위험 작업에 대해 인간 승인을 요청합니다
-
-이러한 조합을 통해 각 미들웨어는 단일 책임 원칙을 유지하면서도, 전체적으로 강력한 프로덕션 에이전트 파이프라인을 구성할 수 있습니다.
-
-다음 코드는 프로덕션 환경에서 권장되는 미들웨어 스택 구성 예시입니다.
+이런 조합에서 각 미들웨어는 단일 책임 원칙을 지키면서도, 전체적으로 강력한 프로덕션 에이전트 파이프라인을 구성합니다.
 
 #code-block(`````python
 from langchain.agents import create_agent
@@ -658,208 +669,26 @@ from langchain.agents.middleware import (
     PIIMiddleware, ModelFallbackMiddleware,
     ModelCallLimitMiddleware, SummarizationMiddleware,
     HumanInTheLoopMiddleware, LLMToolSelectorMiddleware,
+    ContextEditingMiddleware, ClearToolUsesEdit,
 )
+from deepagents.middleware.patch_tool_calls import PatchToolCallsMiddleware
 from langgraph.checkpoint.memory import InMemorySaver
 `````)
 
 #code-block(`````python
 middleware_stack = [
     PIIMiddleware("email", strategy="redact", apply_to_input=True),
+    PatchToolCallsMiddleware(),
     ModelFallbackMiddleware("gpt-5.4-mini", "claude-sonnet-4-6"),
     ModelCallLimitMiddleware(thread_limit=50, run_limit=10),
-    SummarizationMiddleware(model="gpt-5.4-mini", trigger=("tokens", 4000)),
+    ContextEditingMiddleware(edits=[ClearToolUsesEdit(trigger=100_000, keep=3)]),
+    SummarizationMiddleware(model="gpt-5.4-mini", trigger=("fraction", 0.8)),
 ]
 
 production_agent = create_agent(
     model="gpt-5.4", tools=[], checkpointer=InMemorySaver(), middleware=middleware_stack,
 )
 `````)
-
-== 1.12 공급자 특화 미들웨어
-
-빌트인 7종이 _프로바이더 무관_ 공통 패턴을 다룬다면, 공급자 특화 미들웨어는 각 LLM 프로바이더가 제공하는 _고유 기능_을 에이전트에 주입합니다. Anthropic의 프롬프트 캐시, Bedrock의 TTL 캐시, OpenAI의 Moderation API처럼 공급자 서버 측에서만 활성화할 수 있는 기능들은 별도 미들웨어로 노출됩니다.
-
-=== Anthropic Prompt Caching
-
-`langchain_anthropic.middleware.AnthropicPromptCachingMiddleware`는 Claude 모델 호출 시 _시스템 프롬프트 · 도구 정의 · 마지막 메시지_ 위치에 `cache_control` 마커를 자동 부착합니다. 긴 system prompt나 RAG 컨텍스트를 반복 전송하는 에이전트의 입력 토큰 비용을 최대 90% 절감합니다.
-
-#table(
-  columns: 3,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[파라미터],
-  text(weight: "bold")[기본값],
-  text(weight: "bold")[설명],
-  [`type`],
-  [`"ephemeral"`],
-  [현재 Anthropic이 지원하는 유일한 타입],
-  [`ttl`],
-  [`"5m"`],
-  [`"5m"` 또는 `"1h"` (1h는 Anthropic beta)],
-  [`min_messages_to_cache`],
-  [`0`],
-  [메시지 수가 이 값 이상일 때만 cache_control 부착],
-  [`unsupported_model_behavior`],
-  [`"warn"`],
-  [비 Anthropic 모델에 적용 시: `"warn"` / `"ignore"` / `"raise"`],
-)
-
-#code-block(`````python
-from langchain.agents import create_agent
-from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
-
-agent = create_agent(
-    model="anthropic:claude-sonnet-4-6",
-    tools=[],
-    middleware=[
-        AnthropicPromptCachingMiddleware(
-            ttl="1h",
-            min_messages_to_cache=2,
-            unsupported_model_behavior="warn",
-        ),
-    ],
-)
-`````)
-
-연속 호출 시 `usage_metadata.input_token_details`에서 `cache_creation_input_tokens`(1회차)와 `cache_read_input_tokens`(2회차 이후)로 캐시 적중 여부를 확인할 수 있습니다.
-
-=== Claude 네이티브 도구 미들웨어
-
-Claude 모델은 Anthropic 서버가 직접 해석하는 네이티브 도구 스키마(`bash_20250124`, `text_editor_20250728`, `memory_20250818`)를 학습해 두었습니다. 범용 `@tool` 데코레이터로 동일 기능을 구현하는 것보다 _tool schema 토큰이 거의 0에 수렴_하고 오류율이 낮습니다. LangChain은 네이티브 도구를 상태(State) 기반과 디스크(Filesystem) 기반 두 변형으로 래핑한 미들웨어를 제공합니다.
-
-- `ClaudeBashToolMiddleware` — 네이티브 bash 실행 도구. `workspace_root`, `startup_commands`, `execution_policy`(`HostExecutionPolicy` / `DockerExecutionPolicy` / `CodexSandboxExecutionPolicy`), `redaction_rules`를 받습니다. Docker 정책이 기본 권장치입니다.
-- `StateClaudeTextEditorMiddleware` / `FilesystemClaudeTextEditorMiddleware` — 네이티브 text editor로 `view` / `create` / `str_replace` / `insert` / `delete` / `rename`을 지원합니다. State 변형은 `text_editor_files` 상태 키에, Filesystem 변형은 실제 `root_path` 디렉터리에 파일을 씁니다.
-- `StateClaudeMemoryMiddleware` / `FilesystemClaudeMemoryMiddleware` — `/memories/*` 경로 계약을 따르는 네이티브 메모리 도구. State 변형은 체크포인터와 결합해 thread_id 재개 시 복원되고, Filesystem 변형은 디스크에 남기므로 프로세스 재시작에도 보존됩니다.
-- `StateFileSearchMiddleware` — text editor/메모리가 쌓은 가상 파일을 `glob` / `grep`으로 검색하는 네이티브 도구. `state_key="text_editor_files"`가 기본이며 `"memory_files"`로 바꾸면 메모리 쪽을 검색합니다.
-
-#code-block(`````python
-from langchain_anthropic.middleware import (
-    ClaudeBashToolMiddleware,
-    StateClaudeTextEditorMiddleware,
-    StateClaudeMemoryMiddleware,
-    StateFileSearchMiddleware,
-)
-from langchain.agents.middleware import DockerExecutionPolicy
-
-agent = create_agent(
-    model="anthropic:claude-sonnet-4-6",
-    middleware=[
-        ClaudeBashToolMiddleware(execution_policy=DockerExecutionPolicy()),
-        StateClaudeTextEditorMiddleware(allowed_path_prefixes=["/src"]),
-        StateClaudeMemoryMiddleware(),
-        StateFileSearchMiddleware(state_key="text_editor_files"),
-    ],
-)
-`````)
-
-#warning-box[LangChain 1.2의 `create_agent`는 같은 미들웨어 클래스의 중복 인스턴스를 거부합니다. text editor 파일과 메모리 파일 두 저장소를 동시에 `StateFileSearchMiddleware`로 검색하려면 서브클래싱으로 분리해야 합니다.]
-
-=== Bedrock Prompt Caching
-
-AWS Bedrock 경유로 Claude/Nova를 호출하는 기업 환경에서는 `langchain_aws.middleware.BedrockPromptCachingMiddleware`를 사용합니다. `AnthropicPromptCachingMiddleware`와 파라미터 이름과 의미가 거의 같지만 대상 패키지와 모델별 제약이 다릅니다.
-
-#table(
-  columns: 3,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[항목],
-  text(weight: "bold")[ChatBedrockConverse + Anthropic],
-  text(weight: "bold")[ChatBedrockConverse + Nova],
-  [시스템 프롬프트 캐시],
-  [O],
-  [O],
-  [도구 정의 캐시],
-  [O],
-  [X],
-  [메시지 캐시],
-  [O],
-  [O (tool result 메시지 제외)],
-  [TTL `"1h"`],
-  [O],
-  [X (5m 전용)],
-)
-
-`type` 파라미터는 `ChatBedrock`(이전 세대 invoke-model 래퍼)에서만 실제로 반영되고, `ChatBedrockConverse`에서는 `"default"`로 고정됩니다. 체크포인트가 실제로 작동하려면 캐시 대상 블록이 약 _1,024 토큰 이상_이어야 합니다. Nova 모델에서는 `ttl="5m"`로 고정하고 `unsupported_model_behavior="warn"`을 명시해 실수로 `"1h"`를 지정했을 때 조용히 무시되지 않도록 하세요.
-
-#code-block(`````python
-from langchain_aws.middleware import BedrockPromptCachingMiddleware
-
-agent = create_agent(
-    model="bedrock_converse:anthropic.claude-sonnet-4-v6:0",
-    tools=[],
-    middleware=[
-        BedrockPromptCachingMiddleware(
-            ttl="1h",
-            min_messages_to_cache=2,
-            unsupported_model_behavior="warn",
-        ),
-    ],
-)
-`````)
-
-=== OpenAI Content Moderation (보강)
-
-앞서 소개한 `OpenAIModerationMiddleware`의 전체 파라미터를 정리합니다. `check_tool_results`는 도구 결과를 모델에 넣기 전에 추가로 스캔하는 옵션으로, 웹 검색이나 이메일처럼 _제3자가 작성한 콘텐츠_가 섞이는 파이프라인에서만 켜는 것이 비용 대비 효율적입니다.
-
-#table(
-  columns: 3,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[파라미터],
-  text(weight: "bold")[기본값],
-  text(weight: "bold")[설명],
-  [`model`],
-  [`"omni-moderation-latest"`],
-  [Moderation 모델. `"omni-moderation-2024-09-26"` 등 핀 가능],
-  [`check_input`],
-  [`True`],
-  [사용자 메시지를 모델에 넘기기 전 검사],
-  [`check_output`],
-  [`True`],
-  [모델 생성 응답을 반환하기 전 검사],
-  [`check_tool_results`],
-  [`False`],
-  [도구 실행 결과를 모델 입력 전에 검사],
-  [`exit_behavior`],
-  [`"end"`],
-  [`"end"`(그래프 종료) / `"error"`(예외) / `"replace"`(메시지만 교체)],
-  [`violation_message`],
-  [기본 템플릿],
-  [`{categories}` · `{category_scores}` · `{original_content}` 변수 지원],
-  [`client` / `async_client`],
-  [`None`],
-  [사전 구성된 OpenAI 클라이언트 주입 (선택)],
-)
-
-#code-block(`````python
-from langchain_openai.middleware import OpenAIModerationMiddleware
-
-agent = create_agent(
-    model="openai:gpt-5.4",
-    tools=[search_tool],
-    middleware=[
-        OpenAIModerationMiddleware(
-            model="omni-moderation-latest",
-            check_input=True,
-            check_output=True,
-            check_tool_results=False,
-            exit_behavior="replace",
-            violation_message=(
-                "안전 정책 위반이 감지되었습니다 "
-                "(카테고리: {categories}). 원 내용은 기록되지 않습니다."
-            ),
-        ),
-    ],
-)
-`````)
-
-#tip-box[프로덕션에서는 `check_input`만 항상 켜고 `check_output`은 샘플링 전략(예: 10% 랜덤 샘플)으로 운영하는 경우가 많습니다. Moderation API도 호출 비용과 레이턴시가 추가되기 때문입니다.]
 
 #chapter-summary-header()
 
@@ -872,17 +701,25 @@ agent = create_agent(
   text(weight: "bold")[항목],
   text(weight: "bold")[핵심 내용],
   [_아키텍처_],
-  [4가지 훅: `before_model`, `after_model`, `wrap_model_call`, `wrap_tool_call`],
-  [_빌트인 7종_],
-  [Summarization, HITL, ModelCallLimit, ToolCallLimit, ModelFallback, PII, LLMToolSelector],
+  [6단계 훅: `before_agent` / `before_model` / `wrap_model_call` / `wrap_tool_call` / `after_model` / `after_agent`],
+  [_타입_],
+  [`ModelRequest`, `ToolCallRequest`, `ModelResponse`, `ExtendedModelResponse`],
+  [_프로바이더 무관 빌트인_],
+  [Summarization, HITL, ModelCallLimit, ToolCallLimit, ModelFallback, PII, LLMToolSelector, ContextEditing],
+  [_프로바이더 전용_],
+  [AnthropicPromptCaching, BedrockPromptCaching, PatchToolCalls (Deep Agents 기본 스택)],
   [_커스텀_],
-  [데코레이터(`\@before_model` 등) / `AgentMiddleware` 클래스],
+  [데코레이터(`\@before_model`, `\@wrap_model_call`, `\@wrap_tool_call` 등) / `AgentMiddleware` 클래스],
+  [_동적 구성_],
+  [`request.override(system_prompt=, tools=, model=, response_format=)`],
+  [_상태 점프_],
+  [`\@hook_config(can_jump_to=["end"],
+  ["tools"],
+  ["model"])`],
+  [_영구 상태_],
+  [`ExtendedModelResponse(model_response=..., command=Command(update={...}))`],
   [_실행 순서_],
   [`before`: 순방향, `after`: 역방향, `wrap`: 중첩],
-  [_프로덕션_],
-  [PII → Fallback → Limit → Summarization → ToolSelector → HITL],
-  [_공급자 특화_],
-  [Anthropic(캐시·bash·editor·memory·search), Bedrock(캐시), OpenAI(Moderation)],
+  [_프로덕션 스택_],
+  [PII → PatchToolCalls → Fallback → Limit → ContextEditing → Summarization → ToolSelector → HITL],
 )
-
-미들웨어는 단일 에이전트의 동작을 제어하는 강력한 도구입니다. 그러나 복잡한 도메인 문제를 해결하려면 여러 에이전트가 협력하는 멀티에이전트 아키텍처가 필요합니다. 다음 장에서는 감독자 패턴으로 서브에이전트를 조율하는 멀티에이전트 시스템을 다룹니다.

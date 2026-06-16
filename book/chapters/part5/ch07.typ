@@ -5,11 +5,11 @@
 
 #chapter(7, "데이터 분석 에이전트", subtitle: "Deep Agents + 샌드박스")
 
-이전 장의 SQL 에이전트가 데이터베이스에 질의했다면, 데이터 분석 에이전트는 코드 실행 샌드박스에서 Python 코드를 작성하고 실행하여 CSV 데이터를 분석합니다. pandas로 데이터를 탐색하고, matplotlib으로 시각화하며, 분석 결과를 Slack으로 공유하는 자율 에이전트를 구축합니다.
+CSV 데이터를 입력받아 탐색적 데이터 분석(EDA)을 수행하고, 시각화 결과를 생성한 뒤 Slack으로 공유하는 자율 에이전트를 구축합니다.
 
-Deep Agents SDK의 `create_deep_agent`, 백엔드 시스템, 빌트인 도구, 체크포인터를 활용합니다. 에이전트가 코드를 생성하고 실행하는 과정을 스트리밍으로 실시간 관찰하는 것이 이 장의 핵심입니다.
+Deep Agents SDK의 `create_deep_agent`, 백엔드 시스템, 빌트인 도구, 체크포인터를 활용합니다.
 
-#learning-header()
+== 학습 목표
 이 노트북을 완료하면 다음을 수행할 수 있습니다:
 
 + _백엔드 선택_ — `LocalShellBackend`(개발)과 `DaytonaSandbox`/`Modal`/`Runloop`(운영) 간 차이를 이해하고 선택할 수 있다
@@ -18,10 +18,11 @@ Deep Agents SDK의 `create_deep_agent`, 백엔드 시스템, 빌트인 도구, �
 + _스트리밍 관찰_ — 에이전트의 분석 과정을 실시간으로 모니터링할 수 있다
 + _빌트인 도구 활용_ — `write_todos`, `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep` 도구의 역할을 이해할 수 있다
 + _체크포인터_ — `InMemorySaver`로 대화 상태를 유지하고 이어서 분석을 수행할 수 있다
++ _하네스 해부_ — `create_agent()` + 미들웨어 관점으로 `create_deep_agent()`를 이해할 수 있다
 
 == 7.1 환경 설정
 
-Deep Agents SDK와 Tavily(웹 검색), Slack SDK를 설치합니다. 실행 환경에 따라 `pip` 또는 `uv`를 사용합니다. Deep Agents는 LangGraph 위에 구축된 올인원 에이전트 SDK로, 코드 실행 백엔드, 빌트인 도구, 서브에이전트 시스템을 내장하고 있어 데이터 분석 에이전트 구축에 최적화되어 있습니다.
+Deep Agents SDK와 Tavily(웹 검색), Slack SDK를 설치합니다. 실행 환경에 따라 `pip` 또는 `uv`를 사용합니다.
 
 #code-block(`````python
 from dotenv import load_dotenv
@@ -72,16 +73,14 @@ CSV 입력 → 계획 수립(write_todos) → 파일 읽기(read_file) → 코�
 
 Deep Agents의 에이전트는 단순한 도구 호출을 넘어 _자율적 계획 수립_ 능력을 갖추고 있습니다:
 
-+ _계획 수립_: `write_todos`를 통해 분석 작업을 세분화하고 진행 상황을 추적합니다
++ _계획 수립_: `write_todos`로 분석 작업을 세분화하고 진행 상황을 추적합니다
 + _적응적 실행_: 분석 중 오류가 발생하면 코드를 수정(`edit_file`)하고 재실행합니다
 + _서브에이전트 위임_: 복잡한 작업은 전문 서브에이전트를 생성하여 병렬 처리합니다
 + _컨텍스트 관리_: 파일 시스템 도구로 중간 결과를 저장하고 필요할 때 다시 참조합니다
 
-데이터 분석 에이전트의 가장 중요한 설계 결정은 _코드를 어디서 실행할 것인가_입니다. 로컬 환경에서 직접 실행하면 간편하지만 보안 위험이 있고, 클라우드 샌드박스는 안전하지만 설정이 필요합니다.
-
 == 7.3 백엔드 선택
 
-Deep Agents는 _플러그형 백엔드 아키텍처_를 통해 파일시스템 및 코드 실행 환경을 제공합니다. 모든 백엔드는 동일한 `BackendProtocol`을 구현하므로, 코드를 변경하지 않고 백엔드만 교체할 수 있습니다.
+Deep Agents는 _플러그형 백엔드 아키텍처_로 파일시스템 및 코드 실행 환경을 제공합니다. 모든 백엔드는 동일한 `BackendProtocol`을 구현하므로, 코드를 변경하지 않고 백엔드만 교체할 수 있습니다.
 
 #table(
   columns: 4,
@@ -113,10 +112,10 @@ Deep Agents는 _플러그형 백엔드 아키텍처_를 통해 파일시스템 �
 
 === 백엔드 유형별 상세
 
-- *`StateBackend`* (기본값): 파일을 LangGraph 에이전트 상태에 저장합니다. 스크래치패드 용도로 적합하며, 큰 출력물은 자동 제거됩니다.
-- *`FilesystemBackend`*: `root_dir` 설정으로 로컬 디스크 접근을 제공합니다. `virtual_mode=True` 옵션으로 경로 제한 및 디렉터리 탐색 방지가 가능합니다.
-- *`LocalShellBackend`*: 파일시스템 접근에 더해 `execute` 도구를 통한 _무제한 셸 명령 실행_을 제공합니다. 호스트 시스템에 대한 전체 사용자 권한으로 실행됩니다.
-- *`CompositeBackend`*: 경로별로 다른 백엔드를 라우팅합니다. 예: 임시 파일은 `StateBackend`, `/memories/`는 `StoreBackend`.
+- **`StateBackend`** (기본값): 파일을 LangGraph 에이전트 상태에 저장합니다. 스크래치패드 용도로 적합하며, 큰 출력물은 자동 제거됩니다.
+- **`FilesystemBackend`**: `root_dir` 설정으로 로컬 디스크 접근을 제공합니다. `virtual_mode=True` 옵션으로 경로 제한 및 디렉터리 탐색 방지가 가능합니다.
+- **`LocalShellBackend`**: 파일시스템 접근에 더해 `execute` 도구로 _무제한 셸 명령 실행_을 제공합니다. 호스트 시스템에 대한 전체 사용자 권한으로 실행됩니다.
+- **`CompositeBackend`**: 경로별로 다른 백엔드를 라우팅합니다. 예: 임시 파일은 `StateBackend`, `/memories/`는 `StoreBackend`.
 
 === 샌드박스 보안 원칙
 
@@ -139,13 +138,9 @@ dev_backend = LocalShellBackend(virtual_mode=True)
 # prod_backend = ...  # 프로덕션에서는 클라우드 샌드박스 백엔드를 사용하세요
 `````)
 
-백엔드가 구성되었으니, 에이전트가 분석할 데이터를 준비합니다. 실제 프로덕션에서는 사용자가 파일을 업로드하거나 에이전트가 API에서 데이터를 가져오겠지만, 여기서는 학습 목적으로 직접 CSV를 생성합니다.
-
 == 7.4 샘플 데이터 업로드
 
 에이전트가 분석할 CSV 파일을 백엔드의 작업 디렉터리에 생성합니다. `create_deep_agent`의 백엔드는 `write_file` 도구를 내장하고 있어 에이전트가 직접 파일을 쓸 수 있지만, 여기서는 미리 데이터를 준비합니다.
-
-#tip-box[에이전트에게 데이터를 제공하는 방식은 크게 세 가지입니다: (1) 백엔드의 작업 디렉터리에 미리 파일을 배치, (2) 에이전트의 `write_file` 빌트인으로 런타임에 파일 생성, (3) 커스텀 도구로 외부 API/DB에서 데이터 로드. 분석 시나리오에 따라 적합한 방식을 선택하세요.]
 
 #code-block(`````python
 import os
@@ -173,7 +168,7 @@ CSV 저장됨: /tmp/analysis/sales_2025.csv
 
 == 7.5 커스텀 도구 -- Slack 연동
 
-`@tool` 데코레이터를 사용해 에이전트가 호출할 수 있는 커스텀 도구를 정의합니다. 도구의 _docstring_이 에이전트에게 사용법을 알려주는 역할을 합니다.
+`@tool` 데코레이터로 에이전트가 호출할 수 있는 커스텀 도구를 정의합니다. 도구의 _docstring_이 에이전트에게 사용법을 알려주는 역할을 합니다.
 
 아래는 분석 결과를 Slack 채널로 전송하는 도구입니다.
 
@@ -212,61 +207,9 @@ def tavily_search(query: str) -> str:
     )
 `````)
 
-=== pandas / scikit-learn `@tool` 통합
-
-데이터 분석 에이전트는 종종 _도구가 곧 작은 분석 셀_ 입니다. `@tool` 데코레이터는 모델이 호출하는 시점에 pandas / scikit-learn 코드를 그대로 실행하고, 결과를 텍스트로 다시 모델에 돌려줍니다. 파일시스템 접근(`read_file`) 과 분리해 두면, 입력 검증·캐싱·테스트가 쉬워집니다.
-
-#code-block(`````python
-import pandas as pd
-from sklearn.cluster import KMeans
-from langchain_core.tools import tool
-
-@tool
-def summarize_csv(path: str, top_n: int = 5) -> str:
-    """CSV 파일의 기초 통계와 상위 N개 행을 요약합니다."""
-    df = pd.read_csv(path)
-    return (
-        f"shape={df.shape}\n"
-        f"dtypes={df.dtypes.to_dict()}\n"
-        f"head=\n{df.head(top_n).to_string()}"
-    )
-
-@tool
-def cluster_customers(path: str, k: int = 3) -> str:
-    """수치 컬럼만 사용해 KMeans 클러스터링을 수행합니다."""
-    df = pd.read_csv(path).select_dtypes("number").dropna()
-    labels = KMeans(n_clusters=k, n_init="auto").fit_predict(df)
-    return f"cluster_sizes={pd.Series(labels).value_counts().to_dict()}"
-`````)
-
-=== `CodeInterpreterMiddleware` 와 Skills 패턴
-
-`@tool` 만으로 작성하기 어려운 _임시 코드_ — 예를 들어 "이 컬럼 분포를 박스플롯으로 그려줘" 같은 자유 형식 분석 — 은 `CodeInterpreterMiddleware` 가 자체적인 샌드박스 위에서 실행합니다. 그리고 자주 쓰는 분석 절차는 `skills/` 디렉터리에 마크다운 + 코드 스니펫으로 묶어 두면 에이전트가 _Skill_ 단위로 호출합니다.
-
-#code-block(`````python
-from deepagents.middleware import CodeInterpreterMiddleware
-from deepagents.skills import load_skills
-
-skills = load_skills("./skills/data-analysis")  # 마크다운 + 코드 스니펫
-
-agent = create_deep_agent(
-    model="gpt-5.4",
-    tools=[summarize_csv, cluster_customers, slack_send_message],
-    middleware=[CodeInterpreterMiddleware(backend=backend)],
-    skills=skills,
-    backend=backend,
-    checkpointer=checkpointer,
-    system_prompt="당신은 데이터 분석가입니다.",
-)
-`````)
-
-#tip-box[Skills 디렉터리에는 _재현 가능한 분석 레시피_ 만 두고, 일회성 탐색 코드는 `CodeInterpreterMiddleware` 가 처리하도록 분리하세요. 이렇게 하면 검증된 절차와 즉흥 코드가 섞이지 않습니다.]
-
-커스텀 도구까지 정의했으니, 이제 모든 구성 요소를 하나로 조립하여 데이터 분석 에이전트를 생성합니다. `create_deep_agent()`는 모델, 도구, 백엔드, 체크포인터를 받아 완전한 에이전트를 반환합니다.
-
 == 7.6 에이전트 생성
 
-`create_deep_agent()`는 모델, 도구, 백엔드, 체크포인터, 시스템 프롬프트를 조합하여 에이전트를 생성합니다. 에이전트는 전달된 커스텀 도구(`tavily_search`, `slack_send_message`)와 백엔드가 제공하는 빌트인 도구(`read_file`, `write_file`, `execute` 등)를 _모두_ 사용할 수 있습니다. 빌트인 도구는 백엔드 유형에 따라 자동으로 결정됩니다.
+`create_deep_agent()`는 모델, 도구, 백엔드, 체크포인터, 시스템 프롬프트를 조합하여 에이전트를 생성합니다.
 
 #table(
   columns: 3,
@@ -313,11 +256,50 @@ agent = create_deep_agent(
 )
 `````)
 
+=== 7.6.5 `create_agent()`로 해부해 보기
+
+`create_deep_agent()`는 교육과 실무에서 바로 쓰기 좋은 shortcut입니다. 내부 관점에서는 LangChain `create_agent()`에 planning, filesystem, subagent, memory 계열 미들웨어를 조합한 하네스라고 이해하면 됩니다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[관점],
+  text(weight: "bold")[`create_deep_agent()`],
+  text(weight: "bold")[`create_agent()` + middleware],
+  [목적],
+  [Deep Agent 기본 하네스 빠른 구성],
+  [필요한 정책만 직접 조립],
+  [장점],
+  [파일 도구·계획·서브에이전트 기본 제공],
+  [최소 구성, 세밀한 제어],
+  [교육 포인트],
+  [“완성형 하네스 사용”],
+  [“하네스 내부 구조 해부”],
+)
+
+데이터 분석 에이전트처럼 파일 읽기·코드 실행·결과 저장이 핵심이면 `create_deep_agent()`가 기본값입니다. 아주 작은 도구 호출 assistant나 미들웨어 실험은 `create_agent()`로 시작해도 됩니다.
+
+#code-block(`````python
+# 하네스 해부용 reference code — 실제 분석 에이전트는 위의 create_deep_agent() 사용
+agent_anatomy = r'''
+from langchain.agents import create_agent
+
+base_agent = create_agent(
+    model="openai:gpt-5.4",
+    tools=[tavily_search, slack_send_message],
+    system_prompt="당신은 데이터 분석가입니다.",
+    # 필요 시 middleware=[...]로 정책을 직접 조합
+)
+'''
+print(agent_anatomy)
+`````)
+
 == 7.7 실행 — 분석 요청
 
-`agent.invoke()`로 분석 요청을 전달하면 에이전트가 자율적으로 계획 수립 -> 파일 읽기 -> 코드 실행 -> 결과 전달 파이프라인을 수행합니다. 에이전트의 자율성이 이 단계에서 드러납니다: 사용자는 "매출 추이를 분석해줘"라는 고수준 요청만 하면, 에이전트가 어떤 파일을 읽을지, 어떤 pandas 코드를 실행할지, 어떤 시각화를 생성할지 _스스로 결정_합니다.
-
-에이전트가 `invoke()`로 분석을 완료하면 최종 결과만 반환됩니다. 그러나 데이터 분석에서는 _과정_이 _결과_만큼 중요합니다. 에이전트가 어떤 코드를 작성했는지, 중간 결과가 어떤지, 오류를 어떻게 수정했는지 실시간으로 확인할 수 있어야 합니다.
+`agent.invoke()`로 분석 요청을 전달하면 에이전트가 자율적으로 계획 수립 → 파일 읽기 → 코드 실행 → 결과 전달 파이프라인을 수행합니다.
 
 == 7.8 스트리밍으로 분석 과정 관찰
 
@@ -410,7 +392,7 @@ Deep Agents는 백엔드를 통해 다음 빌트인 도구를 자동으로 에�
 
 === `read_file`의 멀티모달 지원
 
-`read_file`은 모든 백엔드에서 이미지 파일을 멀티모달 콘텐츠로 지원합니다. 에이전트가 matplotlib으로 차트를 생성한 후, `read_file`로 해당 이미지를 읽으면 차트의 내용을 _시각적으로 해석_할 수 있습니다. 이를 통해 "차트가 올바르게 생성되었는지", "추가적으로 어떤 시각화가 필요한지" 등을 자율적으로 판단합니다.
+`read_file`은 모든 백엔드에서 이미지 파일을 멀티모달 콘텐츠로 지원합니다. 에이전트가 matplotlib으로 차트를 생성한 후, `read_file`로 해당 이미지를 읽으면 차트의 내용을 _시각적으로 해석_할 수 있습니다. "차트가 올바르게 생성되었는지", "추가적으로 어떤 시각화가 필요한지" 등을 자율적으로 판단하는 데 활용됩니다.
 
 === 커스텀 백엔드 구현
 
@@ -422,13 +404,89 @@ Deep Agents는 백엔드를 통해 다음 빌트인 도구를 자동으로 에�
 - `write()` -- 파일 생성 (create-only)
 - `edit()` -- 유일성을 보장하는 find-and-replace
 
-빌트인 도구를 이해했으니, 마지막으로 에이전트의 _장기 실행_을 지원하는 체크포인터를 살펴봅니다. 데이터 분석은 한 번의 요청으로 끝나지 않습니다 -- "지역별 매출 분석" 후 "그 중 서울만 더 자세히 분석해"와 같은 멀티턴 대화가 자연스럽습니다.
+=== Skills 패턴 — 도메인 지식을 진보적 공개로 분리
+
+복잡한 데이터 분석은 도메인별 컨텍스트가 비대해지기 쉽습니다. _Skills_ 는 `SKILL.md` 와 `module` 프론트매터로 도메인 지식을 분리하여, 에이전트가 필요할 때만 로드합니다.
+
+#code-block(`````text
+skills/
+└── pandas_eda/
+    ├── SKILL.md       # name, description, module, allowed-tools (frontmatter)
+    └── helpers.py     # module 로 노출되는 결정적 헬퍼
+`````)
+
+`SKILL.md` 프론트매터의 핵심 키:
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[키],
+  text(weight: "bold")[용도],
+  [`name`],
+  [스킬 식별자],
+  [`description`],
+  [작업 매칭용 설명 (최대 1024자)],
+  [`module`],
+  [(인터프리터 스킬 한정) Python/TypeScript 파일 경로. interpreter 에 노출],
+  [`allowed-tools`],
+  [스킬 실행 시 허용 도구 목록],
+)
+
+#code-block(`````python
+from deepagents import create_deep_agent
+
+agent = create_deep_agent(
+    skills=["./skills/"],     # 디렉터리 단위 로드
+    checkpointer=checkpointer,
+)
+`````)
+
+=== CodeInterpreterMiddleware (QuickJS) — Backend execute 의 대안
+
+Deep Agents 0.6+ 는 `CodeInterpreterMiddleware` 로 _에이전트 루프 내부 QuickJS 런타임_을 제공합니다. `LocalShellBackend.execute` 와 비교:
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[구분],
+  text(weight: "bold")[Backend `execute` (sandbox)],
+  text(weight: "bold")[`CodeInterpreterMiddleware` (interpreter)],
+  [실행 위치],
+  [격리 외부 런타임/컨테이너],
+  [에이전트 루프 내부 QuickJS],
+  [주 용도],
+  [파일·패키지·셸·pandas/matplotlib 분석 환경],
+  [도구 조합·중간 상태·구조화 데이터 가공],
+  [컨텍스트 절약],
+  [실행 결과만 반환],
+  [interpreter 메모리에 변수 유지],
+  [보안 경계],
+  [provider sandbox 정책],
+  [QuickJS + allowlist bridge],
+)
+
+#code-block(`````python
+from deepagents import create_deep_agent
+from langchain_quickjs import CodeInterpreterMiddleware
+
+agent = create_deep_agent(
+    model="openai:gpt-5.4",
+    middleware=[CodeInterpreterMiddleware(subagents=True, mode="thread")]
+)
+`````)
+
+`pip install -U "deepagents[quickjs]"` 로 설치합니다. 큰 후보군을 변수로 유지하면서 일부만 모델 컨텍스트로 돌려보내거나, top-level `task(...)`로 여러 서브에이전트 결과를 코드에서 병합할 때 적합합니다.
+
 
 == 7.10 체크포인터로 대화 유지
 
-체크포인터는 에이전트 상태를 저장하여 _중단 후 재개_가 가능하게 합니다.
-
-#warning-box[클라우드 샌드박스(Daytona, Modal 등)를 사용할 때는 _반드시_ 샌드박스의 수명(lifetime)을 관리해야 합니다. 체크포인터가 에이전트 _상태_를 저장하더라도, 샌드박스의 _실행 환경_(설치된 패키지, 생성된 파일 등)은 샌드박스 종료 시 소멸합니다. TTL(Time-to-Live)을 설정하여 비활성 샌드박스를 자동 정리하고, 중요한 분석 결과는 외부 스토리지에 저장하세요.] `thread_id`를 통해 대화 세션을 식별하며, 동일한 `thread_id`로 이어서 요청하면 이전 대화 맥락이 유지됩니다.
+체크포인터는 에이전트 상태를 저장하여 _중단 후 재개_가 가능하게 합니다. `thread_id`로 대화 세션을 식별하며, 동일한 `thread_id`로 이어서 요청하면 이전 대화 맥락이 유지됩니다.
 
 #table(
   columns: 3,
@@ -455,7 +513,7 @@ Deep Agents는 백엔드를 통해 다음 빌트인 도구를 자동으로 에�
 체크포인터는 단순한 대화 이력 저장을 넘어 다음을 가능하게 합니다:
 
 - _중단 복구_: 네트워크 오류나 타임아웃 시 마지막 완료된 단계부터 재개
-- *`interrupt()` 지원*: Human-in-the-Loop에서 그래프 상태를 저장하여 사람의 응답 후 정확한 위치에서 재개
+- **`interrupt()` 지원**: Human-in-the-Loop에서 그래프 상태를 저장하여 사람의 응답 후 정확한 위치에서 재개
 - _멀티턴 분석_: 동일 세션에서 여러 분석 요청을 연속으로 처리하면서 이전 결과를 참조
 
 === 샌드박스 수명 관리
@@ -478,8 +536,6 @@ agent_with_memory = create_deep_agent(
 
 #chapter-summary-header()
 
-이 노트북에서 다룬 내용을 정리합니다:
-
 #table(
   columns: 2,
   align: left,
@@ -494,6 +550,8 @@ agent_with_memory = create_deep_agent(
   [`\@tool` 데코레이터 + docstring으로 정의, 에이전트가 자율 호출],
   [_에이전트 생성_],
   [`create_deep_agent(model, tools, backend, checkpointer, system_prompt)`],
+  [_하네스 해부_],
+  [`create_agent()` + middleware 관점으로 Deep Agent shortcut 이해],
   [_스트리밍_],
   [`agent.stream(stream_mode="updates", subgraphs=True)`로 실시간 관찰],
   [_빌트인 도구_],
@@ -501,7 +559,3 @@ agent_with_memory = create_deep_agent(
   [_체크포인터_],
   [`InMemorySaver`(개발) → `SQLiteSaver` → `PostgresSaver`(프로덕션)],
 )
-
-데이터 분석 에이전트는 텍스트 입출력을 기반으로 합니다. 다음 장에서는 텍스트를 넘어 음성 입출력을 다루는 보이스 에이전트를 구축합니다. STT → Agent → TTS의 3-레이어 파이프라인으로 sub-700ms 레이턴시의 실시간 음성 인터페이스를 구현합니다.
-
-

@@ -3,10 +3,10 @@
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-#chapter(3, "데이터 분석 에이전트", subtitle: "코드 실행과 멀티턴 분석")
+#chapter(3, "데이터 분석 에이전트", subtitle: "`@tool` + pandas + 멀티턴")
 
 == 학습 목표
-#learning-objectives([LocalShellBackend로 코드 실행 환경을 구성한다], [커스텀 도구와 빌트인 도구(write_todos, execute)를 조합한다], [스트리밍과 멀티턴 대화로 반복적 분석을 수행한다], [v1 미들웨어(SummarizationMiddleware, ModelCallLimitMiddleware)를 적용한다])
+#learning-objectives([`@tool` 데코레이터로 pandas 코드 실행 도구(`run_pandas`)를 정의한다], [`LocalShellBackend` 와 커스텀 도구를 조합해 데이터 분석 워크플로를 구성한다], [스트리밍과 멀티턴 대화로 반복 분석을 수행한다], [v1 미들웨어(`SummarizationMiddleware`, `ModelCallLimitMiddleware`)를 적용한다], [대안으로 **`CodeInterpreterMiddleware` (QuickJS)** 패턴을 안내한다])
 
 == 개요
 
@@ -19,15 +19,19 @@
   text(weight: "bold")[항목],
   text(weight: "bold")[내용],
   [_프레임워크_],
-  [Deep Agents],
-  [_핵심 컴포넌트_],
-  [LocalShellBackend, InMemorySaver],
+  [Deep Agents + LangChain v1],
+  [_커스텀 도구_],
+  [`\@tool` 로 정의한 `get_csv_path`, `run_pandas`],
+  [_백엔드_],
+  [`LocalShellBackend(virtual_mode=True)`],
   [_빌트인 도구_],
-  [`execute` (코드 실행), `write_todos` (계획 작성)],
+  [`execute`, `write_todos`, `ls`, `read_file` 등],
   [_패턴_],
   [스트리밍 (`stream(subgraphs=True)`) + 멀티턴 대화],
   [_스킬_],
   [`skills/data-analysis/SKILL.md` — 분석 체크리스트 + 코드 실행 규칙],
+  [_대안 패턴_],
+  [`CodeInterpreterMiddleware` — QuickJS 인터프리터 (`docs/deepagents/17-interpreters.md`)],
 )
 
 #code-block(`````python
@@ -116,9 +120,9 @@ print(f"CSV 저장: {csv_path}")
 CSV 저장: C:\Users\HEESU\AppData\Local\Temp\tmpspv1awp9\sales.csv
 `````)
 
-== 3단계: 분석 도구 정의
+== 3단계: `\@tool` + pandas 통합 도구 정의
 
-두 가지 커스텀 도구를 정의합니다:
+두 가지 커스텀 도구를 `@tool` 데코레이터로 정의합니다. `@tool` 은 함수 시그니처와 docstring 으로부터 자동으로 LangChain 도구 스키마를 만듭니다.
 
 #table(
   columns: 2,
@@ -131,10 +135,10 @@ CSV 저장: C:\Users\HEESU\AppData\Local\Temp\tmpspv1awp9\sales.csv
   [`get_csv_path`],
   [CSV 파일 경로 반환],
   [`run_pandas`],
-  [pandas 코드를 직접 실행하고 결과 반환],
+  [에이전트가 작성한 pandas 코드를 직접 실행],
 )
 
-#tip-box[`run_pandas`는 에이전트가 작성한 pandas 코드를 Python으로 실행합니다. `execute` 빌트인보다 venv 환경에서 안정적입니다.]
+#note-box[`run_pandas` 는 `exec` 로 코드를 실행하므로, 노트북 학습 환경 외에서는 `LocalShellBackend.execute` 나 `CodeInterpreterMiddleware`(QuickJS)·샌드박스 백엔드로 격리하는 것이 안전합니다.]
 
 #code-block(`````python
 from langchain.tools import tool
@@ -276,36 +280,61 @@ Prompt 'deep-research-agent-label:production' not found during refresh, evicting
 5. [Delivery]    결과 정리 및 보고
 `````)
 
-== `@tool` + pandas 패턴 vs CodeInterpreterMiddleware
 
-데이터 분석 에이전트가 코드를 실행하는 방법은 크게 두 가지입니다. 본 예제의 `run_pandas`는 _`@tool` + pandas_ 패턴이며, `LocalShellBackend`의 `execute` 빌트인이나 `CodeInterpreterMiddleware`로 대체할 수 있습니다.
+== 대안 패턴: `CodeInterpreterMiddleware` (QuickJS Interpreter)
+
+`@tool` + `exec` 패턴은 학습용으로 명료하지만, _에이전트 루프 내부_에서 변수 공간을 유지하며 도구 호출을 조합하고 싶을 때는 `CodeInterpreterMiddleware`(QuickJS 기반)가 더 적합합니다. 인터프리터는 호스트 파일시스템·네트워크·셸을 기본적으로 노출하지 않으며, allowlist된 도구만 `tools.*` 네임스페이스로 호출할 수 있습니다.
+
+#code-block(`````python
+# pip install -U "deepagents[quickjs]"
+from deepagents import create_deep_agent
+from langchain_quickjs import CodeInterpreterMiddleware
+
+agent = create_deep_agent(
+    model=model,
+    middleware=[
+        CodeInterpreterMiddleware(
+            ptc=["get_csv_path", "run_pandas"],  # programmatic tool calling allowlist
+            snapshot_between_turns=True,         # turn 간 변수 보존
+            timeout=5.0,
+        ),
+    ],
+)
+`````)
+
+QuickJS interpreter 안에서는 다음과 같이 호출합니다.
+
+#code-block(`````javascript
+const csvPath = await tools.getCsvPath();
+const result  = await tools.runPandas(
+  `import pandas as pd\nprint(pd.read_csv(${JSON.stringify(csvPath)}).head())`
+);
+`````)
 
 #table(
-  columns: 4,
+  columns: 3,
   align: left,
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[패턴],
-  text(weight: "bold")[격리],
-  text(weight: "bold")[상태 유지],
-  text(weight: "bold")[용도],
-  [`@tool` + Python 인라인 실행],
-  [없음 (현재 프로세스)],
-  [네임스페이스 매 호출 새로 생성],
-  [노트북·데모·소규모 분석],
-  [`LocalShellBackend` `execute`],
-  [없음 (호스트 셸)],
-  [파일 시스템에만 유지],
-  [에이전트가 외부 명령 호출],
-  [`CodeInterpreterMiddleware` (QuickJS)],
-  [interpreter 내부],
-  [turn 사이 snapshot으로 자동 복원],
-  [Deep Agents 0.6+ 의 안전한 코드 실행],
+  text(weight: "bold")[구분],
+  text(weight: "bold")[`\@tool` + `exec`],
+  text(weight: "bold")[`CodeInterpreterMiddleware`],
+  [실행 위치],
+  [호스트 Python],
+  [에이전트 루프 내 QuickJS],
+  [변수 공간],
+  [호출마다 새로 생성],
+  [turn 간 snapshot 으로 보존],
+  [권한 경계],
+  [파이썬 전역 = 매우 넓음],
+  [PTC allowlist = 최소 권한],
+  [부적합한 경우],
+  [운영 환경],
+  [패키지 설치·셸 실행이 필요한 분석],
 )
 
-#tip-box[Skills 패턴은 `skills/data-analysis/SKILL.md` 에 분석 체크리스트와 코드 실행 규칙을 적어두고, 에이전트가 필요할 때 점진적으로 로드합니다. 모델 호출마다 전체 프롬프트에 욱여넣지 않아 토큰을 절약합니다.]
-
+자세한 내용은 `docs/deepagents/17-interpreters.md` 를 참고하세요.
 
 #chapter-summary-header()
 
@@ -317,20 +346,25 @@ Prompt 'deep-research-agent-label:production' not found during refresh, evicting
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[항목],
   text(weight: "bold")[핵심],
+  [_커스텀 도구_],
+  [`\@tool` + pandas — `get_csv_path`, `run_pandas`],
   [_백엔드_],
   [`LocalShellBackend(virtual_mode=True)` — 코드 실행 가능],
   [_빌트인 도구_],
-  [`execute` (코드 실행) + `write_todos` (계획)],
+  [`execute`, `write_todos`, `ls`, `read_file` 등],
   [_스트리밍_],
   [`stream(subgraphs=True)` — 실행 과정 실시간 관찰],
   [_멀티턴_],
   [`InMemorySaver` + 동일 `thread_id` — 대화 맥락 유지],
+  [_대안 패턴_],
+  [`CodeInterpreterMiddleware` (QuickJS) — turn 간 변수 보존 + PTC allowlist],
 )
 
 
 #references-box[
 - `docs/deepagents/tutorials/data-analysis.md`
 - `docs/deepagents/06-backends.md`
+- `docs/deepagents/17-interpreters.md` — `CodeInterpreterMiddleware` (QuickJS)
 _다음 단계:_ → #link("./04_ml_agent.ipynb")[04_ml_agent.ipynb]: 머신러닝 에이전트를 구축합니다.
 ]
 #chapter-end()

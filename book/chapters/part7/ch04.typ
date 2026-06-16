@@ -3,10 +3,10 @@
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-#chapter(4, "머신러닝 에이전트", subtitle: "CSV 기반 자유 ML 워크플로")
+#chapter(4, "머신러닝 에이전트", subtitle: "`@tool` + scikit-learn 워크플로")
 
 == 학습 목표
-#learning-objectives([`FilesystemBackend`로 데이터 디렉토리를 설정하고, 에이전트가 자유롭게 파일을 탐색한다], [NB03의 `run_pandas` 패턴을 확장하여 sklearn을 포함하는 `run_ml_code` 도구를 만든다], [에이전트가 빌트인 도구(`ls`, `read_file`, `glob`)로 데이터를 탐색하고, `run_ml_code`로 분석한다], [멀티턴 대화로 EDA → 전처리 → 모델 선택 → 학습 → 평가를 수행한다])
+#learning-objectives([`FilesystemBackend` 로 데이터 디렉토리를 설정하고, 에이전트가 자유롭게 파일을 탐색한다], [NB03 의 `run_pandas` 패턴을 확장해 `@tool` + scikit-learn 을 통합한 `run_ml_code` 도구를 만든다], [에이전트가 빌트인 도구(`ls`, `read_file`, `glob`)로 데이터를 탐색하고 `run_ml_code` 로 학습·평가한다], [멀티턴 대화로 EDA → 전처리 → 모델 선택 → 학습 → 평가를 수행한다])
 
 == 개요
 
@@ -26,8 +26,8 @@
   [매출 CSV (8행)],
   [사용자 지정 CSV (데모: 유방암 569행)],
   [_커스텀 도구_],
-  [`get_csv_path` + `run_pandas`],
-  [`run_ml_code` (sklearn 추가)],
+  [`\@tool` + pandas — `get_csv_path` + `run_pandas`],
+  [`\@tool` + scikit-learn — `run_ml_code`],
   [_빌트인 도구_],
   [—],
   [`ls`, `read_file`, `glob` (파일 탐색)],
@@ -130,12 +130,13 @@ from deepagents.backends import FilesystemBackend
 backend = FilesystemBackend(root_dir=DATA_DIR, virtual_mode=True)
 `````)
 
-== 3단계: run_ml_code 도구 정의
+== 3단계: `\@tool` + scikit-learn 통합 도구 정의
 
-NB03의 `run_pandas`를 확장하여 `sklearn`을 네임스페이스에 추가합니다.
-`DATA_DIR`을 네임스페이스에 전달하여, 에이전트가 디렉토리 내 어떤 CSV든 로드할 수 있습니다.
+NB03 의 `run_pandas` 를 확장해 `sklearn` 을 네임스페이스에 추가합니다. `@tool` 데코레이터로 함수를 도구로 등록하면 docstring 이 곧 모델에 노출되는 도구 설명이 됩니다.
 
-#tip-box[파일 탐색은 빌트인 `ls`/`read_file`로, 코드 실행은 `run_ml_code`로 — 역할 분리]
+`DATA_DIR` 을 네임스페이스에 전달해 에이전트가 디렉토리 내 어떤 CSV 든 로드할 수 있게 합니다.
+
+#tip-box[파일 탐색은 빌트인 `ls`/`read_file` 로, 코드 실행은 `run_ml_code` 로 — 역할 분리]
 
 #code-block(`````python
 from langchain.tools import tool
@@ -218,25 +219,6 @@ ml_agent = create_deep_agent(
 
 `stream(subgraphs=True)`으로 에이전트의 실행 과정을 실시간으로 관찰합니다.
 
-== `@tool` + scikit-learn 패턴
-
-`run_ml_code`는 단일 `@tool` 안에 pandas, numpy, sklearn 네임스페이스를 모두 노출합니다. 에이전트는 도구 호출 한 번으로 EDA부터 학습·평가까지 연속된 sklearn 파이프라인을 실행할 수 있습니다.
-
-#code-block(`````python
-@tool
-def run_ml_code(code: str) -> str:
-    """pandas + numpy + sklearn 코드를 실행합니다."""
-    import pandas as pd, numpy as np, sklearn
-    ns = {"pd": pd, "np": np, "sklearn": sklearn, "os": os, "DATA_DIR": DATA_DIR}
-    # ... print 캡처 후 결과 반환
-`````)
-
-#tip-box[
-- 빌트인 `ls` / `read_file` → _데이터 탐색_
-- `run_ml_code` → _코드 실행_
-- 책임을 분리하면 에이전트가 어떤 도구를 언제 호출해야 하는지 명확해집니다.
-]
-
 #chapter-summary-header()
 
 #table(
@@ -252,7 +234,7 @@ def run_ml_code(code: str) -> str:
   [_빌트인 도구_],
   [`ls`, `read_file`, `glob` — 파일 탐색],
   [_커스텀 도구_],
-  [`run_ml_code` (pandas + numpy + sklearn) — ML 코드 실행],
+  [`\@tool` + scikit-learn — `run_ml_code` (pandas + numpy + sklearn)],
   [_워크플로_],
   [파일 탐색 → EDA → 전처리 → 모델 선택 → 교차 검증 비교],
   [_멀티턴_],

@@ -5,24 +5,12 @@
 
 #chapter(6, "SQL 에이전트 심화", subtitle: "- LangChain & LangGraph")
 
-이전 장의 Agentic RAG가 비정형 문서를 다뤘다면, SQL 에이전트는 정형 데이터베이스에 자연어로 질의하는 패턴입니다. 자연어를 SQL 쿼리로 변환하는 에이전트를 두 가지 방법으로 구축합니다: LangChain `create_agent` + `SQLDatabaseToolkit` (간단 버전)과 LangGraph `StateGraph` (커스텀 버전). Human-in-the-Loop, `interrupt()`, `Command(resume=...)` 패턴을 다룹니다.
+자연어를 SQL 쿼리로 변환하는 에이전트를 두 가지 방법으로 구축합니다: LangChain `create_agent` + `SQLDatabaseToolkit` (간단 버전)과 LangGraph `StateGraph` (커스텀 버전). Human-in-the-Loop, `interrupt()`, `Command(resume=...)` 패턴을 다룹니다.
 
-#learning-header()
+== 학습 목표
 #learning-objectives([SQL 에이전트의 8단계 워크플로우를 이해한다], [`SQLDatabase`와 `SQLDatabaseToolkit`의 4개 도구를 활용한다], [LangChain `create_agent`로 ReAct 기반 SQL Agent를 구현한다], [`HumanInTheLoopMiddleware`로 쿼리 실행 전 승인을 추가한다], [LangGraph `StateGraph`로 커스텀 SQL Agent를 구축한다], [`bind_tools`와 `tool_choice`로 강제 도구 호출을 설정한다], [`interrupt()`와 `Command(resume=...)`로 쿼리 리뷰를 구현한다])
 
-#chapter-question-box[
-SQL 에이전트의 본질은 _"자연어를 SQL로 바꾸는 것"_ 자체보다, _"그 쿼리를 어떤 순서로 검증하고 누가 실행을 승인할 것인가?"_ 에 있습니다.
-]
-
-#chapter-key-points((
-  [실무 SQL 에이전트는 생성보다 검증과 실행 통제가 더 중요합니다.],
-  [읽기 전용 권한, 접근 테이블 제한, HITL은 시스템 프롬프트보다 더 근본적인 안전장치입니다.],
-  [순서를 강제하고 싶으면 LangChain 기본 루프보다 LangGraph 커스텀 그래프가 더 적합합니다.],
-))
-
 == 6.1 환경 설정 (SQLite + Chinook DB)
-
-SQL 에이전트를 구축하기 위해 LLM과 데이터베이스를 연결합니다. Chinook DB는 디지털 음악 스토어의 샘플 데이터베이스로, Artist, Album, Track, Invoice 등 11개 테이블을 포함합니다. `SQLDatabase` 래퍼는 SQLAlchemy를 기반으로 데이터베이스 메타데이터(테이블 목록, 스키마, 샘플 데이터)에 프로그래밍 방식으로 접근하는 인터페이스를 제공합니다.
 
 #code-block(`````python
 # %pip install langchain langchain-openai langchain-community langgraph sqlalchemy python-dotenv
@@ -45,13 +33,15 @@ Dialect: sqlite
 
 SQL 에이전트는 자연어 질문을 SQL 쿼리로 변환하는 _8단계_ 프로세스를 따릅니다:
 
-#align(center)[#image("../../assets/diagrams/png/sql_query_review_flow.png", width: 76%, height: 148mm, fit: "contain")]
-
-실무에서는 이 흐름을 두 갈래로 기억하면 됩니다. _정상 경로_ 는 생성 → 검증 → 승인 → 실행으로 이어지고, _보호 경로_ 는 검증 실패나 사람 거절 시 즉시 다시 작성하거나 사용자에게 추가 정보를 요구합니다.
+#code-block(`````python
+1. 질문 수신 -> 2. 테이블 목록 -> 3. 관련 테이블 스키마
+-> 4. SQL 쿼리 생성 -> 5. 쿼리 검증 -> 6. (선택) 사람 리뷰
+-> 7. 쿼리 실행 -> 8. 결과 해석
+`````)
 
 === 왜 에이전트가 필요한가?
 
-단순 text-to-SQL과 달리 에이전트 방식은 _스키마 탐색 → 쿼리 생성 → 검증 → 실행_의 반복 루프를 수행합니다. 잘못된 쿼리가 생성되면 에이전트가 오류를 분석하고 쿼리를 재작성할 수 있어 정확도가 크게 향상됩니다. 또한 에이전트는 필요한 테이블의 스키마만 선택적으로 로드하므로 _컨텍스트 윈도우를 효율적으로_ 사용합니다.
+단순 text-to-SQL과 달리 에이전트 방식은 _스키마 탐색 → 쿼리 생성 → 검증 → 실행_의 반복 루프를 수행합니다. 잘못된 쿼리가 나오면 에이전트가 오류를 분석하고 쿼리를 재작성할 수 있어 정확도가 크게 높아집니다. 에이전트는 필요한 테이블의 스키마만 선택적으로 로드하므로 _컨텍스트 윈도우를 효율적으로_ 사용합니다.
 
 === 에이전트 실행 트레이스 예시
 
@@ -94,8 +84,6 @@ Agent -> sql_db_query(validated_query)
   [데이터베이스 뷰(view) 또는 제한된 사용자 권한 활용],
 )
 
-#warning-box[SQL 에이전트는 데이터베이스에 직접 쿼리를 실행하므로, 반드시 _읽기 전용 계정_을 사용하고 `include_tables`로 접근 범위를 제한해야 합니다. DML(INSERT/UPDATE/DELETE) 실행을 시스템 프롬프트로만 방지하는 것은 불충분합니다 — DB 레벨 권한 설정이 근본적인 안전장치입니다.]
-
 === 접근 가능 테이블 제한
 
 프로덕션에서는 에이전트가 접근할 수 있는 테이블을 명시적으로 제한하는 것이 좋습니다:
@@ -108,13 +96,9 @@ db = SQLDatabase.from_uri(
 )
 `````)
 
-SQL 에이전트의 전체 구조와 안전 수칙을 이해했으니, 이제 실제 구현의 핵심인 도구(tool) 레이어를 살펴봅니다. `SQLDatabaseToolkit`은 데이터베이스 연결 하나로 SQL 에이전트에 필요한 모든 도구를 자동으로 생성해 주는 유틸리티입니다.
-
 == 6.3 SQLDatabaseToolkit
 
-`SQLDatabaseToolkit`은 `SQLDatabase` 인스턴스와 LLM을 받아 4개의 도구를 자동 생성합니다. 이 도구들은 SQL 에이전트 워크플로의 각 단계에 1:1로 매핑됩니다:
-
-#tip-box[`sql_db_query_checker`는 내부적으로 LLM을 사용하여 쿼리를 검사합니다. 따라서 `SQLDatabaseToolkit(db=db, llm=llm)`에서 LLM을 전달하는 것이 필수입니다. 쿼리 검증에 사용되는 LLM은 에이전트의 메인 LLM과 동일하거나, 비용 절감을 위해 더 가벼운 모델을 지정할 수 있습니다.]
+4개의 도구를 자동 생성합니다:
 
 #table(
   columns: 2,
@@ -195,19 +179,13 @@ LangChain SQL 에이전트 생성됨.
 
 == 6.5 실행 테스트
 
-에이전트가 생성되었으니, 실제 자연어 질문을 던져 SQL 에이전트의 동작을 확인합니다. 에이전트가 도구를 호출하는 순서와 생성하는 SQL 쿼리를 주의 깊게 관찰하세요. 시스템 프롬프트에 지시한 워크플로(list_tables -> schema -> query_checker -> query)를 따르는지 확인하는 것이 핵심입니다.
+== 6.6 HITL — `HumanInTheLoopMiddleware`
 
-LangChain `create_agent` 기반의 SQL 에이전트는 간단하게 프로토타입을 만들 수 있지만, 프로덕션 환경에서는 SQL 쿼리 실행 전 반드시 사람의 검토가 필요합니다. 다음 절에서 이를 구현합니다.
+프로덕션에서는 SQL 쿼리 실행 전 _사람 승인_이 필요합니다. 에이전트가 만든 쿼리가 비용을 유발하거나, 예상 외 테이블에 접근하거나, 의도와 다른 결과를 반환할 수 있기 때문입니다.
 
-== 6.6 HITL -- `HumanInTheLoopMiddleware`
+`HumanInTheLoopMiddleware` 는 지정한 도구(`sql_db_query`) 호출을 가로채 그래프를 일시 중단합니다. 사람이 결정을 내리면 `Command(resume={"decisions": [...]})` 로 그래프를 재개합니다 (v2 invocation 필수).
 
-프로덕션 환경에서는 SQL 쿼리 실행 전 _사람의 승인이 필수_입니다. 에이전트가 생성한 쿼리가 비용이 높거나, 예상치 못한 테이블에 접근하거나, 의도와 다른 결과를 반환할 수 있기 때문입니다.
-
-`HumanInTheLoopMiddleware`는 지정된 도구(`sql_db_query`) 호출을 가로채서 실행을 일시 중단하고, 사람이 리뷰할 수 있도록 합니다.
-
-=== 리뷰 옵션 3가지
-
-에이전트가 `sql_db_query`를 호출하려 할 때, 실행이 일시 중단되고 사람은 다음 중 하나를 선택합니다:
+=== 4가지 decision 타입
 
 #table(
   columns: 3,
@@ -215,80 +193,105 @@ LangChain `create_agent` 기반의 SQL 에이전트는 간단하게 프로토타
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[옵션],
+  text(weight: "bold")[타입],
   text(weight: "bold")[`Command(resume=...)` 값],
-  text(weight: "bold")[설명],
-  [_승인_],
+  text(weight: "bold")[동작],
+  [_approve_],
   [`{"decisions": [{"type": "approve"}]}`],
-  [생성된 쿼리를 그대로 실행],
-  [_수정_],
-  [`{"decisions": [{"type": "edit", "args": {...}}]}`],
-  [쿼리를 수정한 후 실행],
-  [_거부_],
+  [원본 인자 그대로 실행],
+  [_edit_],
+  [`{"decisions": [{"type": "edit", "edited_action": {"name": "sql_db_query", "args": {"query": "..."}}}]}`],
+  [수정된 인자로 실행],
+  [_reject_],
   [`{"decisions": [{"type": "reject", "message": "..."}]}`],
-  [쿼리를 실행하지 않고 사유를 전달],
+  [실행 거부, 대화에 메시지 추가],
+  [_respond_],
+  [`{"decisions": [{"type": "respond", "message": "..."}]}`],
+  [도구 호출 건너뛰고, 사람의 응답이 도구 결과를 대체],
 )
 
-#tip-box[v1 `HumanInTheLoopMiddleware`는 동일 인터럽트에서 여러 도구 호출을 한 번에 검토할 수 있도록 `decisions` 배열을 받습니다. 각 항목은 도구 호출 순서와 1:1로 대응하며 `type`은 `approve`/`edit`/`reject` 중 하나입니다.]
+=== HITL이 필요한 이유
 
-=== 왜 HITL이 중요한가?
+- _비용 제어_: `LIMIT` 없는 풀 스캔 차단
+- _데이터 보호_: 민감 컬럼 접근 사전 차단
+- _정확성 검증_: 에이전트가 질문 의도를 잘못 해석한 경우 수정
+- _감사 추적_: 실행된 모든 쿼리에 대한 승인 기록 — DELETE / UPDATE 등 파괴적 쿼리는 반드시 HITL 필수
 
-리뷰 단계는 단순 승인 버튼이 아니라 _분기점_ 입니다.
+=== v2 invocation 필수
 
-- _승인 경로_ — 생성된 쿼리를 그대로 실행하여 빠른 응답 제공
-- _수정 경로_ — WHERE 조건, LIMIT, 집계 방식만 사람 손으로 보정
-- _거절 경로_ — 쿼리를 실행하지 않고 질문을 더 좁히거나 정책 위반 사유를 설명
+`Command(resume={"decisions": [...]})` 패턴은 `invoke(..., version="v2")` / `stream(..., version="v2")` 호출에서만 동작합니다. v2 결과는 `.interrupts`, `.value` 속성을 가진 `GraphOutput` 객체입니다.
 
-- _비용 제어_: `LIMIT` 없는 대규모 테이블 풀 스캔 방지
-- _데이터 보호_: 민감한 컬럼 접근 사전 차단
-- _정확성 검증_: 에이전트가 질문 의도를 잘못 해석한 경우 수정 가능
-- _감사 추적(Audit Trail)_: 모든 실행된 쿼리에 대한 승인 기록 유지
 
 #code-block(`````python
 from langchain.agents.middleware import HumanInTheLoopMiddleware
 
+# DELETE / UPDATE 가 위험한 환경: sql_db_query 를 전부 가로채거나,
+# 특정 도구만 allowed_decisions 로 제한할 수 있습니다.
 hitl = HumanInTheLoopMiddleware(
-    interrupt_on={"sql_db_query": True},
+    interrupt_on={
+        "sql_db_query": {"allowed_decisions": ["approve", "edit", "reject"]},
+    },
+    description_prefix="SQL 쿼리 실행 승인 필요",
 )
 sql_agent_hitl = create_agent(
     model=llm, tools=tools,
     system_prompt=system_prompt, middleware=[hitl],
 )
 print("HITL이 적용된 SQL 에이전트 생성됨.")
+
 `````)
 #output-block(`````
 HITL이 적용된 SQL 에이전트 생성됨.
 `````)
 
-=== DELETE / UPDATE 같은 파괴적 쿼리에 대한 재개 패턴
-
-읽기 전용 SELECT는 `approve` 만으로 충분하지만, DELETE/UPDATE/INSERT 같은 _파괴적 쿼리_ 는 보통 `edit` 으로 `WHERE` 조건이나 `LIMIT` 을 보강한 뒤 실행합니다. 인터럽트가 발생하면 `Command(resume=...)` 의 `decisions` 배열로 의사결정을 한 번에 전달합니다.
-
 #code-block(`````python
 from langgraph.types import Command
 
-# 위험한 쿼리 — 사람 검토 후 LIMIT를 추가하여 승인
-result = sql_agent_hitl.invoke(
-    Command(resume={
-        "decisions": [{
-            "type": "edit",
-            "args": {
-                "query": (
-                    "UPDATE invoices SET status='void' "
-                    "WHERE customer_id=42 AND total < 1 LIMIT 10"
-                )
-            },
-        }],
-    }),
-    config={"configurable": {"thread_id": "sql-session-1"}},
-)
-`````)
+config = {"configurable": {"thread_id": "sql-review-1"}}
 
-`create_agent` 기반 SQL 에이전트는 빠르게 프로토타입을 만들 수 있지만, 도구 호출 순서가 LLM의 자율 판단에 의존합니다. 프로덕션에서는 스키마 조회 → 쿼리 생성 → 검증 → 실행의 순서를 _강제_하고, 쿼리 리뷰를 위한 정확한 중단점을 설정해야 합니다. LangGraph `StateGraph`가 이를 가능하게 합니다.
+# v2 invocation 필요 (version="v2")
+# 1) 첫 실행 — interrupt 발생 시점까지 진행
+# result = sql_agent_hitl.invoke(
+#     {"messages": [{"role": "user", "content": "고객이 가장 많은 나라는?"}]},
+#     config=config, version="v2",
+# )
+# print(result.interrupts)  # HITLRequest 확인
+
+# Option 1: Approve
+# result = sql_agent_hitl.invoke(
+#     Command(resume={"decisions": [{"type": "approve"}]}),
+#     config=config, version="v2",
+# )
+
+# Option 2: Edit
+# result = sql_agent_hitl.invoke(
+#     Command(resume={"decisions": [
+#         {"type": "edit",
+#          "edited_action": {
+#              "name": "sql_db_query",
+#              "args": {"query": "SELECT Country, COUNT(*) FROM Customer GROUP BY Country LIMIT 10"},
+#          }}
+#     ]}),
+#     config=config, version="v2",
+# )
+
+# Option 3: Reject (DELETE/UPDATE 차단 시 사용)
+# result = sql_agent_hitl.invoke(
+#     Command(resume={"decisions": [
+#         {"type": "reject", "message": "DELETE 가 의심됩니다. SELECT 로 다시 작성하세요."}
+#     ]}),
+#     config=config, version="v2",
+# )
+print("HITL 재개 옵션: approve / edit / reject / respond (v2 invocation 필수)")
+
+`````)
+#output-block(`````
+HITL 재개 옵션: approve / edit / reject
+`````)
 
 == 6.7 LangGraph 커스텀 SQL Agent -- StateGraph
 
-LangChain `create_agent`는 빠르게 프로토타입을 만들 수 있지만, _노드 단위의 세밀한 제어_가 필요하면 LangGraph `StateGraph`를 사용합니다. 각 단계를 독립적인 노드로 정의하여 다음을 실현할 수 있습니다:
+LangChain `create_agent`는 빠르게 프로토타입을 만들 수 있지만, _노드 단위의 세밀한 제어_가 필요하면 LangGraph `StateGraph`를 사용합니다. 각 단계를 독립적인 노드로 정의하면 다음을 실현할 수 있습니다:
 
 - _조건부 분기_: 쿼리 검증 실패 시 재생성 노드로 라우팅
 - _강제 도구 호출_: `bind_tools(tool_choice=...)`로 특정 노드에서 반드시 특정 도구 호출
@@ -349,9 +352,7 @@ SQLState 키: ['messages']
 
 == 6.9 `bind_tools` with `tool_choice` -- 강제 도구 호출
 
-`tool_choice` 파라미터로 특정 도구를 _강제_ 호출하도록 설정합니다. 이는 `create_agent`의 ReAct 루프에서 LLM이 자율적으로 도구를 선택하는 것과 대비됩니다. `StateGraph`에서는 특정 노드에서 _반드시_ 특정 도구를 호출하도록 강제할 수 있어, 워크플로의 일관성이 보장됩니다. 예를 들어, `list_tables` 노드에서는 반드시 `sql_db_list_tables` 도구를 호출하고, `get_schema` 노드에서는 반드시 `sql_db_schema`를 호출하도록 설정할 수 있습니다.
-
-#tip-box[`bind_tools(tools, tool_choice="sql_db_list_tables")`는 LLM에게 해당 도구를 _반드시_ 호출하도록 강제합니다. 이는 OpenAI API의 `tool_choice` 파라미터를 활용하며, LLM이 도구 호출 없이 텍스트 응답만 생성하는 것을 방지합니다. 특정 노드에서 확실한 도구 호출이 필요할 때 사용하세요.]
+`tool_choice` 파라미터로 특정 도구를 _강제_ 호출하도록 설정합니다.
 
 == 6.10 `interrupt()`로 쿼리 리뷰
 
@@ -391,9 +392,7 @@ LangGraph의 `interrupt()` 함수는 그래프 실행을 _일시 중단_하고 �
 
 == 6.11 `Command(resume=...)` 패턴
 
-`interrupt()`로 중단된 그래프를 재개하려면 `Command(resume=...)`를 사용합니다. 이 패턴은 에이전트 실행의 _비동기적 중단과 재개_를 가능하게 합니다. 웹 애플리케이션에서는 사용자가 쿼리를 리뷰하는 동안 에이전트 상태가 체크포인터에 저장되며, 사용자의 결정(승인/수정/거부)이 `Command(resume=...)`를 통해 전달되면 정확히 중단된 지점에서 실행이 재개됩니다.
-
-#warning-box[`interrupt()` 사용 시 반드시 체크포인터(`InMemorySaver`, `SqliteSaver` 등)를 설정해야 합니다. 체크포인터 없이 `interrupt()`를 호출하면 그래프 상태가 소실되어 재개가 불가능합니다. 또한 `thread_id`를 통해 세션을 식별하므로, 같은 `thread_id`로 `Command(resume=...)`를 전달해야 올바른 세션이 재개됩니다.]
+`interrupt()`로 중단된 그래프를 재개하려면 `Command(resume=...)`를 사용합니다.
 
 #code-block(`````python
 from langgraph.graph import StateGraph, START, END
@@ -466,12 +465,12 @@ LangGraph SQL 에이전트 컴파일됨.
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[액션],
   text(weight: "bold")[`Command(resume=...)`],
-  [Approve],
-  [`{"decisions": [{"type": "approve"}]}`],
+  [Accept],
+  [`{"action": "accept"}`],
   [Edit],
-  [`{"decisions": [{"type": "edit", "args": {...}}]}`],
+  [`{"action": "edit", "edited_query": "..."}`],
   [Reject],
-  [`{"decisions": [{"type": "reject", "message": "..."}]}`],
+  [`{"action": "reject", "reason": "..."}`],
 )
 
 === SQLDatabaseToolkit 4개 도구
@@ -498,6 +497,3 @@ LangGraph SQL 에이전트 컴파일됨.
   [7],
   [쿼리 실행],
 )
-
-SQL 에이전트는 정형 데이터에 자연어 인터페이스를 제공합니다. 다음 장에서는 코드 실행 샌드박스를 활용하여 비정형 데이터(CSV, 이미지 등)를 프로그래밍 방식으로 분석하는 데이터 분석 에이전트를 구축합니다.
-

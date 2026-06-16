@@ -5,20 +5,10 @@
 
 #chapter(6, "세 프레임워크 비교 & 다음 단계")
 
-각 프레임워크를 개별적으로 학습한 후, 자연스럽게 떠오르는 질문은 "어떤 것을 사용해야 하나?"입니다. 정답은 프로젝트의 복잡도, 팀 규모, 일정에 따라 달라집니다. 이 장에서는 단순한 기능 비교를 넘어, 구체적인 시나리오 기반의 의사결정 프레임워크를 제공합니다.
+LangChain, LangGraph, Deep Agents를 한눈에 비교하고 중급 과정을 안내합니다.
 
-#learning-header()
+== 학습 목표
 #learning-objectives([LangChain, LangGraph, Deep Agents 세 프레임워크의 _핵심 차이점_을 이해한다], [각 프레임워크의 _적합한 사용 사례_를 판단할 수 있다], [중급 과정으로의 _학습 경로_를 선택할 수 있다])
-
-#chapter-question-box[
-이 문제는 결국 하나로 귀결됩니다. _"지금 내 문제에 필요한 것이 빠른 시작인지, 정밀한 제어인지, 아니면 계획·파일·서브에이전트까지 포함한 작업형 하네스인지?"_
-]
-
-#chapter-key-points((
-  [LangChain은 빠른 시작과 단순한 도구 호출에 가장 가볍습니다.],
-  [LangGraph는 상태 전이, 분기, 병렬 처리, interrupt/resume 같은 정밀 제어에 강합니다.],
-  [Deep Agents는 계획, 파일시스템, 메모리, 서브에이전트가 필요한 복합 작업에 잘 맞습니다.],
-))
 
 == 6.1 프레임워크 비교
 
@@ -88,19 +78,9 @@ _추가 비교 정보:_
   [LangSmith 지원],
 )
 
-세 프레임워크는 서로 배타적이지 않습니다. Deep Agents는 내부적으로 LangGraph를 사용하고, LangChain의 모델/도구 인터페이스를 공유합니다. 따라서 LangChain으로 기본기를 다지고, LangGraph로 복잡한 워크플로를 설계한 뒤, Deep Agents로 프로덕션급 에이전트를 구축하는 것이 자연스러운 학습 경로입니다.
-
-표만으로는 선택이 어려울 수 있습니다. 구체적인 시나리오별로 어떤 프레임워크가 적합한지 살펴봅시다.
-
-#pagebreak(weak: true)
+세 프레임워크는 서로 배타적이지 않습니다. Deep Agents는 내부적으로 LangGraph를 쓰고, LangChain의 모델/도구 인터페이스를 공유합니다. LangChain으로 기본기를 다지고, LangGraph로 복잡한 워크플로를 설계한 뒤, Deep Agents로 프로덕션급 에이전트를 구축하는 순서가 자연스럽습니다.
 
 == 6.2 어떤 걸 선택해야 할까?
-
-#align(center)[#image("../../assets/diagrams/png/framework_selection_tree.png", width: 96%, height: 132mm, fit: "contain")]
-
-의사결정 트리를 읽는 가장 쉬운 방법은 _"어디까지 직접 제어하고 싶은가?"_ 를 먼저 묻는 것입니다. 도구 호출 몇 개와 프롬프트 조합만으로 충분하면 LangChain, 상태 전이와 재개 시점을 직접 설계해야 하면 LangGraph, 파일/계획/서브에이전트가 기본 탑재된 작업형 에이전트가 필요하면 Deep Agents가 자연스럽습니다.
-
-#note-box[_3줄 규칙_: *빠르게 시작*이면 LangChain, *분기/루프/HITL*이 핵심이면 LangGraph, *코딩·리서치·파일 작업*까지 한 번에 다뤄야 하면 Deep Agents를 우선 검토하세요.]
 
 #code-block(`````python
 "간단한 도구 호출 에이전트가 필요해"     → LangChain
@@ -108,40 +88,7 @@ _추가 비교 정보:_
 "파일 조작 + 계획 기능까지 한 번에"       → Deep Agents
 `````)
 
-*LangChain 시나리오*: 주문 상태 조회와 FAQ 응답이 필요한 고객 지원 챗봇을 만들고 있습니다. 워크플로는 단순합니다 — 사용자가 질문하면, 에이전트가 적절한 도구를 호출하고, 결과를 반환합니다. `create_agent()`에 도구 두 개와 시스템 프롬프트만 있으면 20줄 미만의 코드로 완성됩니다.
-
-*LangGraph 시나리오*: 문서 검토 파이프라인을 구축하고 있습니다. 문서를 분류하고, 유형에 따라 다른 검토 큐로 라우팅하고, LLM이 검토한 뒤, 승인하거나 인간 검토자에게 에스컬레이션해야 합니다. 조건 분기, 휴먼 인 더 루프 일시 중지, 서로 다른 처리 경로 — `StateGraph`의 자연스러운 활용 사례입니다.
-
-*Deep Agents 시나리오*: 웹을 검색하고, 여러 문서를 읽고, 노트를 작성하고, 접근 방식을 계획하고, 구조화된 보고서를 생성하는 리서치 어시스턴트를 만들고 있습니다. 빌트인 계획(`write_todos`), 파일 관리(`write_file`/`read_file`), 서브에이전트 위임이 각 단계를 수동으로 조율하지 않아도 되게 해줍니다.
-
-#note-box[_언제 쓰고, 언제 멈출까?_
-- *LangChain*은 빠르게 시작하는 단일 에이전트와 비교적 단순한 도구 호출에 적합합니다. 반대로 조건 분기와 장기 실행 상태를 직접 설계해야 한다면 한 단계 아래인 LangGraph가 더 낫습니다.
-- *LangGraph*는 결정론적 단계와 에이전트 단계를 함께 다루는 복잡한 워크플로에 적합합니다. 하지만 직선형 흐름만 있는 문제를 굳이 그래프로 쪼개면 코드와 운영 비용이 함께 늘어납니다.
-- *Deep Agents*는 계획, 파일시스템, 서브에이전트, 컨텍스트 관리가 필요한 복합 작업에 강합니다. 단순 FAQ나 짧은 도구 호출 문제라면 오히려 하네스의 오버헤드가 과할 수 있습니다.]
-
-#table(
-  columns: 3,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[프레임워크],
-  text(weight: "bold")[이럴 때 쓴다],
-  text(weight: "bold")[이럴 때는 과하다],
-  [LangChain],
-  [빠른 시작, 표준 모델/도구 추상화, 복잡한 오케스트레이션이 없는 에이전트],
-  [상태 전이, durable execution, 병렬/조건부 그래프가 핵심인 경우],
-  [LangGraph],
-  [세밀한 제어, 장기 실행, 결정론적 단계 + 에이전트 단계 혼합, 사람 개입],
-  [단순 ReAct 루프만 있거나 선형 절차만 필요한 경우],
-  [Deep Agents],
-  [계획 수립, 파일 작업, 서브에이전트, 장시간 자율 작업, 컨텍스트 격리],
-  [짧고 단순한 도구 호출 문제, 중간 컨텍스트를 메인 에이전트가 계속 직접 봐야 하는 경우],
-)
-
-#tip-box[세 프레임워크는 _함께_ 사용하도록 설계되었습니다. 공통 패턴은 LangChain의 모델/도구 인터페이스를 기반으로, LangGraph로 정밀한 워크플로를 제어하고, Deep Agents로 고수준 에이전트 작업을 처리하는 것입니다. Deep Agents 에이전트를 LangGraph 워크플로의 노드로 사용할 수도 있습니다.]
-
-이론적 비교를 넘어, 동일한 작업을 세 가지 방식으로 구현한 코드를 직접 비교해 봅시다.
+#tip-box[세 프레임워크는 서로 배타적이지 않습니다. Deep Agents는 내부적으로 LangGraph를 사용하고, LangChain의 모델·도구 인터페이스를 공유합니다.]
 
 == 6.3 코드 비교 — 같은 질문, 세 가지 방식
 
@@ -184,8 +131,6 @@ agent = create_deep_agent(model=model)
 agent.invoke({"messages": [{"role": "user", "content": "3+4?"}]})
 `````)
 
-이 단순한 예제에서는 세 접근 방식 모두 같은 결과를 생성하지만, 복잡도가 증가하면 차이가 극적으로 벌어집니다. LangChain의 `create_agent()`는 단순함을 유지하지만 내부가 블랙박스가 됩니다. LangGraph는 완전한 제어권을 주지만 더 많은 코드가 필요합니다. Deep Agents는 복잡성을 자동으로 처리하지만, 내부에서 정확히 무슨 일이 일어나는지 파악하기 어려울 수 있습니다.
-
 #chapter-summary-header()
 
 #table(
@@ -216,6 +161,7 @@ agent.invoke({"messages": [{"role": "user", "content": "3+4?"}]})
   [낮음],
 )
 
+
 === 미니 프로젝트
 → _#link("./07_mini_project.ipynb")[07_mini_project.ipynb]_: 검색 + 요약 에이전트를 만드는 실습
 
@@ -230,18 +176,18 @@ agent.invoke({"messages": [{"role": "user", "content": "3+4?"}]})
   text(weight: "bold")[과정],
   text(weight: "bold")[설명],
   text(weight: "bold")[노트북 수],
-  [#link("../02_langchain/")[LangChain 중급]],
-  [모델 설정, 고급 도구 패턴(ToolRuntime, 상태 접근, 스트림 라이터), 전처리/후처리 미들웨어, 멀티에이전트 아키텍처],
+  [\#link("../02_langchain/")[LangChain 중급]],
+  [모델/메시지/도구/메모리/미들웨어/멀티에이전트],
   [10],
-  [#link("../03_langgraph/")[LangGraph 중급]],
-  [복합 조건 라우팅, `interrupt()`를 사용한 휴먼 인 더 루프, 모듈형 서브그래프, 데이터베이스 체크포인터를 활용한 영속적 상태, 재시도 전략],
+  [\#link("../03_langgraph/")[LangGraph 중급]],
+  [Graph API/워크플로/에이전트/퍼시스턴스/서브그래프],
   [10],
-  [#link("../04_deepagents/")[Deep Agents 중급]],
-  [커스텀 백엔드, 고급 서브에이전트 패턴, 대화 간 영속 메모리, 샌드박스 실행, 프로덕션 배포],
+  [\#link("../04_deepagents/")[Deep Agents 중급]],
+  [커스터마이징/백엔드/서브에이전트/메모리/고급 기능],
   [7],
 )
 
 권장 학습 순서:
-+ _LangChain_ — 모델 설정, 도구 패턴, 미들웨어의 기본기를 다진다
-+ _LangGraph_ — 조건 분기, 루프, 인간 검토 등 정밀한 그래프 기반 워크플로를 설계한다
-+ _Deep Agents_ — 계획, 파일 관리, 서브에이전트를 활용한 프로덕션급 에이전트를 구축한다
++ _LangChain_ — 모델/도구의 기본기를 다진다
++ _LangGraph_ — 그래프 기반 워크플로를 설계한다
++ _Deep Agents_ — 프로덕션급 에이전트를 구축한다

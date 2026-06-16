@@ -5,12 +5,12 @@
 
 #chapter(1, "LangChain 소개")
 
-Part I에서 `create_agent()`를 간단히 사용해 봤다면, 이제 그 내부를 깊이 이해할 차례입니다. LangChain v1은 100개 이상의 LLM 프로바이더와 도구를 10줄 미만의 코드로 연결할 수 있는 통합 프레임워크로, 에이전트 개발의 기반 레이어 역할을 합니다. 이 장에서는 프레임워크의 전체 구조, 핵심 설계 철학, 그리고 v1에서 달라진 주요 사항을 살펴봅니다.
+_LangChain v1 프레임워크 개요_
 
-#learning-header()
+== 학습 목표
 LangChain 프레임워크의 구조와 핵심 컴포넌트를 이해합니다.
 
-이 장을 완료하면 다음을 이해할 수 있습니다:
+이 노트북을 마치면 다음을 알게 됩니다:
 
 - LangChain v1 프레임워크의 3가지 레이어 구조
 - ReAct 에이전트 패턴의 동작 방식
@@ -19,15 +19,11 @@ LangChain 프레임워크의 구조와 핵심 컴포넌트를 이해합니다.
 
 == 1.1 LangChain 프레임워크 개요
 
-LangChain v1은 LLM 기반 에이전트를 구축하기 위한 통합 프레임워크입니다. 3가지 레이어로 구성되어 있으며, 각 레이어는 서로 다른 수준의 추상화를 제공합니다.
+LangChain v1은 LLM 기반 에이전트를 구축하는 통합 프레임워크입니다. 3가지 레이어로 구성되며, 각 레이어는 서로 다른 수준의 추상화를 제공합니다.
 
 === 3가지 레이어 구조
 
-#align(center)[#image("../../assets/diagrams/png/langchain_3layer.png", width: 76%, height: 148mm, fit: "contain")]
-
-#diagram-guide-box[
-위에서 아래로 읽으면 됩니다. *LangChain*은 개발자가 직접 만지는 상위 API, *LangGraph*는 실행과 상태 관리, *Deep Agents*는 그 위에 계획·파일·서브에이전트를 얹은 하네스입니다.
-]
+#image("../../assets/images/langchain_3layer.png")
 
 #table(
   columns: 3,
@@ -47,12 +43,7 @@ LangChain v1은 LLM 기반 에이전트를 구축하기 위한 통합 프레임�
   [_Deep Agents_],
   [사전 구축된 에이전트 (코딩, 리서치 등)],
   [빠른 프로토타이핑],
-  [_LangSmith_],
-  [어떤 프레임워크로 만든 에이전트든 추적·디버깅·평가하는 관측 플랫폼],
-  [모든 개발자 / 운영자],
 )
-
-#tip-box[LangSmith는 LangChain·LangGraph·Deep Agents에 한정되지 않습니다. OpenAI SDK·LlamaIndex·자체 구현 에이전트까지 트레이스를 전송하면 동일한 UI로 디버깅·평가할 수 있어, v1부터는 네 번째 핵심 도구로 다룹니다.]
 
 === LangChain v1에서 변경된 주요 사항
 
@@ -67,16 +58,16 @@ LangChain v1은 LLM 기반 에이전트를 구축하기 위한 통합 프레임�
   text(weight: "bold")[현재 (v1)],
   [에이전트 생성],
   [`create_react_agent()`],
-  [*`create_agent()`*],
+  [**`create_agent()`**],
   [에이전트 임포트],
   [`from langchain.agents import ...` (다양)],
-  [*`from langchain.agents import create_agent`*],
+  [**`from langchain.agents import create_agent`**],
   [모델 초기화],
   [`ChatOpenAI(...)` 직접 사용],
   [`init_chat_model()` 또는 `ChatOpenAI(...)`],
   [메모리],
   [`ConversationBufferMemory` 등],
-  [*`InMemorySaver`* (LangGraph 체크포인터)],
+  [**`InMemorySaver`** (LangGraph 체크포인터)],
   [실행 엔진],
   [AgentExecutor],
   [_LangGraph 그래프_ (내부적으로)],
@@ -84,49 +75,27 @@ LangChain v1은 LLM 기반 에이전트를 구축하기 위한 통합 프레임�
 
 === 핵심 설계 철학
 
-LangChain v1의 핵심 설계 철학은 _모든 에이전트가 LangGraph 그래프로 실행된다_는 것입니다. `create_agent()`로 생성된 에이전트는 내부적으로 LangGraph의 `StateGraph`로 구현되며, 이를 통해:
+LangChain v1의 핵심은 _모든 에이전트가 LangGraph 그래프로 실행된다_는 점입니다. `create_agent()`로 생성된 에이전트는 내부적으로 LangGraph의 `StateGraph`로 구현되며, 이로 인해:
 
 - _스트리밍_: `stream()` 메서드로 실시간 응답
 - _상태 관리_: 체크포인터를 통한 대화 히스토리 유지
 - _확장성_: 커스텀 노드와 엣지 추가 가능
 
-=== 멀티프로바이더 지원
-
-LangChain v1은 100여 개의 LLM 프로바이더를 동일한 인터페이스로 다룹니다. 본 책에서 자주 등장하는 모델 ID 예시는 다음과 같습니다:
-
-- _OpenAI_: `openai:gpt-5.4`, `openai:gpt-4.1`
-- _Anthropic_: `anthropic:claude-sonnet-4-6`, `anthropic:claude-opus-4-6`
-- _Google_: `google:gemini-2.5-flash-lite`, `google:gemini-2.5-pro`
-- _OpenRouter_: `openrouter:meta-llama/llama-3.3-70b-instruct` 등 100+ 모델
-- _AWS Bedrock_: `bedrock:anthropic.claude-sonnet-4-6`
-- _Ollama_: `ollama:llama3.3` (로컬 실행)
-
-본 책의 예제는 별도 명시가 없는 한 OpenAI `gpt-5.4` 또는 Anthropic `claude-sonnet-4-6`을 기본 모델로 사용합니다.
-
 == 1.2 ReAct 에이전트 패턴
 
-ReAct (Reasoning + Acting) 패턴은 LangChain v1 에이전트의 기본 동작 방식입니다. 에이전트는 다음과 같은 루프를 반복합니다:
+ReAct (Reasoning + Acting) 패턴은 LangChain v1 에이전트의 기본 동작 방식입니다. 에이전트는 다음 루프를 반복합니다:
 
-#align(center)[#image("../../assets/diagrams/png/react_loop.png", width: 72%, height: 156mm, fit: "contain")]
-
-내부적으로 에이전트는 LangGraph `StateGraph`의 두 노드 — "model"과 "tools" — 로 구현됩니다. 루프의 각 단계는 다음과 같습니다:
-
-+ *모델 호출*: 시스템 프롬프트, 대화 메시지, 사용 가능한 도구 목록을 LLM에 전달합니다. 모델은 _최종 텍스트 응답_(루프 종료) 또는 _도구 호출 요청_(`tool_calls`가 포함된 `AIMessage`)을 반환합니다.
-+ *도구 실행*: `ToolNode`가 요청된 도구를 실행하고, 결과를 매칭되는 `tool_call_id`와 함께 `ToolMessage`로 대화에 추가합니다. 여러 도구가 요청되면 병렬로 실행됩니다.
-+ *반복*: 모델이 충분한 정보를 얻어 텍스트로 응답하거나, 최대 반복 횟수에 도달할 때까지 1\~2단계를 반복합니다.
-
-이 흐름을 결정하는 핵심 라우팅 함수가 `tools_condition`입니다. 모델의 응답에 `tool_calls`가 있으면 "tools" 노드로, 없으면 `END`로 라우팅합니다.
+#image("../../assets/images/react_loop.png")
 
 === 핵심 특징
 
 - _자율적 판단_: 에이전트가 도구 사용 여부를 스스로 결정합니다
 - _다단계 추론_: 복잡한 작업을 여러 단계로 분해하여 처리합니다
 - _관찰 기반 학습_: 도구 결과를 관찰하고 다음 행동을 결정합니다
-- _병렬 도구 호출_: 모델이 여러 도구를 동시에 요청하면 `ToolNode`가 병렬로 실행합니다
 
 == 1.3 주요 컴포넌트 개요
 
-LangChain v1의 핵심 컴포넌트를 표로 정리합니다. 이 컴포넌트들은 이후 장에서 하나씩 깊이 다룹니다:
+LangChain v1의 핵심 컴포넌트를 표로 정리합니다:
 
 #table(
   columns: 3,
@@ -162,7 +131,45 @@ LangChain v1의 핵심 컴포넌트를 표로 정리합니다. 이 컴포넌트�
 
 == 1.4 환경 설정 및 설치 확인
 
-LangChain v1 개발에는 4개의 핵심 패키지가 필요합니다: `langchain`(코어 프레임워크), `langchain-openai`(OpenAI 프로바이더), `langchain-community`(커뮤니티 통합), `langgraph`(실행 엔진). 이 패키지들이 정상적으로 설치되었는지 확인합니다.
+LangChain v1 개발에 필요한 패키지와 API 키를 확인합니다.
+
+=== 설치
+
+LangChain v1 기반 실습에 필요한 핵심 패키지를 설치합니다. `uv` 또는 `pip` 중 환경에 맞는 명령을 쓰면 됩니다.
+
+#code-block(`````bash
+# uv 사용자
+uv add langchain deepagents langgraph langchain-openai langchain-anthropic
+
+# pip 사용자
+pip install -U langchain deepagents langgraph langchain-openai langchain-anthropic
+`````)
+
+#note-box[노트북 안에서 바로 설치하려면 첫 셀에 `%pip install -U langchain deepagents`를 넣어도 됩니다.]
+
+=== 자주 쓰는 기본 모델 ID
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[프로바이더],
+  text(weight: "bold")[권장 모델 ID],
+  text(weight: "bold")[메모],
+  [OpenAI],
+  [`gpt-5.4`],
+  [`init_chat_model("openai:gpt-5.4")` 형태로도 호출],
+  [Anthropic],
+  [`claude-sonnet-4-6`],
+  [안정적 추론 + 도구 사용 균형],
+  [Google],
+  [`gemini-2.5-flash-lite`],
+  [경량·저지연용],
+)
+
+본문 예시는 별다른 언급이 없으면 `gpt-5.4`를 기본 모델로 씁니다.
 
 #code-block(`````python
 # 환경 설정
@@ -249,7 +256,6 @@ print("  - InMemorySaver: 메모리 체크포인터")
   - InMemorySaver: 메모리 체크포인터
 `````)
 
-
 #chapter-summary-header()
 
 #table(
@@ -269,5 +275,3 @@ print("  - InMemorySaver: 메모리 체크포인터")
   [핵심 API],
   [`create_agent()`, `\@tool`, `invoke()`, `stream()`],
 )
-
-다음 장에서는 `create_agent()`를 사용하여 도구, 메모리, 스트리밍이 포함된 완전한 에이전트를 직접 구축합니다.

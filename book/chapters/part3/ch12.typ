@@ -5,11 +5,7 @@
 
 #chapter(12, "내구성 실행")
 
-6장에서 체크포인터 기반 장애 복구를 간략히 소개했다면, 이 장에서는 _내구성 실행(Durable Execution)_을 본격적으로 심화합니다. 실제 운영 환경에서 에이전트 워크플로는 네트워크 장애, 프로세스 재시작, 외부 API 타임아웃 등 다양한 실패 상황에 노출됩니다. 내구성 실행은 각 실행 단계를 체크포인트로 저장하여, 장애 발생 시 처음부터 재실행하지 않고 마지막 성공 지점에서 정확히 재개할 수 있게 합니다.
-
-내구성 실행의 핵심 원리는 _결정론적 재실행(deterministic replay)_입니다. 워크플로가 재개되면 `@entrypoint` 함수는 처음부터 다시 실행되지만, 이미 완료된 `@task`는 체크포인트에서 저장된 결과를 반환합니다. 이를 통해 부수 효과(API 호출 등)의 중복 실행을 방지하면서도, 정확히 중단된 지점에서 실행을 이어갈 수 있습니다. 이 장에서는 내구성 실행의 원리와 `@entrypoint` + `@task` 기반 구현, 그리고 세 가지 내구성 모드(`exit`, `async`, `sync`)의 차이를 살펴봅니다.
-
-#learning-header()
+== 학습 목표
 #learning-objectives([내구성 실행(Durable Execution)의 개념과 필요성을 이해한다], [체크포인터와 내구성 실행의 관계를 안다], [`@entrypoint` + `@task`로 내구성을 보장하는 방법을 익힌다], [내구성 모드(exit, async, sync)의 차이를 이해한다], [장애 시나리오에서의 복구 과정을 안다])
 
 == 12.1 환경 설정
@@ -23,13 +19,8 @@ model = ChatOpenAI(model="gpt-5.4")
 
 == 12.2 내구성 실행 개념
 
-_내구성 실행(Durable Execution)_이란 프로세스나 워크플로가 핵심 지점에서 진행 상태를 저장하여, 일시 중지 후 나중에 정확히 중단된 위치에서 재개할 수 있는 기법입니다. 이 개념은 Temporal, Azure Durable Functions 등 분산 시스템에서 오래전부터 사용되어 온 검증된 패턴이며, LangGraph는 이를 AI 에이전트 워크플로에 맞게 적용합니다.
-
-일반적인 프로그램은 프로세스가 종료되면 모든 상태를 잃습니다. 하지만 에이전트 워크플로는 수십 분에서 수 시간 동안 실행될 수 있고, 외부 API 호출이나 사람의 승인 대기 등 장시간 중단이 빈번합니다. 이런 워크플로에서 장애가 발생했을 때 처음부터 다시 실행하는 것은 시간과 비용 면에서 비효율적이며, 부수 효과의 중복 실행으로 오류를 유발할 수도 있습니다.
-
-#align(center)[#image("../../assets/diagrams/png/durable_resume_flow.png", width: 72%, height: 156mm, fit: "contain")]
-
-이 흐름도에서 중요한 것은 재개 지점이 _아무 줄_ 이 아니라 _체크포인트 경계_ 라는 점입니다. 따라서 부작용이 있는 작업은 `@task` 경계 바깥으로 흘러나오지 않도록 설계해야 합니다.
+_내구성 실행(Durable Execution)_이란 프로세스나 워크플로가 핵심 지점에서 진행 상태를 저장하여,
+일시 중지 후 나중에 정확히 중단된 위치에서 재개할 수 있는 기법입니다.
 
 _왜 필요한가?_
 
@@ -44,19 +35,19 @@ _왜 필요한가?_
   [장애 복구],
   [서버 장애 시 처음부터 다시 실행하지 않고 중단 지점에서 재개],
   [상태 영속],
-  [긴 실행 시간을 가진 워크플로의 중간 결과를 보존],
+  [긴 실행 시간의 워크플로 중간 결과를 보존],
   [Human-in-the-loop],
   [사람의 승인을 기다리는 동안 상태를 유지],
 )
 
-LangGraph는 체크포인터(checkpointer)를 통해 내구성 실행을 지원합니다.
+LangGraph는 checkpointer로 내구성 실행을 지원합니다.
 
 == 12.3 핵심 요구사항
 
-내구성 실행의 개념을 이해했으니, 이제 LangGraph에서 이를 구현하기 위한 구체적인 요구사항을 살펴봅시다. 내구성 실행을 구현하려면 세 가지 요소가 반드시 갖추어져야 합니다:
+내구성 실행을 구현하려면 세 가지 요소가 필요합니다:
 
 + _영속 계층 (Persistence Layer)_
-체크포인터를 통해 워크플로 진행 상태를 기록합니다.
+체크포인터로 워크플로 진행 상태를 기록합니다.
 예: `InMemorySaver`(개발용), `PostgresSaver`(프로덕션용)
 
 + _스레드 식별자 (Thread ID)_
@@ -69,9 +60,7 @@ LangGraph는 체크포인터(checkpointer)를 통해 내구성 실행을 지원�
 
 == 12.4 내구성 모드 비교
 
-세 가지 요구사항이 갖추어졌다면, 다음으로 결정해야 할 것은 _언제_ 체크포인트를 저장할 것인가입니다. 체크포인트를 자주 저장할수록 장애 복구 능력은 높아지지만, 그만큼 I/O 비용이 증가합니다. LangGraph는 이 트레이드오프를 조절할 수 있도록 세 가지 내구성 모드를 제공합니다:
-
-#tip-box[내구성 모드는 `\@entrypoint(checkpointer=saver, durability_mode="sync")` 형태로 Functional API에서 설정하거나, Graph API에서는 `graph.compile(checkpointer=saver)` 시점에 지정합니다. 기본값은 `"exit"`입니다.]
+LangGraph는 성능과 일관성 사이의 균형을 맞추는 세 가지 모드를 제공합니다:
 
 #table(
   columns: 3,
@@ -96,11 +85,10 @@ LangGraph는 체크포인터(checkpointer)를 통해 내구성 실행을 지원�
 대부분의 사용 사례에서는 기본 모드(`"exit"`)로 충분합니다.
 미션 크리티컬한 워크플로에서는 `"sync"` 모드를 고려하세요.
 
-#note-box[`"async"` 모드에서는 다음 태스크 실행과 체크포인트 저장이 동시에 진행됩니다. 만약 체크포인트 저장이 완료되기 전에 프로세스가 크래시되면, 해당 태스크의 결과가 유실될 수 있습니다. 이 위험이 허용되지 않는 금융 거래 등의 시나리오에서는 `"sync"` 모드를 사용하세요.]
-
 == 12.5 문제가 있는 코드
 
-내구성 모드를 이해했으니, 이제 _올바른 코드와 잘못된 코드의 차이_를 구체적으로 살펴봅시다. 내구성 실행의 핵심 원리인 _결정론적 재실행(deterministic replay)_을 제대로 활용하려면, 어떤 코드를 `@task`로 감싸야 하는지 정확히 이해해야 합니다. 부수 효과(API 호출 등)를 태스크로 감싸지 않으면, 재개 시 동일한 API 호출이 다시 실행되어 심각한 문제를 일으킬 수 있습니다.
+부수 효과(API 호출 등)를 태스크로 감싸지 않으면
+재개 시 동일한 API 호출이 다시 실행될 수 있습니다.
 
 #code-block(`````python
 # 문제가 있는 접근 방식: 부수 효과를 직접 호출
@@ -130,7 +118,8 @@ def call_api(state: State):
 
 == 12.6 \@task로 개선
 
-위 문제를 해결하는 방법은 간단합니다. 부수 효과를 `@task` 데코레이터로 감싸면 됩니다. `@task`로 감싼 함수의 결과는 체크포인트에 저장되므로, 워크플로가 재개될 때 실제 함수를 다시 호출하지 않고 저장된 결과를 즉시 반환합니다. 이것이 결정론적 재실행의 핵심 메커니즘입니다.
+`@task` 데코레이터로 부수 효과를 감싸면
+재개 시 이전 결과를 체크포인트에서 복원하여 재실행을 방지합니다.
 
 #code-block(`````python
 # 개선된 접근 방식: @task로 부수 효과 래핑
@@ -174,9 +163,7 @@ def call_api(state: State):
 
 == 12.7 Graph API에서의 내구성
 
-`@task` 패턴을 이해했으니, 이제 두 가지 API에서 내구성이 어떻게 동작하는지 비교해 봅시다. Graph API에서는 내구성 구현이 더 단순합니다. `StateGraph`에 체크포인터를 연결하기만 하면, 각 노드 실행이 완료될 때마다 전체 상태가 자동으로 저장됩니다. 노드 자체가 내구성의 기본 단위가 되므로, 별도의 `@task` 래핑이 필요하지 않습니다.
-
-#note-box[Graph API에서는 각 노드가 하나의 체크포인트 단위입니다. 노드 A가 성공하고 노드 B에서 장애가 발생하면, 재개 시 노드 B부터 다시 실행됩니다. 따라서 하나의 노드 안에 여러 개의 독립적인 부수 효과가 있다면, 이를 별도의 노드로 분리하는 것이 내구성 측면에서 유리합니다.]
+StateGraph에 체크포인터를 연결하면 각 노드 실행 후 상태가 자동 저장됩니다.
 
 #code-block(`````python
 from typing import TypedDict
@@ -220,7 +207,7 @@ print("결과:", result)
 
 == 12.8 Functional API에서의 내구성
 
-Functional API에서의 내구성은 Graph API와 근본적으로 다른 방식으로 동작합니다. `@entrypoint`와 `@task`를 조합하면 내구성을 보장할 수 있지만, 재개 시의 동작이 다릅니다. `@entrypoint` 함수는 _항상_ 처음부터 다시 실행되며, 이미 완료된 `@task`는 실제로 실행되지 않고 체크포인트에서 저장된 결과를 반환합니다. 따라서 `@entrypoint` 내부의 모든 비결정적 코드는 반드시 `@task`로 감싸야 합니다.
+`@entrypoint`와 `@task`를 조합하면 Functional API에서도 내구성을 보장할 수 있습니다.
 
 #code-block(`````python
 from langgraph.func import entrypoint, task
@@ -257,7 +244,7 @@ print("결과:", result)
 
 == 12.9 장애 복구 시나리오
 
-이론적인 설명만으로는 내구성 실행의 가치를 체감하기 어렵습니다. 이제 구체적인 장애 복구 시나리오를 통해 체크포인터가 실제로 어떻게 동작하는지 확인해 봅시다. 핵심 원리는 간단합니다: 같은 `thread_id`로 재실행하면 체크포인트에서 이전 상태를 복원하여 이어서 실행합니다.
+같은 `thread_id`로 재실행하면 체크포인트에서 이전 상태를 복원하여 이어서 실행합니다.
 
 #code-block(`````python
 from typing import TypedDict
@@ -323,11 +310,9 @@ print(f"step_one 총 호출 횟수: {call_count}")
 step_one 총 호출 횟수: 1
 `````)
 
-#note-box[장애가 발생했을 때 “어디서 다시 시작되는가?”를 항상 확인하세요. LangGraph는 마지막으로 _성공적으로 체크포인트된 작업 이후_ 부터 다시 시작합니다. 그래서 외부 API 호출, 파일 쓰기, 결제 같은 부작용은 _재실행되어도 안전한 단위_ 로 감싸야 합니다.]
-
 == 12.10 재개 시작점
 
-내구성 실행에서 가장 중요한 차이 중 하나는 _재개 시작점_입니다. Graph API와 Functional API는 동일한 체크포인터를 사용하지만, 재개 동작이 근본적으로 다릅니다:
+워크플로가 재개될 때 API에 따라 시작점이 다릅니다:
 
 #table(
   columns: 3,
@@ -353,17 +338,13 @@ _핵심 차이:_
 - StateGraph: 노드 단위 재개 (중단된 노드만 재실행)
 - Functional API: 엔트리포인트부터 재실행하되, 완료된 `@task`는 캐시 결과 사용
 
-#warning-box[Functional API에서 재개 시 `\@entrypoint` 함수가 처음부터 다시 실행되므로, `\@task` 밖에 있는 코드(변수 초기화, 조건문 등)는 _결정론적_이어야 합니다. 비결정적 코드가 `\@task` 밖에 있으면 재실행 시 다른 분기를 탈 수 있어 예측할 수 없는 동작이 발생합니다.]
-
 == 12.11 프로덕션 내구성 패턴
 
-재개 시작점의 차이를 이해했다면, 이제 프로덕션 환경에서 내구성을 효과적으로 활용하기 위한 모범 사례를 정리합니다. 아래 패턴들은 장애 복구뿐 아니라, 코드의 유지보수성과 테스트 용이성까지 향상시킵니다.
-
-#warning-box[프로덕션 환경에서 `InMemorySaver`를 사용하면 프로세스 재시작 시 모든 체크포인트가 유실됩니다. 반드시 `PostgresSaver` 등 영속 저장소 기반 체크포인터를 사용하세요. LangGraph Platform을 사용하면 체크포인터가 자동으로 관리되므로 별도 설정이 필요 없습니다.]
+프로덕션 환경에서 내구성을 보장하기 위한 모범 사례:
 
 + _멱등성(Idempotent) 연산 구현_
-같은 요청을 여러 번 실행해도 결과가 동일하도록 설계합니다.
-멱등성 키(idempotency key)를 활용하여 중복 처리를 방지합니다.
+같은 요청을 여러 번 실행해도 결과가 같도록 설계합니다.
+멱등성 키(idempotency key)로 중복 처리를 방지합니다.
 
 + _부수 효과 분리_
 API 호출, 파일 쓰기 등의 부수 효과를 개별 `@task`로 분리합니다.
@@ -380,17 +361,61 @@ API 호출, 파일 쓰기 등의 부수 효과를 개별 `@task`로 분리합니
 각 워크플로 인스턴스에 고유한 `thread_id`를 부여합니다.
 장애 복구 시 동일한 `thread_id`로 재개합니다.
 
-== 12.12 노드 시도 단위 fault tolerance --- `TimeoutPolicy` + `heartbeat`
+== 12.12 LangGraph 1.2 Fault Tolerance
 
-내구성 실행이 _어디까지 진행했는지_를 checkpoint로 보존한다면, LangGraph 1.2의 fault tolerance 기능은 _언제 포기하고, 어떻게 보정할지_를 노드 시도(attempt) 단위로 제어합니다. `add_node(..., timeout=TimeoutPolicy(...))`로 단일 시도에 시간 제한을 두면, 초과 시 `NodeTimeoutError`가 발생하고 retry policy가 있으면 다음 시도로 넘어갑니다. timeout이 발생한 시도의 partial write는 폐기됩니다.
+내구성 실행은 checkpoint를 통해 재개 지점을 보존합니다. LangGraph 1.2의 fault tolerance는 여기에 _노드 시도 단위 제어_를 추가합니다.
 
-장기 작업 노드는 `Runtime.heartbeat()`와 `refresh_on="heartbeat"`를 결합해 idle timeout을 갱신할 수 있습니다.
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[기능],
+  text(weight: "bold")[핵심 API],
+  text(weight: "bold")[언제 쓰나],
+  [노드 timeout],
+  [`TimeoutPolicy`, `NodeTimeoutError`],
+  [외부 API가 오래 멈추는 경우],
+  [재시도],
+  [`RetryPolicy`],
+  [일시적 네트워크/5xx 실패],
+  [보정 handler],
+  [`error_handler=...`, `NodeError`, `Command`],
+  [Saga/보상 트랜잭션],
+  [Graceful shutdown],
+  [`RunControl.request_drain()`, `GraphDrained`],
+  [배포·점검 전 안전 중단],
+)
 
 #code-block(`````python
-from langgraph.func import task
-from langgraph.runtime import Runtime
-from langgraph.types import TimeoutPolicy
+# LangGraph 1.2 fault tolerance 패턴
+from importlib.metadata import version
 
+print("설치된 langgraph:", version("langgraph"))
+print("필요 버전: langgraph>=1.2.0")
+
+example = r'''
+from langgraph.errors import NodeError
+from langgraph.types import Command, RetryPolicy, TimeoutPolicy
+from langgraph.runtime import Runtime  # heartbeat 사용 시
+
+def payment_error_handler(state: State, error: NodeError) -> Command:
+    # retry 모두 소진 후 실행되는 보정 함수
+    return Command(
+        update={"status": f"compensated: {error.error}"},
+        goto="finalize",
+    )
+
+builder.add_node(
+    "charge_payment",
+    charge_payment,
+    timeout=TimeoutPolicy(idle_timeout=30),                     # NodeTimeoutError
+    retry_policy=RetryPolicy(max_attempts=3, retry_on=ConnectionError),
+    error_handler=payment_error_handler,                        # 보정 트랜잭션
+)
+
+# 장기 작업 노드: heartbeat로 idle timeout 갱신
 async def long_running_node(state: State, runtime: Runtime) -> dict:
     for batch in fetch_batches():
         process(batch)
@@ -402,17 +427,23 @@ builder.add_node(
     long_running_node,
     timeout=TimeoutPolicy(idle_timeout=30, refresh_on="heartbeat"),
 )
+'''
+print(example)
 `````)
 
-== 12.13 Graceful shutdown --- `RunControl` / `GraphDrained`
+=== Graceful shutdown — `RunControl` / `GraphDrained` / `Runtime.drain_requested`
 
-장기 실행 그래프를 SIGTERM 같은 외부 시그널에서 즉시 강제 종료하지 않고, 현재 superstep을 끝낸 뒤 checkpoint를 남기려면 `RunControl.request_drain()`을 사용합니다. drain이 요청되면 런은 `GraphDrained`로 멈추고 _같은 config_로 나중에 재개할 수 있습니다. 노드 내부에서는 `Runtime.drain_requested`로 drain 신호를 직접 분기해 안전 종료 처리를 추가할 수 있습니다.
+장기 실행 그래프를 즉시 강제 종료하지 않고 현재 superstep을 끝낸 뒤 checkpoint를 남기려면 `RunControl.request_drain()`을 사용합니다. drain이 요청되면 런은 `GraphDrained`로 멈추고 같은 config로 나중에 재개할 수 있습니다.
+
+노드 내부에서는 `Runtime.drain_requested`로 drain 신호를 직접 확인할 수 있습니다.
 
 #code-block(`````python
+# Graceful shutdown 패턴 — langgraph>=1.2
+example = r'''
 from langgraph.runtime import RunControl, Runtime
 from langgraph.errors import GraphDrained
 
-# 1) 호출 측 — 외부 시그널(SIGTERM 등)에 drain 요청
+# 1) 호출 측: 외부 시그널(SIGTERM 등)에 drain 요청
 control = RunControl()
 control.request_drain("sigterm")
 
@@ -420,45 +451,44 @@ try:
     result = graph.invoke(inputs, config, control=control)
 except GraphDrained as e:
     print(f"Drained: {e.reason}")
-    # checkpoint는 이미 저장됨
+    # checkpoint는 이미 저장됨 — 같은 config로 재개 가능
 
 # 같은 config로 재개
 graph.invoke(None, config)
 
-# 2) 노드 내부 — drain 신호를 직접 감지
+# 2) 노드 내부: drain 신호를 직접 감지
 async def my_node(state: State, runtime: Runtime) -> dict:
     if runtime.drain_requested:
         return {"status": "skipped"}
     # ... 일반 처리
     return {"status": "done"}
+'''
+print(example)
 `````)
 
-#tip-box[drain은 인터럽트와 다릅니다. 인터럽트는 사용자 입력을 기다리며 일시 정지하는 _애플리케이션 레벨_ 신호이고, drain은 superstep 경계에서 안전하게 멈추기 위한 _운영 레벨_ 신호입니다. 두 가지를 함께 사용하면 점검·배포·롤링 업데이트 중에도 진행 상태를 잃지 않습니다.]
+== 12.13 DeltaChannel — checkpoint 저장량 최적화
 
-== 12.14 DeltaChannel (beta) --- checkpoint 저장량 최적화
+기본 checkpoint는 superstep마다 채널 값을 전체 저장합니다. 메시지 목록처럼 계속 커지는 append-heavy 채널은 장기 thread에서 저장량이 크게 늘어납니다. LangGraph 1.2의 `DeltaChannel`은 누적 전체값 대신 delta를 저장해 checkpoint 비용을 낮춥니다.
 
-기본 checkpoint는 매 superstep마다 채널 값을 _전체_ 저장합니다. 메시지 목록처럼 append-heavy 채널은 장기 thread에서 저장량이 빠르게 늘어납니다. `langgraph≥1.2`에서 도입된 `DeltaChannel`은 누적 전체값 대신 delta만 저장해 checkpoint 비용을 낮추고, `snapshot_frequency`로 K step마다 한 번씩 full snapshot을 남겨 reconstruction 비용을 제한합니다.
+- `snapshot_frequency=K`로 K step마다 전체 snapshot을 남겨 읽기 지연을 제한합니다.
+- beta 기능이므로 프로덕션 적용 전 저장량, 읽기 지연, 마이그레이션 비용을 측정합니다.
+- 내구성 실행 설계에서는 `DeltaChannel`을 _저장 최적화_, `TimeoutPolicy`/`error_handler`를 _실패 복구 제어_로 분리해 이해합니다.
 
 #code-block(`````python
-from typing import Annotated, Sequence
-from typing_extensions import TypedDict
-from langgraph.channels import DeltaChannel
+# DeltaChannel 개념 예시 — 실제 실행은 langgraph>=1.2에서 확인하세요.
+example = r'''
+from typing_extensions import Annotated, TypedDict
+from langgraph.channels.delta import DeltaChannel
 
-def list_reducer(state: list, writes: Sequence[list]) -> list:
-    # bulk reducer 시그니처: (current_state, sequence_of_writes) -> new_state
-    result = list(state)
-    for write in writes:
-        result.extend(write)
-    return result
+def append(state: list[str], writes: list[list[str]]) -> list[str]:
+    return state + [item for batch in writes for item in batch]
 
 class State(TypedDict):
-    messages: Annotated[
-        list[str],
-        DeltaChannel(list_reducer, snapshot_frequency=5),
-    ]
+    # append-heavy 메시지/로그 채널에서 checkpoint delta 저장을 고려
+    items: Annotated[list[str], DeltaChannel(reducer=append, snapshot_frequency=50)]
+'''
+print(example)
 `````)
-
-#warning-box[`DeltaChannel`은 `langgraph≥1.2` beta 기능입니다. Reducer는 associative해야 하며 _write 시점이 아니라 reconstruction 시점_에 실행됩니다. 프로덕션 적용 전 저장량, 복구 지연, 마이그레이션 비용을 함께 측정하세요. 저장 최적화는 `DeltaChannel`로, 실패 복구 제어는 `TimeoutPolicy` / `error_handler`로 분리해 이해하면 설계가 명확해집니다.]
 
 #chapter-summary-header()
 
@@ -484,16 +514,11 @@ class State(TypedDict):
   [`\@entrypoint` + `\@task`로 내구성 보장],
   [장애 복구],
   [같은 `thread_id`로 체크포인트에서 재개],
-  [노드 timeout],
-  [`TimeoutPolicy(idle_timeout=..., refresh_on="heartbeat")`로 시도별 시간 제한],
-  [Graceful shutdown],
-  [`RunControl.request_drain()` → `GraphDrained` → 같은 config로 재개],
-  [DeltaChannel (beta)],
-  [`langgraph≥1.2`. delta만 저장 + `snapshot_frequency`로 reconstruction 비용 제한],
 )
 
 
 #references-box[
 - #link("../docs/langgraph/06-durable-execution.md")[Durable Execution]
+- #link("../docs/langgraph/06-durable-execution.md")[Fault Tolerance]
 ]
 #chapter-end()
