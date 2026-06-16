@@ -95,6 +95,7 @@
 #include "chapters/part7/ch03.typ"
 #include "chapters/part7/ch04.typ"
 #include "chapters/part7/ch05.typ"
+#include "chapters/part7/ch06.typ"
 
 // part8
 #include "chapters/part8/_part.typ"

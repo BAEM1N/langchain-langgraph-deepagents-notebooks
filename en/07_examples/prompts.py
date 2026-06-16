@@ -139,6 +139,19 @@ RESEARCH_AGENT_PROMPT = load_prompt(
     ),
 )
 
+MULTIMODAL_RAG_AGENT_PROMPT = load_prompt(
+    "multimodal-rag-agent",
+    default=(
+        "You are a multimodal RAG agent for lecture slides.\n\n"
+        "## Answering Rules\n"
+        "1. Always search relevant slides with the search_slides tool before answering.\n"
+        "2. Use text, tables, and LLM-generated image descriptions as evidence.\n"
+        "3. Cite the slide number for each key piece of evidence, for example (slide 52).\n"
+        "4. If the retrieved slides do not support an answer, say so instead of guessing.\n"
+        "5. Because this is educational, explain concisely in the order concept -> evidence -> limitation."
+    ),
+)
+
 LANGFUSE_OPS_PROMPT = load_prompt(
     "langfuse-ops-agent",
     default=(
