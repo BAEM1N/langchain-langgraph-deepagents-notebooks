@@ -109,3 +109,4 @@ parts:
       - {source: "03_data_analysis_agent.ipynb", output: "ch03.typ", title: "데이터 분석 에이전트", diagrams: []}
       - {source: "04_ml_agent.ipynb", output: "ch04.typ", title: "ML 에이전트", diagrams: []}
       - {source: "05_deep_research_agent.ipynb", output: "ch05.typ", title: "딥 리서치 에이전트", diagrams: ["deep-research-workflow"]}
+      - {source: "06_multimodal_pdf_rag.ipynb", output: "ch06.typ", title: "멀티모달 PDF RAG", diagrams: []}

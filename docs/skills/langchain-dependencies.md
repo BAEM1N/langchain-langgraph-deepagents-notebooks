@@ -11,15 +11,15 @@
 
 | 패키지 | 용도 | 최소 버전 | 비고 |
 |--------|------|-----------|------|
-| `langchain` | 코어 프레임워크 | 1.3.0+ | event streaming v3, ~~0.3 레거시~~ |
-| `langchain-core` | 기본 추상화 | — | langchain에 포함 |
-| `langgraph` | 워크플로/에이전트 런타임 | 1.2.0+ | fault tolerance, `stream_events(..., version="v3")` |
-| `deepagents` | 고수준 에이전트 하네스 | 0.6.1+ | async subagents, interpreters, event streaming v3 |
-| `langsmith` | 관측성 | 선택 | tracing/eval |
+| `langchain` | 코어 프레임워크 | 1.3.9+ | event streaming v3, ~~0.3 레거시~~ |
+| `langchain-core` | 기본 추상화 | 1.4.7+ | 직접 명시 권장 |
+| `langgraph` | 워크플로/에이전트 런타임 | 1.2.5+ | fault tolerance, `stream_events(..., version="v3")` |
+| `deepagents` | 고수준 에이전트 하네스 | 0.6.10+ | async subagents, interpreters, rubrics, event streaming v3 |
+| `langsmith` | 관측성 | 0.8.16+ | tracing/eval |
 | `langchain-openai` | OpenAI 통합 | 최신 | 전용 패키지 권장 |
 | `langchain-anthropic` | Anthropic 통합 | 최신 | 전용 패키지 권장 |
 | `langchain-google-genai` | Google 통합 | 4.0.0+ | Gemini + Vertex AI 단일 SDK |
-| `langchain-community` | 커뮤니티 통합 | — | 보수적 버전 고정 |
+| `langchain-community` | 커뮤니티 통합 | 0.4.2,<0.5 | 보수적 minor 고정 |
 | `pymupdf4llm` | PDF Markdown 추출 | 1.27.2.3+ | 슬라이드/논문 PDF 이미지·표 추출 |
 
 ### 선택적 샌드박스 (deepagents 0.4+)
@@ -30,6 +30,13 @@
 | `langchain-daytona` | Daytona 샌드박스 |
 | `langchain-runloop` | Runloop 샌드박스 |
 
+### 선택적 Deep Agents 확장
+
+| 패키지 / extra | 용도 |
+|----------------|------|
+| `deepagents[quickjs]` / `langchain-quickjs` | `CodeInterpreterMiddleware`, PTC, programmatic subagents |
+| `deepagents-code` | `dcode` 터미널 코딩 에이전트 |
+
 ## 설치
 
 ```bash
@@ -37,21 +44,21 @@
 uv add langchain langgraph langchain-openai
 
 # deepagents까지
-uv add langchain langgraph deepagents langchain-openai langchain-anthropic
+uv add langchain-core langchain langgraph deepagents langchain-openai langchain-anthropic
 
 # PDF/슬라이드 멀티모달 RAG
 uv add pymupdf4llm
 
 # pip
-pip install "langchain>=1.3" "langgraph>=1.2" "deepagents>=0.6.1" "pymupdf4llm>=1.27.2.3"
+pip install "langchain-core>=1.4.7" "langchain>=1.3.9" "langgraph>=1.2.5" "deepagents>=0.6.10" "pymupdf4llm>=1.27.2.3"
 ```
 
 ## 버전 관리 원칙
 
-1. **LangChain 1.3+ / LangGraph 1.2+ / DeepAgents 0.6.1+ 사용** — 최신 스트리밍·fault tolerance·interpreter 예제 기준
+1. **LangChain 1.3.9+ / LangGraph 1.2.5+ / DeepAgents 0.6.10+ 사용** — 최신 스트리밍·fault tolerance·interpreter·rubric 예제 기준
 2. **전용 통합 패키지 우선** — `langchain-openai` > `langchain-community`의 OpenAI
 3. **langchain-community는 보수적 고정** — 빈번한 변경 가능성
-4. **langchain-core 직접 설치 불필요** — `langchain`에 포함
+4. **langchain-core 직접 명시 권장** — monorepo/교육 환경에서 버전 경계를 명확히 함
 5. **샌드박스 패키지는 필요할 때만** — 기본 실행에는 불필요
 
 ## 주요 버전별 변경 요약
@@ -63,6 +70,6 @@ pip install "langchain>=1.3" "langgraph>=1.2" "deepagents>=0.6.1" "pymupdf4llm>=
 - **langgraph 1.2**: `DeltaChannel`, per-node timeout, node-level `error_handler`, graceful shutdown, event streaming v3
 - **deepagents 0.4**: 샌드박스 패키지 3종, OpenAI Responses API 기본, `ContextOverflowError` 자동 요약
 - **deepagents 0.5**: async subagents, 멀티모달 `read_file`, `StateBackend()` / `StoreBackend()` 직접 인스턴스화
-- **deepagents 0.6**: `CodeInterpreterMiddleware`(QuickJS), interpreter snapshots, Deep Agents event streaming v3
+- **deepagents 0.6**: `CodeInterpreterMiddleware`(QuickJS), interpreter snapshots, programmatic subagents, `RubricMiddleware`, Deep Agents Code(`dcode`), Deep Agents event streaming v3
 
 각 버전 세부 내용은 docs.langchain.com/oss/python/releases/changelog 참조.

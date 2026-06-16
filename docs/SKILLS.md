@@ -1,6 +1,6 @@
 # LangChain Skills와 함께 사용하기
 
-[LangChain Skills](https://github.com/langchain-ai/langchain-skills)는 LangChain, LangGraph, Deep Agents 프레임워크용 **에이전트 스킬 모음**입니다. Claude Code나 Deep Agents CLI와 함께 사용하면 코딩 에이전트가 프레임워크 문서를 참조하여 더 정확한 코드를 작성할 수 있습니다.
+[LangChain Skills](https://github.com/langchain-ai/langchain-skills)는 LangChain, LangGraph, Deep Agents 프레임워크용 **에이전트 스킬 모음**입니다. Claude Code나 Deep Agents Code(`dcode`)와 함께 사용하면 코딩 에이전트가 프레임워크 문서를 참조하여 더 정확한 코드를 작성할 수 있습니다.
 
 ## 설치
 
@@ -32,7 +32,7 @@ npx skills add langchain-ai/langchain-skills --skill '*' --yes --global
 
 ## 로컬 참조 문서
 
-스킬 내용은 `docs/skills/` 디렉토리에도 마크다운으로 저장되어 있어 오프라인에서도 참조할 수 있습니다. `npx skills add` 명령으로 설치하면 `.deepagents/skills/`에 SKILL.md 파일이 배치되어 Deep Agents CLI가 자동으로 인식합니다.
+스킬 내용은 `docs/skills/` 디렉토리에도 마크다운으로 저장되어 있어 오프라인에서도 참조할 수 있습니다. `npx skills add` 명령으로 설치하면 `.deepagents/skills/`에 SKILL.md 파일이 배치되어 Deep Agents Code가 자동으로 인식합니다.
 
 ## langchain-ecosystem-skills (문서 기반 스킬)
 

@@ -306,3 +306,7 @@ parts:
     title: Deep Research Agent
     diagrams:
     - deep-research-workflow
+  - source: 06_multimodal_pdf_rag.ipynb
+    output: ch06.typ
+    title: Multimodal PDF RAG
+    diagrams: []

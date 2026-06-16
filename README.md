@@ -21,7 +21,7 @@ uv run jupyter lab
 
 ---
 
-## 커리큘럼 한눈에 보기 — 8 Parts · 134 노트북
+## 커리큘럼 한눈에 보기 — 8 Parts · 135 노트북
 
 | # | 트랙 | 대상 | 노트북 | 핵심 주제 |
 |---|------|------|--------|----------|
@@ -30,7 +30,7 @@ uv run jupyter lab
 | **03** | [`03_langgraph/`](03_langgraph/) | 상태 그래프와 복잡한 워크플로 학습자 | 13 | `StateGraph` · 체크포인터 · subgraph · Pregel |
 | **04** | [`04_deepagents/`](04_deepagents/) | 올인원 에이전트 시스템 구축자 | 11 | `create_deep_agent` · backend · subagent · skill · async subagents |
 | **05** | [`05_advanced/`](05_advanced/) | 고급 패턴과 운영 설계 학습자 | 10 | 멀티에이전트 · RAG · SQL · 보이스 · 프로덕션 |
-| **06** | [`07_examples/`](07_examples/) | 실전 응용 프로젝트 학습자 | 5 | RAG · SQL · 데이터 분석 · ML · 딥 리서치 |
+| **06** | [`07_examples/`](07_examples/) | 실전 응용 프로젝트 학습자 | 6 | RAG · SQL · 데이터 분석 · ML · 딥 리서치 · 멀티모달 PDF RAG |
 | **07** | [`08_integration/`](08_integration/) | 외부 도구·공급자 통합 개발자 | 69 | LangChain/LangGraph 생태계 통합 13개 카테고리 |
 | **08** | [`06_langsmith/`](06_langsmith/) | 관측·평가·프롬프트 운영 학습자 | 5 | Trace · dataset · evaluator · prompt hub · monitoring |
 
@@ -84,7 +84,7 @@ typst compile --root . en/book/main.typ en/book/out/main.pdf   # en
 | IV | Deep Agents: async subagents · production · context engineering · streaming · permissions | 15 |
 | V | 고급 패턴 | 10 |
 | **VI** | **LangSmith** | 5 |
-| VII | 실전 응용 예제 | 5 |
+| VII | 실전 응용 예제 | 6 |
 | VIII | Integrations: provider middleware 7종 포함 | 9 |
 
 ---
@@ -93,12 +93,14 @@ typst compile --root . en/book/main.typ en/book/out/main.pdf   # en
 
 | 패키지 | 최소 버전 | 용도 |
 |--------|----------|------|
-| `langchain` | 1.2 | 에이전트 · 도구 · 미들웨어 |
-| `langgraph` | 1.0 | 상태 그래프 워크플로 |
-| `deepagents` | 0.4.4 | 올인원 에이전트 SDK |
-| `langsmith` | 0.3 | 관측 · 평가 · 프롬프트 허브 |
-| `langchain-openai` | 1.1.10 | OpenAI 모델 통합 |
-| `langchain-community` | 0.4 | 커뮤니티 통합 |
+| `langchain` | 1.3.9 | 에이전트 · 도구 · 미들웨어 · event streaming v3 |
+| `langchain-core` | 1.4.7 | 핵심 메시지·도구·모델 추상화 |
+| `langgraph` | 1.2.5 | 상태 그래프 · fault tolerance · event streaming v3 |
+| `deepagents` | 0.6.10 | 올인원 에이전트 SDK · async subagents · interpreters · rubrics |
+| `langsmith` | 0.8.16 | 관측 · 평가 · 프롬프트 허브 |
+| `langchain-openai` | 1.3.2 | OpenAI 모델 통합 |
+| `langchain-community` | 0.4.2,<0.5 | 커뮤니티 통합 |
+| `pymupdf4llm` | 1.27.2.3 | PDF Markdown · 이미지 · 표 추출 |
 
 전체 의존성은 [`pyproject.toml`](pyproject.toml)을 기준으로 관리합니다.
 

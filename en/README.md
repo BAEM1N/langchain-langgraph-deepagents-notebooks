@@ -21,7 +21,7 @@ uv run jupyter lab
 
 ---
 
-## Curriculum at a glance — 8 Parts · 134 notebooks
+## Curriculum at a glance — 8 Parts · 135 notebooks
 
 | # | Track | Audience | Notebooks | Core topics |
 |---|-------|----------|-----------|-------------|
@@ -30,7 +30,7 @@ uv run jupyter lab
 | **03** | [`03_langgraph/`](../03_langgraph/) | State graph and workflow learners | 13 | `StateGraph` · checkpointers · subgraphs · Pregel |
 | **04** | [`04_deepagents/`](../04_deepagents/) | All-in-one agent system builders | 11 | `create_deep_agent` · backends · subagents · skills · async subagents |
 | **05** | [`05_advanced/`](../05_advanced/) | Advanced pattern and operations learners | 10 | multi-agent · RAG · SQL · voice · production |
-| **06** | [`07_examples/`](../07_examples/) | Applied project learners | 5 | RAG · SQL · data analysis · ML · deep research |
+| **06** | [`07_examples/`](../07_examples/) | Applied project learners | 6 | RAG · SQL · data analysis · ML · deep research · multimodal PDF RAG |
 | **07** | [`08_integration/`](../08_integration/) | External tool and provider integrators | 69 | 13 LangChain/LangGraph ecosystem integration categories |
 | **08** | [`06_langsmith/`](../06_langsmith/) | Observability, evaluation, and prompt-ops learners | 5 | trace · dataset · evaluator · prompt hub · monitoring |
 
@@ -93,12 +93,14 @@ typst compile --root . book/main.typ    book/out/main.pdf      # ko
 
 | Package | Minimum version | Use |
 |---------|-----------------|-----|
-| `langchain` | 1.2 | agents · tools · middleware |
-| `langgraph` | 1.0 | state graph workflows |
-| `deepagents` | 0.4.4 | all-in-one agent SDK |
-| `langsmith` | 0.3 | observability · evaluation · prompt hub |
-| `langchain-openai` | 1.1.10 | OpenAI model integration |
-| `langchain-community` | 0.4 | community integrations |
+| `langchain` | 1.3.9 | agents · tools · middleware · event streaming v3 |
+| `langchain-core` | 1.4.7 | core message, tool, and model abstractions |
+| `langgraph` | 1.2.5 | state graphs · fault tolerance · event streaming v3 |
+| `deepagents` | 0.6.10 | all-in-one agent SDK · async subagents · interpreters · rubrics |
+| `langsmith` | 0.8.16 | observability · evaluation · prompt hub |
+| `langchain-openai` | 1.3.2 | OpenAI model integration |
+| `langchain-community` | 0.4.2,<0.5 | community integrations |
+| `pymupdf4llm` | 1.27.2.3 | PDF Markdown, image, and table extraction |
 
 The full dependency set is managed in [`../pyproject.toml`](../pyproject.toml).
 

@@ -4,6 +4,8 @@
 
 LangGraph implements persistence through **checkpointers**, which save graph state snapshots at each super-step. These checkpoints are stored in **threads** (identified by unique IDs), enabling powerful capabilities like human-in-the-loop workflows, conversation memory, time travel debugging, and fault tolerance.
 
+> 최신 공식 문서 구조에서는 checkpointer와 store가 별도 페이지로 분리되어 있다. 이 요약 문서는 둘의 관계를 함께 보여주고, 세부는 `25-checkpointers.md`와 `26-stores.md`를 참조한다.
+
 ## Core Concepts
 
 ### Threads

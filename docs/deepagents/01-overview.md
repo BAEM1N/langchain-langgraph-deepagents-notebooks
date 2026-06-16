@@ -16,6 +16,7 @@ The `deepagents` ecosystem ships three offerings:
 - **Context management** through filesystem tools (`ls`, `read_file`, `write_file`, `edit_file`)
 - **Shell execution** with sandbox backend isolation
 - **JavaScript interpreters** via a QuickJS runtime for lightweight tool composition (no shell or network)
+- **Runtime grading rubrics** via `RubricMiddleware` for LLM-as-a-judge self-evaluation loops
 - **Pluggable filesystem backends** — in-memory state, local disk, LangGraph store, ContextHub, sandboxes
 - **Subagent spawning** for context isolation and parallel work
 - **Long-term memory** across threads via the LangGraph Memory Store
@@ -30,7 +31,7 @@ The `deepagents` ecosystem ships three offerings:
 pip install -qU deepagents langchain-{provider}
 ```
 
-Replace `{provider}` with one of `anthropic`, `openai`, `google-genai`, `openrouter`, `fireworks`, `baseten`, or `ollama` depending on the model you plan to use.
+Replace `{provider}` with one of `anthropic`, `openai`, `google-genai`, `openrouter`, `fireworks`, `baseten`, or `ollama` depending on the model you plan to use. For Deep Agents Code, use the `dcode` command provided by `deepagents-code`.
 
 ## Getting Started
 

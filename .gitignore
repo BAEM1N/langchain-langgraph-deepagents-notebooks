@@ -39,3 +39,9 @@ en/book/out/
 
 # Local scratch workspace
 local/
+
+# Notebook runtime caches (downloaded PDFs, extracted images, vector demos)
+07_examples/.cache/
+
+# Generated HTML deck outputs
+/decks/
