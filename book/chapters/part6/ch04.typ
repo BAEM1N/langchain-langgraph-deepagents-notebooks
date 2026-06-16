@@ -48,6 +48,8 @@ print(url)  # https://smith.langchain.com/hub/...
 - `is_public` — public hub에 공개할지 여부 (기본 False)
 - `parent_commit_hash` — 특정 커밋 기준으로 새 커밋 생성 (기본은 최신)
 
+반환 URL에는 조직 식별용 query string이 붙을 수 있습니다. CI 핀에 쓸 commit SHA는 `url.split("/")[-1]`처럼 문자열 끝을 자르지 말고, URL path의 마지막 segment만 파싱해야 합니다.
+
 #figure(image("../../../assets/images/langsmith/04_prompt_hub/01_prompt_hub_list.png", width: 95%), caption: [Prompts 허브 목록 — `city-list`(1 commit), `weather-bot`(2 commits). Visibility, Last Commit 짧은 SHA 표시])
 
 == 4.2 Commit SHA 고정 vs 태그 (`prod`, `staging`)
@@ -152,6 +154,8 @@ agent = create_agent(
 - `prompt_identifier` — `"name"`, `"name:tag"`, `"name:SHA"` 세 가지 참조 방식
 - `include_model` — True로 두면 Playground에서 저장한 모델·temperature까지 함께 반환되는 `RunnableSequence`
 - 캐싱 — Python SDK가 commit 기준으로 ETag 캐싱을 하므로 같은 SHA를 반복해 받을 때 비용이 들지 않음
+
+공개 Hub 프롬프트(`owner/name`)를 가져올 때는 신뢰한 프롬프트에 한해서 `dangerously_pull_public_prompt=True`를 명시합니다. 공개 프롬프트는 직렬화된 LangChain 객체를 포함할 수 있으므로, 교육·테스트 코드에서도 의도를 코드에 남기는 편이 안전합니다.
 
 == 4.6 CI에서 특정 커밋 해시 고정
 

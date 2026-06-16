@@ -48,6 +48,8 @@ The main arguments to `Client.push_prompt(...)`:
 - `is_public` — whether to publish to the public hub (default False)
 - `parent_commit_hash` — create the new commit from a specific commit (default is latest)
 
+The returned URL may include an organization query string. For a CI pin, parse the last segment of the URL path rather than blindly taking `url.split("/")[-1]`.
+
 #figure(image("../../../../assets/images/langsmith/04_prompt_hub/01_prompt_hub_list.png", width: 95%), caption: [Prompts hub listing — `city-list` (1 commit), `weather-bot` (2 commits). Visibility and short-SHA Last Commit shown])
 
 == 4.2 Commit SHA pinning vs tags (`prod`, `staging`)
@@ -152,6 +154,8 @@ The main options on `Client.pull_prompt(...)`:
 - `prompt_identifier` — three reference forms: `"name"`, `"name:tag"`, `"name:SHA"`
 - `include_model` — when True, returns a `RunnableSequence` that also includes the model / temperature saved in Playground
 - Caching — the Python SDK keeps an ETag cache keyed by commit, so repeated pulls of the same SHA cost nothing
+
+When pulling a public Hub prompt (`owner/name`), set `dangerously_pull_public_prompt=True` only for prompts you trust. Public prompts can include serialized LangChain objects, so even course/test code should make that intent explicit.
 
 == 4.6 Pinning a specific commit hash in CI
 
