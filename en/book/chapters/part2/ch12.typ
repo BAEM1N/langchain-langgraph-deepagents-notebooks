@@ -11,12 +11,11 @@
 Learn how to stream LLM responses to users in real time.
 
 This notebook covers:
-- Understanding the basics of LangChain SDK streaming (`.stream()`, `.astream_events()`)
+- Understanding LangChain SDK streaming (`.stream()`, `.astream_events()`)
+- Consuming Agent `stream_events(..., version="v3")` projections (`messages`, `tool_calls`, `values`, `output`)
 - Learning the structure and usage of the `useStream` React hook
-- Understanding the `StreamEvent` protocol
 - Consuming real-time streaming from the Python SDK
 - Understanding real-time agent-state display patterns
-
 
 == 12.1 Environment Setup
 
@@ -29,16 +28,54 @@ load_dotenv(override=True)
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(
-    model="gpt-5.4",
+    model="gpt-4.1",
 )
 
 print("Environment ready.")
+`````)
+
+#code-block(`````python
+# Optional observability setup: LangSmith or Langfuse
+# Set the keys in .env, or uncomment the lines below to enter them manually.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: automatically enabled when LANGSMITH_TRACING=true
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: pass config={"callbacks": [langfuse_handler]} to invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
 `````)
 
 == 12.2 Python SDK Streaming Basics
 
 The `.stream()` method delivers model output token by token in real time. Users can see partial results before the full response is complete.
 
+
+#code-block(`````python
+# Token-level streaming with `.stream()`
+print("Streaming response:")
+for chunk in model.stream(
+    "Tell me three famous tourist attractions in Seoul.",
+    config=lf_config,
+):
+    print(chunk.content, end="", flush=True)
+print()  # newline
+`````)
 
 == 12.3 `astream_events()`
 
@@ -89,6 +126,64 @@ async def stream_events_demo():
             print(f"\n[Model call complete]")
 
 await stream_events_demo()
+`````)
+
+== 12.4 Event Streaming v3 — projection-based agent streams
+
+For LangChain agents, prefer `stream_events(..., version="v3")` when UI code needs separated projections instead of one raw event stream.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Projection],
+  text(weight: "bold")[Meaning],
+  text(weight: "bold")[UI mapping],
+  [`stream.messages`],
+  [Model messages and text deltas],
+  [Chat bubble],
+  [`stream.tool_calls`],
+  [Tool-call start, args, output, errors],
+  [Tool timeline],
+  [`stream.values`],
+  [Agent state snapshots],
+  [State/debug panel],
+  [`stream.output`],
+  [Final state],
+  [Save/post-process],
+  [`stream.subgraphs` / `stream.subagents`],
+  [Nested graph or subagent events],
+  [Multi-agent cards],
+  [`stream.extensions`],
+  [Custom projection channels],
+  [Progress, charts, domain UI],
+)
+
+The same projection model is shared with LangGraph and Deep Agents event streaming.
+
+#code-block(`````python
+from langchain.agents import create_agent
+from langchain.tools import tool
+
+@tool
+def get_weather(city: str) -> str:
+    """Get weather for a city."""
+    return f"{city}: sunny"
+
+streaming_agent = create_agent(
+    model="openai:gpt-5.4", tools=[get_weather],
+    system_prompt="Always use get_weather for weather questions.",
+)
+stream = streaming_agent.stream_events(
+    {"messages": [{"role": "user", "content": "Weather in Seoul?"}]},
+    version="v3",
+)
+for message in stream.messages:
+    if str(message.text):
+        print(str(message.text), end="", flush=True)
+print("\noutput keys:", list(stream.output.keys()))
 `````)
 
 == 12.4 The `useStream` React Hook
@@ -322,7 +417,7 @@ async def analyze_data(
 ) -> str:
     \"\"\"Analyzes the data.\"\"\"
     if config.writer:
-        # Stream progress updates to the client
+        # Stream progress to the client
         config.writer({
             "type": "progress",
             "message": "Loading data...",
@@ -336,7 +431,7 @@ async def analyze_data(
         })
     return '{"result": "Analysis complete"}'
 """)
-print("Client side (React): receive it via the onCustomEvent callback")
+print("Client side (React): receive through the onCustomEvent callback")
 print('  onCustomEvent: (data) => setProgress(data.progress)')
 `````)
 
@@ -373,7 +468,7 @@ When several agents collaborate, their messages should be _displayed separately_
 )
 
 
-== 12.10 Summary
+== 12.11 Summary
 
 This notebook covered:
 
@@ -387,9 +482,11 @@ This notebook covered:
   text(weight: "bold")[Key Idea],
   [_SDK streaming_],
   [Use `.stream()` for real-time token output],
-  [`astream_events`],
+  [_`astream_events`_],
   [Trace model and tool calls through asynchronous event streaming],
-  [`useStream`],
+  [_Event Streaming v3_],
+  [Separate messages, tool calls, state, subagents, and custom projections],
+  [_`useStream`_],
   [Simplify LangGraph server streaming in React],
   [_Thread management_],
   [Keep conversations alive with `threadId` and `reconnectOnMount`],
@@ -404,9 +501,9 @@ This notebook covered:
 === Next Steps
 → Continue to _#link("./13_guardrails.ipynb")[13_guardrails.ipynb]_
 
-
 #line(length: 100%, stroke: 0.5pt + luma(200))
 _References:_
-- #link("../docs/langchain/08-streaming.md")[Streaming] — canonical `useStream` reference with the full event protocol
+- LangChain Event Streaming: https://docs.langchain.com/oss/python/langchain/event-streaming
+- LangGraph Event Streaming: https://docs.langchain.com/oss/python/langgraph/event-streaming
+- #link("../docs/langchain/08-streaming.md")[Streaming]
 - #link("../docs/langchain/28-ui.md")[UI (Agent Chat UI & useStream)]
-

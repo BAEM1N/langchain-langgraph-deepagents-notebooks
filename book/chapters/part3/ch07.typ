@@ -206,7 +206,7 @@ async for chunk in graph.astream(
 
 == 7.12 Event Streaming v3 — projection 기반 앱 스트림
 
-LangGraph 1.2의 `stream_events(..., version="v3")`는 raw `stream_mode` 위에 projection 계층을 얹습니다. `stream_mode`는 런타임 이벤트를 직접 파싱할 때 좋고, v3 event streaming은 앱 코드가 `stream.messages`, `stream.values`, `stream.subgraphs`, `stream.output`처럼 목적별 핸들을 소비할 때 좋습니다.
+LangGraph의 `stream_events(..., version="v3")`는 raw `stream_mode` 위에 projection 계층을 얹습니다. `stream_mode`는 런타임 이벤트를 직접 파싱할 때 좋고, v3 event streaming은 앱 코드가 `stream.messages`, `stream.values`, `stream.subgraphs`, `stream.output`, `stream.interrupts`, `stream.extensions`처럼 목적별 핸들을 소비할 때 좋습니다.
 
 #table(
   columns: 2,
@@ -222,48 +222,23 @@ LangGraph 1.2의 `stream_events(..., version="v3")`는 raw `stream_mode` 위에 
   [`graph.stream(..., stream_mode="custom")`],
   [UI에서 메시지·상태·서브그래프를 분리 표시],
   [`graph.stream_events(..., version="v3")`],
+  [interrupt 이후 재개 표시],
+  [`stream.interrupted`, `stream.interrupts`],
   [typed projection 확장],
   [`StreamTransformer`, `StreamChannel`],
 )
 
 #code-block(`````python
-# Event Streaming v3 패턴 — 로컬 설치 버전과 무관하게 안전하게 예시를 출력합니다.
-from importlib.metadata import version
-
-print("설치된 langgraph:", version("langgraph"))
-print("필요 버전: langgraph>=1.2.0")
-
-example = r'''
-# 1) 기본 사용
-stream = graph.stream_events(
-    {"messages": [{"role": "user", "content": "42 * 17은?"}]},
+# Event Streaming v3 — custom_graph의 values/output projection을 실제 소비합니다.
+stream = custom_graph.stream_events(
+    {"topic": "LangGraph Event Streaming v3"},
     version="v3",
 )
-
-for message in stream.messages:
-    for token in message.text:
-        print(token, end="", flush=True)
-
+print("values projection:")
 for snapshot in stream.values:
     print(snapshot)
-
-final_state = stream.output
-
-# 2) interrupt 이후 재개 — checkpointer + thread_id 필요
-from langgraph.types import Command
-
-stream = graph.stream_events(input_data, version="v3")
-for message in stream.messages:
-    print(message.text)
-
-if stream.interrupted:
-    print(stream.interrupts)
-    stream = graph.stream_events(
-        Command(resume={"decisions": [{"type": "approve"}]}),
-        version="v3",
-    )
-'''
-print(example)
+print("final output:", stream.output)
+print("interrupted:", stream.interrupted)
 `````)
 
 #chapter-summary-header()
@@ -286,14 +261,10 @@ print(example)
   [전체 실행 트레이스],
   [여러 모드 동시],
   [v1: `(mode, data)` 튜플 / v2: `chunk["type"]`],
-  [_`version="v2"`_],
-  [`StreamPart` dict (`type` / `ns` / `data`) 통일, Pydantic state 자동 강제],
-  [_`invoke(..., version="v2")`_],
-  [`GraphOutput` 반환 — `.value` / `.interrupts`],
-  [_`nostream` 태그_],
-  [내부 보조 LLM을 messages 스트림에서 제외],
-  [_`chunk_position == "last"`_],
-  [메시지 스트리밍 종료 시점 감지],
   [_`stream_events(..., version="v3")`_],
-  [projection 기반 — `stream.messages` / `stream.values` / `stream.output`, interrupt 재개 지원],
+  [projection 기반 — `messages` / `tool_calls` / `values` / `subgraphs` / `output`],
+  [_interrupt projections_],
+  [`stream.interrupted`, `stream.interrupts` 로 중단 상태 확인],
+  [_custom extensions_],
+  [`stream.extensions` 와 `StreamChannel` 로 도메인 UI 채널 확장],
 )

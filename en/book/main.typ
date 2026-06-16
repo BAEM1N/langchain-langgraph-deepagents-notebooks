@@ -48,6 +48,7 @@
 #include "chapters/part3/ch11.typ"
 #include "chapters/part3/ch12.typ"
 #include "chapters/part3/ch13.typ"
+#include "chapters/part3/ch14.typ"
 
 // part4
 #include "chapters/part4/_part.typ"
@@ -87,6 +88,7 @@
 #include "chapters/part6/ch03.typ"
 #include "chapters/part6/ch04.typ"
 #include "chapters/part6/ch05.typ"
+#include "chapters/part6/ch06.typ"
 
 // part7
 #include "chapters/part7/_part.typ"
@@ -96,6 +98,7 @@
 #include "chapters/part7/ch04.typ"
 #include "chapters/part7/ch05.typ"
 #include "chapters/part7/ch06.typ"
+#include "chapters/part7/ch07.typ"
 
 // part8
 #include "chapters/part8/_part.typ"

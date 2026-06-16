@@ -170,18 +170,17 @@ is_subagent = any(seg.startswith("tools:") for seg in chunk["ns"])
 
 #code-block(`````python
 from typing import Literal
-from tavily import TavilyClient
 
-tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY", ""))
+LOCAL_DOC_SNIPPETS = {
+    "langgraph": "LangGraph supports persistence, interrupts, subgraphs, streaming, and fault tolerance.",
+    "python 3.13": "Python 3.13 improves the REPL, error messages, and standard-library behavior.",
+}
 
 
-def internet_search(
-    query: str,
-    max_results: int = 3,
-    topic: Literal["general", "news"] = "general",
-) -> dict:
-    """인터넷에서 정보를 검색합니다."""
-    return tavily_client.search(query, max_results=max_results, topic=topic)
+def internet_search(query: str, max_results: int = 3, topic: Literal["general", "news"] = "general") -> dict:
+    """로컬 문서 스니펫을 검색합니다. 라이브 harness에서는 외부 검색 키가 필요 없습니다."""
+    matches = [v for k, v in LOCAL_DOC_SNIPPETS.items() if k in query.lower()]
+    return {"query": query, "topic": topic, "results": matches[:max_results] or list(LOCAL_DOC_SNIPPETS.values())[:max_results]}
 
 
 # 서브에이전트 포함 에이전트
@@ -191,14 +190,15 @@ stream_agent = create_deep_agent(
     subagents=[
         {
             "name": "researcher",
-            "description": "인터넷 검색을 통해 정보를 조사합니다.",
-            "system_prompt": "인터넷을 검색하여 요청된 정보를 수집하고 간결하게 요약하세요.",
+            "description": "로컬 문서 스니펫을 통해 정보를 조사합니다.",
+            "system_prompt": "검색 도구 결과만 근거로 요청된 정보를 간결하게 요약하세요.",
             "tools": [internet_search],
         }
     ],
 )
 
 print("스트리밍 데모 에이전트 생성 완료")
+
 `````)
 #output-block(`````
 스트리밍 데모 에이전트 생성 완료
@@ -437,6 +437,28 @@ agent = create_deep_agent(
 # QuickJS 안에서는 task(...)와 tools.webSearch(...)를 분리해서 사용합니다.
 '''
 print(interpreter_example)
+`````)
+
+=== 현재 설치 버전에서의 Programmatic Subagents 호환성 gate
+
+공식 Programmatic Subagents 패턴은 QuickJS interpreter 안의 top-level `task(...)` 함수를 사용합니다. 이 저장소의 기본 venv는 `deepagents==0.6.10`이지만 `langchain_quickjs` extra가 설치되어 있지 않으므로, 기본 실행 경로에서는 _기능 감지 → 일반 `SubAgent` fan-out/fan-in fallback_ 순서로 설명합니다.
+
+이렇게 두면 학습자는 공식 패턴의 위치를 이해하면서도, 기본 gpt-4.1 실행 harness는 추가 QuickJS 의존성 없이 통과합니다.
+
+#code-block(`````python
+from importlib.metadata import PackageNotFoundError, version
+from importlib.util import find_spec
+
+try:
+    deepagents_version = version("deepagents")
+except PackageNotFoundError:
+    deepagents_version = "not installed"
+quickjs_available = find_spec("langchain_quickjs") is not None
+fallback_pattern = "Programmatic task(...) demo" if quickjs_available else "ordinary SubAgent fan-out/fan-in fallback"
+print("deepagents:", deepagents_version)
+print("langchain_quickjs available:", quickjs_available)
+print("recommended path:", fallback_pattern)
+
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -701,4 +723,5 @@ print(dcode_examples)
 === 추가 업데이트 포인트
 
 - `task(...)`는 interpreter의 top-level 함수이며, PTC의 `tools.*` allowlist와 분리해 설명합니다.
+- 현재 기본 venv에서는 `langchain_quickjs`를 감지한 뒤 없으면 일반 `SubAgent` fallback 경로를 사용합니다.
 - Deep Agents CLI 명령은 `deepagents-cli`가 아니라 Deep Agents Code의 `dcode`를 기준으로 사용합니다.

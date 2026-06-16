@@ -180,6 +180,10 @@ parts:
     output: ch13.typ
     title: API Guide and Pregel
     diagrams: []
+  - source: 14_fault_tolerance.ipynb
+    output: ch14.typ
+    title: Fault Tolerance
+    diagrams: []
 - number: 4
   title: Deep Agents
   subtitle: Framework-Agnostic Agent Building
@@ -309,4 +313,8 @@ parts:
   - source: 06_multimodal_pdf_rag.ipynb
     output: ch06.typ
     title: Multimodal PDF RAG
+    diagrams: []
+  - source: 07_content_builder_agent.ipynb
+    output: ch07.typ
+    title: Content Builder Agent
     diagrams: []

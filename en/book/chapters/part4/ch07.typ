@@ -9,8 +9,10 @@
 - Implement a Human-in-the-Loop workflow
 - Understand streaming modes and the namespace system
 - Understand sandbox integrations such as Modal, Daytona, and Runloop
+- Understand `CodeInterpreterMiddleware`, QuickJS, and programmatic subagent gates
+- Use `RubricMiddleware` as a selective runtime quality gate
 - Learn how ACP (Agent Client Protocol) connects agents to editors
-- Learn how to use the Deep Agents CLI
+- Learn how to use Deep Agents Code (`dcode`)
 
 
 #code-block(`````python
@@ -25,9 +27,32 @@ print("Environment setup complete")
 `````)
 
 #code-block(`````python
+# Optional observability setup: LangSmith or Langfuse
+# Set the keys in .env, or uncomment the lines below to enter them manually.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
+#code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-5.4")
+model = ChatOpenAI(model="gpt-4.1")
 
 print(f"Model configured: {model.model_name}")
 
@@ -36,52 +61,11 @@ print(f"Model configured: {model.model_name}")
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 1. Human-in-the-Loop (HITL)
 
-Human-in-the-Loop is a workflow in which the agent _requires human approval_ before calling sensitive tools. Deep Agents supports _four decision types_, all passed as dicts under `Command(resume={"decisions": [...]})` when resuming.
+Human-in-the-Loop is a workflow in which the agent _requires human approval_ before calling sensitive tools.
 
 === How it Works
 
-#image("../../../../book/assets/diagrams/png/hitl_flow.png")
-
-=== Four decision types
-
-#table(
-  columns: 2,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Decision],
-  text(weight: "bold")[Behavior],
-  [`approve`],
-  [Execute the tool with the proposed arguments as-is],
-  [`edit`],
-  [Modify arguments via `edited_action.name/args` and then execute],
-  [`reject`],
-  [Skip the tool call entirely],
-  [`respond`],
-  [Skip execution and return `message` as the tool result],
-)
-
-=== Inspecting interrupts and resuming (v2 standard)
-
-When you call `invoke(..., version="v2")`, interrupts are exposed via `result.interrupts` — _not_ the older `result["__interrupt__"]` key. Each interrupt's `interrupt_value["action_requests"]` lists the proposed tool calls and `allowed_decisions`. Resume with `Command(resume={"decisions": [...]})` (a dict) using the same `thread_id`.
-
-#code-block(`````python
-from langgraph.types import Command
-
-# Inspect interrupts
-result = hitl_agent.invoke(inputs, config=config, version="v2")
-for itr in result.interrupts:
-    for req in itr.value["action_requests"]:
-        print(req["action"]["name"], req["allowed_decisions"])
-
-# Resume — one decision per interrupt, in the same order
-hitl_agent.invoke(
-    Command(resume={"decisions": [{"type": "approve"}]}),
-    config=config,
-    version="v2",
-)
-`````)
+#image("../../assets/images/hitl_flow.png")
 
 === Required Condition
 - _Checkpointer_: required to preserve the agent's state between interrupt and resume
@@ -107,24 +91,56 @@ print("write_file and edit_file now require approval")
 
 `````)
 
+#code-block(`````python
+# Run the agent — it will pause before write_file
+config = {"configurable": {"thread_id": "hitl-demo"}}
+
+result = hitl_agent.invoke(
+    {"messages": [{"role": "user", "content": "Create a file named config.yaml and write 'debug: true'."}]},
+    config={**config, **lf_config},
+)
+
+# Inspect interrupts
+if "__interrupt__" in result:
+    interrupt_info = result["__interrupt__"]
+    print("The agent was interrupted")
+    print(f"Pending approvals: {len(interrupt_info)}")
+    for item in interrupt_info:
+        val = item.value if hasattr(item, 'value') else item
+        print(f"  - Interrupt payload: {val}")
+else:
+    print("Completed without interruption:")
+    print(result["messages"][-1].content)
+
+`````)
+
+#code-block(`````python
+from langgraph.types import Command
+
+# Resume with approval
+if "__interrupt__" in result:
+    resumed = hitl_agent.invoke(
+        Command(
+            resume={
+                "decisions": [
+                    {"type": "approve"}
+                    # {"type": "reject"}
+                    # {"type": "edit", "args": {"content": "debug: false"}}
+                ]
+            }
+        ),
+        config={**config, **lf_config},
+    )
+
+    print("✅ Resumed after approval:")
+    print(resumed["messages"][-1].content)
+
+`````)
+
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 2. Advanced Streaming
 
 Deep Agents runs on top of LangGraph's streaming infrastructure.
-
-=== v2 unified format (standard)
-
-The standard path is _one call_: `agent.stream(..., stream_mode=..., subgraphs=True, version="v2")`. The older v1 nested-tuple format is harder to branch on, and v3/projection variants are unofficial — do not use them. Every chunk shares the same 3-field shape:
-
-#code-block(`````python
-{
-    "type": "updates" | "messages" | "custom",
-    "ns":   tuple,            # event source (main vs subagent routing)
-    "data": Any,              # payload, depends on type
-}
-`````)
-
-#tip-box[Without `subgraphs=True`, subagent-internal events are invisible — set it whenever the UI needs to show subagent progress. To hide summarization tokens, filter on `metadata.get("lc_source") == "summarization"`.]
 
 === Stream Modes
 
@@ -159,49 +175,19 @@ Events from subagents are separated by namespace:
 `````)
 
 
-=== Custom progress events (`get_stream_writer` + `stream_mode="custom"`)
-
-Tools can emit arbitrary objects for the UI — upload progress, processed counts, mid-execution status. Pin the schema (for example `{"status", "progress", "message"}`) so the UI routing does not break across tools.
-
-#code-block(`````python
-from langchain.tools import tool
-from langgraph.config import get_stream_writer
-
-
-@tool
-def analyze_data(topic: str) -> str:
-    """Analyze data for a topic and stream progress updates."""
-    writer = get_stream_writer()
-    writer({"status": "starting", "progress": 0, "topic": topic})
-    # ... actual analysis ...
-    writer({"status": "complete", "progress": 100, "topic": topic})
-    return f"Analysis complete: {topic}"
-
-
-for chunk in agent.stream(
-    {"messages": [{"role": "user", "content": "..."}]},
-    stream_mode=["updates", "messages", "custom"],
-    subgraphs=True,
-    version="v2",
-):
-    if chunk["type"] == "custom":
-        print(chunk["data"])
-`````)
-
 #code-block(`````python
 from typing import Literal
-from tavily import TavilyClient
 
-tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY", ""))
+LOCAL_DOC_SNIPPETS = {
+    "langgraph": "LangGraph supports persistence, interrupts, subgraphs, streaming, and fault tolerance.",
+    "python 3.13": "Python 3.13 improves the REPL, error messages, and standard-library behavior.",
+}
 
 
-def internet_search(
-    query: str,
-    max_results: int = 3,
-    topic: Literal["general", "news"] = "general",
-) -> dict:
-    """Search the internet for information."""
-    return tavily_client.search(query, max_results=max_results, topic=topic)
+def internet_search(query: str, max_results: int = 3, topic: Literal["general", "news"] = "general") -> dict:
+    """Search local course snippets. The live harness does not need an external search key."""
+    matches = [v for k, v in LOCAL_DOC_SNIPPETS.items() if k in query.lower()]
+    return {"query": query, "topic": topic, "results": matches[:max_results] or list(LOCAL_DOC_SNIPPETS.values())[:max_results]}
 
 
 stream_agent = create_deep_agent(
@@ -210,14 +196,70 @@ stream_agent = create_deep_agent(
     subagents=[
         {
             "name": "researcher",
-            "description": "Uses internet search to investigate topics.",
-            "system_prompt": "Search the internet, collect the requested information, and summarize it concisely.",
+            "description": "Uses local course snippets to investigate topics.",
+            "system_prompt": "Use only the search tool results, then summarize the requested information concisely.",
             "tools": [internet_search],
         }
     ],
 )
 
 print("Streaming demo agent created")
+
+`````)
+
+#code-block(`````python
+# Stream events with subgraphs — use namespaces to distinguish sources
+print("=== Subagent event streaming ===")
+print()
+
+for namespace, chunk in stream_agent.stream(
+    {"messages": [{"role": "user", "content": "Research the latest LangGraph features."}]},
+    stream_mode="updates",
+    subgraphs=True,
+    config=lf_config,
+):
+    source = "[main]" if not namespace else f"[subagent: {namespace}]"
+
+    for node_name, node_data in chunk.items():
+        if not node_data:
+            continue
+        msgs = node_data.get("messages", [])
+        if hasattr(msgs, "value"):
+            msgs = msgs.value
+        if msgs:
+            last_msg = msgs[-1]
+            if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+                for tc in last_msg.tool_calls:
+                    print(f"{source} 🔧 tool call: {tc['name']}")
+            elif hasattr(last_msg, "content") and last_msg.content:
+                content = last_msg.content if isinstance(last_msg.content, str) else str(last_msg.content)
+                if content.strip() and not hasattr(last_msg, "tool_call_id"):
+                    preview = content[:100].replace("\n", " ")
+                    print(f"{source} 💬 {preview}...")
+
+`````)
+
+#code-block(`````python
+# Use multiple stream modes together
+print("=== Multiple stream modes ===")
+print()
+
+for event in stream_agent.stream(
+    {"messages": [{"role": "user", "content": "Explain one new feature in Python 3.13 in a single sentence."}]},
+    stream_mode=["updates", "messages"],
+    subgraphs=True,
+    config=lf_config,
+):
+    *namespace_parts, mode, data = event
+    if mode == "updates":
+        for node_name in data:
+            print(f"  [updates] node '{node_name}' completed")
+    elif mode == "messages":
+        msg, metadata = data
+        if hasattr(msg, "content") and msg.content and metadata and metadata.get("langgraph_node") == "model":
+            print(msg.content, end="", flush=True)
+
+print()
 
 `````)
 
@@ -253,7 +295,7 @@ That prevents it from accessing the host machine's files, network, or credential
 
 _Use the sandbox as a tool_ (recommended)
 
-#image("../../../../book/assets/diagrams/png/sandbox_architecture.png")
+#image("../../assets/images/sandbox_architecture.png")
 
 === ⚠️ Security Guidelines
 - _Never put secrets inside the sandbox_ — the agent may leak them
@@ -263,39 +305,32 @@ _Use the sandbox as a tool_ (recommended)
 
 
 #code-block(`````python
-# Modal sandbox integration — uses the langchain-modal package
-# pip install langchain-modal deepagents
-import modal
-from deepagents import create_deep_agent
-from langchain_anthropic import ChatAnthropic
-from langchain_modal import ModalSandbox
+# Sandbox integration example (reference only — requires provider-specific setup)
 
-app = modal.App.lookup("your-app")
-modal_sandbox = modal.Sandbox.create(app=app)
-backend = ModalSandbox(sandbox=modal_sandbox)
+sandbox_example_code = """
+# pip install deepagents-modal
+from deepagents.backends.sandbox import ModalSandbox
 
 agent = create_deep_agent(
-    model=ChatAnthropic(model="claude-sonnet-4-6"),
-    system_prompt="You are a Python coding assistant with sandbox access.",
-    backend=backend,
+    model="anthropic:claude-sonnet-4-6",
+    backend=ModalSandbox(
+        image="python:3.12-slim",
+        gpu="T4",  # GPU support
+    ),
 )
+"""
 
-try:
-    result = agent.invoke({
-        "messages": [{"role": "user", "content": "Create a small Python package and run pytest"}],
-    })
-finally:
-    modal_sandbox.terminate()    # required: free resources
+print("Sandbox integration example (reference only):")
+print(sandbox_example_code)
+
 `````)
 
-#tip-box[Each provider ships as a separate package (`langchain-modal`, `langchain-daytona`, ...). Always pair sandbox creation with `try/finally` and call `terminate()` (or `stop()` / `shutdown()`) so resources are released.]
-
 #line(length: 100%, stroke: 0.5pt + luma(200))
-== 3-1. Interpreters — `CodeInterpreterMiddleware`
+== 4. Interpreters — CodeInterpreterMiddleware
 
-Deep Agents 0.6 lets you attach a _QuickJS-based interpreter_ through `CodeInterpreterMiddleware`. A sandbox runs code in an isolated _outside_ environment; an interpreter runs small programs _inside_ the agent loop. It is useful for composing tool calls, fan-out/fan-in across subagents, and shaping structured data.
+Deep Agents can use a QuickJS-based interpreter as an internal workspace for tool composition, intermediate variables, structured data transforms, and programmatic subagent fan-out/fan-in.
 
-=== Install
+=== Installation
 
 #code-block(`````bash
 pip install -U "deepagents[quickjs]"
@@ -303,54 +338,88 @@ pip install -U "deepagents[quickjs]"
 uv add "deepagents[quickjs]"
 `````)
 
-=== Programmatic Tool Calling (PTC)
+=== Programmatic Tool Calling vs programmatic subagents
 
-Set `ptc=["task"]` (an allowlist) to expose tools as async functions under the `tools.*` namespace, with names converted to camelCase (for example `web_search` → `tools.webSearch`). Inside the interpreter you can fan out with `Promise.all`.
+Programmatic Tool Calling exposes allowlisted tools as `tools.*` functions inside QuickJS. Programmatic subagents are separate: the interpreter exposes a top-level `task(...)` function when `CodeInterpreterMiddleware(subagents=True)` is enabled.
+
+#code-block(`````javascript
+const topics = ["retrieval", "memory", "evaluation"];
+const reports = await Promise.all(
+  topics.map((topic) => task({
+    description: `Research ${topic}`,
+    subagent_type: "general-purpose",
+  })),
+);
+`````)
+
+Use a least-privilege PTC allowlist for sensitive tools. Do not assume parent-level approvals automatically cover every interpreter dispatch.
 
 #code-block(`````python
+# Interpreter configuration example — requires the deepagents[quickjs] extra
+interpreter_example = r'''
 from deepagents import create_deep_agent
 from langchain_quickjs import CodeInterpreterMiddleware
+from langgraph.checkpoint.memory import MemorySaver
 
 agent = create_deep_agent(
     model="openai:gpt-5.4",
-    middleware=[
-        CodeInterpreterMiddleware(
-            ptc=["task"],
-            snapshot_between_turns=True,
-            timeout=5.0,
-            max_ptc_calls=256,
-        ),
-    ],
+    checkpointer=MemorySaver(),
+    middleware=[CodeInterpreterMiddleware(ptc=["web_search"], subagents=True, mode="thread")],
 )
+
+# Inside QuickJS, use task(...) separately from tools.webSearch(...).
+'''
+print(interpreter_example)
+
 `````)
 
-=== Middleware options (10)
+=== Compatibility gate in the current course environment
 
-#table(
-  columns: 3,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Parameter],
-  text(weight: "bold")[Default],
-  text(weight: "bold")[Purpose],
-  [`memory_limit`], [`64*1024*1024`], [QuickJS heap memory limit (bytes)],
-  [`timeout`], [`5.0`], [Per-eval timeout (seconds)],
-  [`max_ptc_calls`], [`256`], [Max `tools.*` calls per eval],
-  [`tool_name`], [`"eval"`], [Interpreter tool name],
-  [`max_result_chars`], [`4000`], [Max characters returned],
-  [`capture_console`], [`True`], [Capture `console.log` output],
-  [`ptc`], [`None`], [PTC allowlist],
-  [`skills_backend`], [`None`], [Backend for interpreter skill modules],
-  [`snapshot_between_turns`], [`True`], [Preserve state across turns],
-  [`max_snapshot_bytes`], [`None`], [Max snapshot size],
-)
+The official Programmatic Subagents pattern relies on the QuickJS interpreter and top-level `task(...)`. The current course venv has Deep Agents installed, but the `langchain_quickjs` extra may not be present. Therefore the default notebook path detects availability and falls back to ordinary `SubAgent` orchestration.
 
-#warning-box[PTC does not go through the regular tool-calling path, so per-tool `interrupt_on` policies are _not_ guaranteed to apply. Do not expose tools with side effects (cost, data mutation, network) without an explicit approval wrapper.]
+#code-block(`````python
+from importlib.metadata import PackageNotFoundError, version
+from importlib.util import find_spec
+
+try:
+    deepagents_version = version("deepagents")
+except PackageNotFoundError:
+    deepagents_version = "not installed"
+quickjs_available = find_spec("langchain_quickjs") is not None
+fallback_pattern = "Programmatic task(...) demo" if quickjs_available else "ordinary SubAgent fan-out/fan-in fallback"
+print("deepagents:", deepagents_version)
+print("langchain_quickjs available:", quickjs_available)
+print("recommended path:", fallback_pattern)
+
+`````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
-== 4. ACP (Agent Client Protocol)
+== 5. RubricMiddleware — runtime LLM-as-a-judge
+
+`RubricMiddleware` evaluates an agent response against a rubric during the same invocation. Use it as a selective runtime quality gate for high-risk outputs, final deliverables, or external-send steps. Keep offline regression checks in LangSmith/AgentEvals, and use runtime rubrics only where the extra latency and cost are justified.
+
+#code-block(`````python
+# RubricMiddleware configuration example — reference only
+rubric_example = r'''
+from deepagents import RubricMiddleware, create_deep_agent
+from langgraph.checkpoint.memory import MemorySaver
+
+agent = create_deep_agent(
+    model="openai:gpt-5.4",
+    checkpointer=MemorySaver(),
+    middleware=[RubricMiddleware(
+        model="openai:gpt-5.4-mini",
+        system_prompt="Judge accuracy, grounding, and safety from 1 to 5; request revision if weak.",
+        max_iterations=3,
+    )],
+)
+'''
+print(rubric_example)
+
+`````)
+
+#line(length: 100%, stroke: 0.5pt + luma(200))
+== 6. ACP (Agent Client Protocol)
 
 ACP standardizes communication _between coding agents and editors / IDEs_.
 
@@ -377,75 +446,45 @@ ACP standardizes communication _between coding agents and editors / IDEs_.
 
 
 #code-block(`````python
-# ACP server — canonical pattern (asyncio + acp.run_agent)
+# ACP server implementation example (reference only)
+acp_example_code = """
 # pip install deepagents-acp
-import asyncio
-
-from acp import run_agent
 from deepagents import create_deep_agent
+from deepagents_acp import AgentServerACP
 from langgraph.checkpoint.memory import MemorySaver
 
-from deepagents_acp.server import AgentServerACP
+# Create the agent
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-6",
+    system_prompt="You are a coding assistant.",
+    checkpointer=MemorySaver(),
+)
 
+# Run the ACP server (stdio mode)
+server = AgentServerACP(agent)
+server.run()
+"""
 
-async def main() -> None:
-    agent = create_deep_agent(
-        model="anthropic:claude-sonnet-4-6",
-        system_prompt="You are a helpful coding assistant",
-        checkpointer=MemorySaver(),
-    )
-    server = AgentServerACP(agent)
-    await run_agent(server)
+print("ACP server implementation example (reference only):")
+print(acp_example_code)
 
-
-if __name__ == "__main__":
-    asyncio.run(main())
-`````)
-
-#tip-box[The Toad CLI runs ACP servers as managed local processes. Install with `uv tool install -U batrachian-toad`, then `toad acp "python path/to/your_server.py" .` to launch with automatic start/stop/restart.]
-
-=== Context Engineering — `@dynamic_prompt`
-
-Inject request-time data into the system prompt with the `@dynamic_prompt` middleware. It can read `request.runtime.context` and `request.runtime.store`, so any field declared in `context_schema` (such as `user_id` / `org_id`) propagates to every subagent and tool automatically. Tools receive `ToolRuntime[Context]` and read runtime values from `runtime.context.user_id`.
-
-#code-block(`````python
-from deepagents.middleware import dynamic_prompt
-
-@dynamic_prompt
-def inject_user(request):
-    user_id = request.runtime.context.user_id
-    pref = request.runtime.store.get(("prefs", user_id), "lang")
-    return f"\n\nUser: {user_id} / Preferred language: {pref}"
-`````)
-
-=== Permissions (`deepagents>=0.5.2`)
-
-`FilesystemPermission` controls read/write access on built-in FS tools using _first-match-wins_ semantics; if nothing matches, the default is `allow`. Custom tools, MCP, and the sandbox `execute` bypass these rules and need separate guards. A subagent's `permissions` _fully replaces_ parent rules (no partial override).
-
-#code-block(`````python
-from deepagents.permissions import FilesystemPermission
-
-permissions = [
-    FilesystemPermission(operations=["write"], paths=["/policies/**"], mode="deny"),
-    FilesystemPermission(operations=["read", "write"], paths=["/workspace/**"], mode="allow"),
-]
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
-== 5. Deep Agents CLI
+== 7. Deep Agents Code (`dcode`)
 
-The Deep Agents CLI is a _terminal coding agent_ built on top of the SDK.
+Deep Agents Code is a _terminal coding agent_ built on top of the SDK. Current CLI material uses the `deepagents-code` package and the `dcode` command.
 
 === Installation and Execution
 #code-block(`````bash
-# Install
-uv tool install deepagents-cli
+# Install script
+curl -LsSf https://langch.in/dcode | bash
+
+# Check help without installing
+uvx --from deepagents-code dcode --help
 
 # Run
-deepagents-cli
-
-# Run directly without installing
-uvx deepagents-cli
+dcode
 `````)
 
 === Main Options
@@ -458,16 +497,22 @@ uvx deepagents-cli
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[Option],
   text(weight: "bold")[Description],
-  [`-a/--agent AGENT`],
-  [Specify the agent name],
   [`-M/--model MODEL`],
   [Choose the model],
   [`-n/--non-interactive`],
-  [Non-interactive mode (single task execution)],
-  [`--auto-approve`],
-  [Skip human confirmation],
-  [`--sandbox {none,modal,daytona,runloop}`],
-  [Select a sandbox backend],
+  [Non-interactive mode for a single task],
+  [`-S/--shell-allow-list`],
+  [Specify allowed shell commands],
+  [`--interpreter`],
+  [Enable the interpreter],
+  [`--interpreter-tools`],
+  [Specify tools available to the interpreter],
+  [`--stdin`],
+  [Read the prompt from standard input],
+  [`--json`],
+  [Emit JSON output],
+  [`--acp`],
+  [Run as an ACP server over stdio],
 )
 
 === Interactive Commands
@@ -490,29 +535,27 @@ uvx deepagents-cli
   [Run a shell command],
 )
 
-=== Memory System
-- _Global_: `~/.deepagents/<agent_name>/memories/`
-- _Project_: `.deepagents/AGENTS.md` (project root)
+=== Configuration and Memory
+- _Global config_: `~/.deepagents/config.toml`
+- _Project instructions_: `AGENTS.md`
+- _Skills_: progressive disclosure through `SKILL.md`
+- _Subagents_: configured through files or project instructions
 
 
 #code-block(`````python
-# CLI non-interactive examples (run in the shell)
+# Deep Agents Code examples (run in the shell)
 cli_examples = """
-# Basic usage
-deepagents-cli
+# Check help without installing
+uvx --from deepagents-code dcode --help
 
 # Non-interactive execution with a specific model
-deepagents-cli -M claude-sonnet-4-6 -n "Write the README.md file for this project"
+uvx --from deepagents-code dcode -M gpt-5.4 -n "Write the README.md file for this project"
 
-# Run inside a sandbox
-deepagents-cli --sandbox modal "Run the test suite"
-
-# Skill management
-deepagents-cli skills list
-deepagents-cli skills create my-skill
+# Enable interpreter support
+uvx --from deepagents-code dcode --interpreter "Inspect this repository and summarize risks"
 """
 
-print("CLI usage examples (run in the terminal):")
+print("dcode usage examples (run in the terminal):")
 print(cli_examples)
 
 `````)
@@ -549,10 +592,9 @@ print(cli_examples)
   [`memory`, `skills`, `AGENTS.md`, `SKILL.md`],
   [_07_],
   [Advanced Features],
-  [`interrupt_on`, `stream_mode`, Sandbox, ACP, CLI],
+  [`interrupt_on`, streaming, `CodeInterpreterMiddleware`, `RubricMiddleware`, Sandbox, ACP, `dcode`],
 )
 
 === Next Steps
 → Continue to _#link("./08_harness.ipynb")[08_harness.ipynb]_
 → Or jump to the _advanced track_ at _#link("../05_advanced/00_migration.ipynb")[../05_advanced/00_migration.ipynb]_
-

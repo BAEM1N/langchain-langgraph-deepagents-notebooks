@@ -10,10 +10,9 @@ LLM 응답을 실시간으로 스트리밍하여 사용자에게 전달하는 �
 
 이 노트북에서 다루는 내용:
 - LangChain SDK의 스트리밍 기초(`.stream()`, `.astream_events()`)를 이해한다
+- Agent `stream_events(..., version="v3")`의 projection(`messages`, `tool_calls`, `values`, `output`)을 실제로 소비한다
 - `useStream` React 훅의 구조와 사용법을 안다
-- `StreamEvent` 프로토콜을 이해한다
 - Python SDK로 실시간 스트리밍을 소비하는 방법을 익힌다
-- 에이전트 상태 실시간 표시 패턴을 안다
 - Headless Tools와 Custom Stream Channels로 UI 확장 지점을 구분한다
 
 == 12.1 환경 설정
@@ -119,9 +118,9 @@ await stream_events_demo()
 ... (truncated)
 `````)
 
-== 12.4 Event Streaming v3 — LangChain 1.3+
+== 12.4 Event Streaming v3 — projection 기반 agent stream
 
-LangChain 1.3부터 agent 실행에는 `stream_events(..., version="v3")`를 우선 검토합니다. 기존 `.stream()`은 토큰을 직접 받는 저수준 API이고, v3 event streaming은 _메시지, 도구 호출, 상태, 최종 출력_을 projection 단위로 나누어 UI 코드가 덜 복잡해집니다.
+LangChain 1.3부터 agent 실행에는 `stream_events(..., version="v3")`를 우선 검토합니다. 기존 `.stream()`은 토큰을 직접 받는 저수준 API이고, v3 event streaming은 _메시지, 도구 호출, 상태, 서브에이전트, 확장 채널, 최종 출력_을 projection 단위로 나눕니다.
 
 #table(
   columns: 3,
@@ -133,48 +132,48 @@ LangChain 1.3부터 agent 실행에는 `stream_events(..., version="v3")`를 우
   text(weight: "bold")[의미],
   text(weight: "bold")[UI 매핑],
   [`stream.messages`],
-  [모델 메시지와 토큰 delta],
+  [모델 메시지와 텍스트 delta],
   [채팅 버블],
   [`stream.tool_calls`],
-  [도구 시작·출력·완료·오류],
+  [도구 호출 시작·인자·결과],
   [도구 타임라인],
   [`stream.values`],
   [agent state snapshot],
-  [디버그 패널],
+  [디버그/상태 패널],
   [`stream.output`],
   [최종 state],
   [저장/후처리],
+  [`stream.subgraphs` / `stream.subagents`],
+  [하위 그래프·서브에이전트 이벤트],
+  [멀티에이전트 카드],
+  [`stream.extensions`],
+  [커스텀 projection 채널],
+  [진행률·차트·도메인 UI],
 )
 
-이 API는 LangGraph의 v3 event streaming 위에 올라가므로 LangGraph/Deep Agents와 같은 UI 패턴을 공유합니다.
+이 API는 LangGraph v3 event streaming 위에 올라가므로 LangGraph/Deep Agents와 같은 UI 패턴을 공유합니다.
 
 #code-block(`````python
-# Event Streaming v3 패턴 — 설치 버전이 낮아도 안전하게 읽을 수 있는 예시 출력
-from importlib.metadata import version
-
-print("설치된 langchain:", version("langchain"))
-print("필요 버전: langchain>=1.3.0")
-
-example = r'''
 from langchain.agents import create_agent
+from langchain.tools import tool
 
+@tool
 def get_weather(city: str) -> str:
     """도시 날씨를 조회합니다."""
     return f"{city}: 맑음"
 
-agent = create_agent(model="openai:gpt-5.4", tools=[get_weather])
-stream = agent.stream_events(
+streaming_agent = create_agent(
+    model="openai:gpt-5.4", tools=[get_weather],
+    system_prompt="날씨 질문은 반드시 get_weather 도구를 사용하세요.",
+)
+stream = streaming_agent.stream_events(
     {"messages": [{"role": "user", "content": "서울 날씨 알려줘"}]},
     version="v3",
 )
-
 for message in stream.messages:
-    for token in message.text:
-        print(token, end="", flush=True)
-
-final_state = stream.output
-'''
-print(example)
+    if str(message.text):
+        print(str(message.text), end="", flush=True)
+print("\noutput keys:", list(stream.output.keys()))
 `````)
 
 == 12.5 useStream React 훅
@@ -558,7 +557,7 @@ Custom channel은 “기본 메시지 스트림 밖의 데이터를 어디로 �
   [_astream_events_],
   [비동기 이벤트 스트리밍으로 모델/도구 호출을 세밀하게 추적합니다],
   [_Event Streaming v3_],
-  [`stream_events(..., version="v3")`로 메시지·도구·상태 projection을 분리합니다],
+  [`stream_events(..., version="v3")`로 메시지·도구·상태·서브에이전트·확장 projection을 분리합니다],
   [_useStream_],
   [React 훅으로 LangGraph 서버와 스트리밍 통신을 간편하게 처리합니다],
   [_스레드 관리_],
@@ -577,9 +576,10 @@ Custom channel은 “기본 메시지 스트림 밖의 데이터를 어디로 �
 
 
 #references-box[
-- #link("../docs/langchain/08-streaming.md")[Streaming] — useStream 정식 문서
+- LangChain Event Streaming: https://docs.langchain.com/oss/python/langchain/event-streaming
+- LangGraph Event Streaming: https://docs.langchain.com/oss/python/langgraph/event-streaming
+- #link("../docs/langchain/08-streaming.md")[Streaming]
 - #link("../docs/langchain/28-ui.md")[UI (Agent Chat UI & useStream)]
 - #link("../docs/langchain/28-ui.md")[Headless Tools / Custom Stream Channels]
-- #link("../docs/langchain/08-streaming.md")[LangChain Event Streaming v3]
 ]
 #chapter-end()

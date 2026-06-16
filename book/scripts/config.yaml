@@ -66,6 +66,7 @@ parts:
       - {source: "11_local_server.ipynb", output: "ch11.typ", title: "로컬 서버", diagrams: []}
       - {source: "12_durable_execution.ipynb", output: "ch12.typ", title: "내구적 실행", diagrams: []}
       - {source: "13_api_guide_and_pregel.ipynb", output: "ch13.typ", title: "API 가이드와 Pregel", diagrams: []}
+      - {source: "14_fault_tolerance.ipynb", output: "ch14.typ", title: "Fault Tolerance", diagrams: []}
 
   - number: 4
     title: "Deep Agents"
@@ -110,3 +111,4 @@ parts:
       - {source: "04_ml_agent.ipynb", output: "ch04.typ", title: "ML 에이전트", diagrams: []}
       - {source: "05_deep_research_agent.ipynb", output: "ch05.typ", title: "딥 리서치 에이전트", diagrams: ["deep-research-workflow"]}
       - {source: "06_multimodal_pdf_rag.ipynb", output: "ch06.typ", title: "멀티모달 PDF RAG", diagrams: []}
+      - {source: "07_content_builder_agent.ipynb", output: "ch07.typ", title: "Content Builder 에이전트", diagrams: []}

@@ -13,5 +13,6 @@
     [3. Datasets and the Evaluation Loop],
     [4. Prompt Hub Versioning],
     [5. Production Monitoring],
+    [6. Agent Evals],
   ),
 )
