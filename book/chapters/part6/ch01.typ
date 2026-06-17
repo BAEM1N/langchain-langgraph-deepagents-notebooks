@@ -45,7 +45,7 @@ pip install -U langsmith
 
 #figure(image("../../../assets/images/langsmith/01_quickstart/03_get_started_tracing_dialog.png", width: 85%), caption: [Home의 첫 카드로 열리는 4단계 퀵스타트 다이얼로그])
 
-#figure(image("../../../assets/images/langsmith/01_quickstart/04_api_key_generated_RAW.png", width: 85%), caption: [Generate API Key 클릭 시 `lsv2_pt_…` 키 생성 — 한 번만 표시되므로 즉시 `.env`로 복사])
+#figure(image("../../../assets/images/langsmith/01_quickstart/04_api_key_generated_redacted.png", width: 85%), caption: [Generate API Key 클릭 시 `lsv2_pt_…` 키 생성 — 한 번만 표시되므로 즉시 `.env`로 복사])
 
 == 1.2 첫 트레이스 — LangChain 에이전트
 
@@ -170,7 +170,7 @@ UI 프로젝트 페이지 우상단의 _Analytics_ 탭에서 프로젝트 단위
 
 온보딩 이후 키를 재발급하거나 revoke하려면 _Settings → Access and Security → API Keys_ 로 이동합니다. 기존 키는 Last Used At이 자동으로 기록되므로, 유출이 의심되면 즉시 revoke하고 새 키를 발급합니다.
 
-#figure(image("../../../assets/images/langsmith/01_quickstart/09_settings_api_keys.png", width: 95%), caption: [Settings > API Keys — 테이블의 Key 컬럼은 자동으로 앞뒤만 표시되고 Last Used At이 기록됨])
+#figure(image("../../../assets/images/langsmith/01_quickstart/09_settings_api_keys_redacted.png", width: 95%), caption: [Settings > API Keys — 테이블의 Key 컬럼은 자동으로 앞뒤만 표시되고 Last Used At이 기록됨])
 
 == 핵심 정리
 

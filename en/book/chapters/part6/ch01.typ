@@ -51,7 +51,7 @@ _After onboarding, Home — Tracing/Datasets/Prompts all show 0/4._
 
 _First card on Home → 4-step quickstart dialog. `Generate API Key` button is step 1._
 
-#image("../../assets/images/langsmith/01_quickstart/04_api_key_generated_RAW.png")
+#image("../../assets/images/langsmith/01_quickstart/04_api_key_generated_redacted.png")
 
 _Clicking Generate API Key creates an `lsv2_pt_…` key and auto-injects it into the env block in step 3. The key is shown only once, so copy it to `.env` immediately._
 
@@ -206,7 +206,7 @@ Model-specific pricing is automatically calculated and filled in the `total_cost
 
 After onboarding, to reissue or revoke keys, go to `Settings → Access and Security → API Keys`.
 
-#image("../../assets/images/langsmith/01_quickstart/09_settings_api_keys.png")
+#image("../../assets/images/langsmith/01_quickstart/09_settings_api_keys_redacted.png")
 
 _Settings left nav: API Keys · Members · OAuth providers · Provider secrets · MCP servers · Model configurations · _Fleet webhooks_ · Model pricing · Feedback tags · Resource tags · Shared URLs · Plans · Usage · Credits · Invoices. The Key column in the table shows only the beginning and end by default, and Last Used At is recorded._
 
