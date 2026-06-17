@@ -1,6 +1,6 @@
 [project]
 name = "langchain-langgraph-deepagents-notebooks"
-version = "0.0.1"
+version = "1.2.0"
 description = "LangChain & LangGraph & DeepAgents 자료"
 readme = "README.md"
 requires-python = ">=3.12"
