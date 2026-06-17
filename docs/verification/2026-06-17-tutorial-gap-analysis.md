@@ -476,3 +476,42 @@ Result:
 - Generated image references checked: 29
 - Missing generated image references after symlink fix: 0
 - Manual/generated Part VI content similarity remains intentionally low (`0.100`-`0.236`) because the manual chapters are compact book prose and the notebooks include objectives, prerequisites, and screenshots.
+
+---
+
+## English Part VI notebook-generated book migration — 2026-06-17
+
+Scope:
+
+- Replaced `en/book/chapters/part6/ch01.typ` through `ch05.typ` with `nb2typ.py` output generated from the matching `en/06_langsmith/01` through `05` source notebooks.
+- Added Part VI to `en/book/scripts/config.yaml` so the English LangSmith book source has an explicit regeneration contract.
+- Kept `en/book/chapters/part6/ch06.typ` as the existing notebook-generated Agent Evals chapter.
+
+Visual review:
+
+| Chapter | Old pages | New pages | Review note |
+|---|---:|---:|---|
+| ch01 Quickstart | 9 | 9 | New first page matches generated notebook style; screenshot pages render without clipping. |
+| ch02 Tracing Agents | 8 | 10 | Expanded notebook sections render as readable code/table/screenshot pages. |
+| ch03 Datasets & Evaluation | 7 | 8 | Dataset/evaluator screenshots and code blocks fit A4 page bounds. |
+| ch04 Prompt Hub | 5 | 7 | Prompt Hub screenshots, comparison tables, and code blocks render cleanly. |
+| ch05 Production Monitoring | 7 | 9 | Monitoring screenshots and safety-check sections render cleanly. |
+
+Verification commands:
+
+```bash
+typst compile en/book/chapters/part6/ch01.typ tmp/pdfs/part6_visual/new_pdf/ch01.pdf --root "$PWD" --font-path book/fonts
+typst compile en/book/chapters/part6/ch02.typ tmp/pdfs/part6_visual/new_pdf/ch02.pdf --root "$PWD" --font-path book/fonts
+typst compile en/book/chapters/part6/ch03.typ tmp/pdfs/part6_visual/new_pdf/ch03.pdf --root "$PWD" --font-path book/fonts
+typst compile en/book/chapters/part6/ch04.typ tmp/pdfs/part6_visual/new_pdf/ch04.pdf --root "$PWD" --font-path book/fonts
+typst compile en/book/chapters/part6/ch05.typ tmp/pdfs/part6_visual/new_pdf/ch05.pdf --root "$PWD" --font-path book/fonts
+pdftoppm -png -r 90 tmp/pdfs/part6_visual/new_pdf/ch01.pdf tmp/pdfs/part6_visual/render/ch01_new/page
+python en/book/scripts/build.py
+```
+
+Result:
+
+- Standalone chapter PDF compile passed for ch01 through ch05.
+- Rendered PNG contact-sheet review passed for all new chapter pages: no missing pages, clipped screenshots, overlapping tables, or unreadable code blocks observed.
+- Generated image references in ch01 through ch05: 29 checked, 0 missing.
+- `python en/book/scripts/build.py` passed and rebuilt `en/book/agent-handbook-en.pdf`.

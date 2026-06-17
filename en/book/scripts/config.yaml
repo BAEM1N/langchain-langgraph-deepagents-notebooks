@@ -283,6 +283,35 @@ parts:
     title: Production Deployment
     diagrams:
     - production-deploy
+- number: 6
+  title: LangSmith
+  subtitle: Tracing, Evaluation, Prompt Ops, and Agent Evals
+  source_dir: 06_langsmith
+  chapters:
+  - source: 01_quickstart.ipynb
+    output: ch01.typ
+    title: LangSmith Quickstart
+    diagrams: []
+  - source: 02_tracing_agents.ipynb
+    output: ch02.typ
+    title: Tracing Agents
+    diagrams: []
+  - source: 03_datasets_and_evaluation.ipynb
+    output: ch03.typ
+    title: Datasets and Evaluation
+    diagrams: []
+  - source: 04_prompt_hub.ipynb
+    output: ch04.typ
+    title: Prompt Hub
+    diagrams: []
+  - source: 05_production_monitoring.ipynb
+    output: ch05.typ
+    title: Production Monitoring
+    diagrams: []
+  - source: 06_agent_evals.ipynb
+    output: ch06.typ
+    title: Agent Evals
+    diagrams: []
 - number: 7
   title: Applied Examples
   subtitle: Real-World Applications
