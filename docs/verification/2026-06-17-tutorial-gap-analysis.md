@@ -441,3 +441,38 @@ Book builds:
 
 - `python book/scripts/build.py` passed.
 - `python en/book/scripts/build.py` passed.
+
+---
+
+## Risk audit after English LangSmith parity — 2026-06-17
+
+Scope:
+
+- README/track documentation touched by the parity wave.
+- Korean and English handbook compile status.
+- Future `nb2typ.py` regeneration path for `en/06_langsmith/01` through `05`.
+
+Findings:
+
+- README local links and Markdown fence balance passed for `README.md`, `en/README.md`, `06_langsmith/README.md`, `en/06_langsmith/README.md`, and `08_integration/README.md`.
+- Korean `book/agent-handbook.pdf` and English `en/book/agent-handbook-en.pdf` compile with zero Typst warnings in compile-only checks.
+- Current English Part VI `ch01` through `ch05` are still manually maintained Typst chapters, while the source notebooks are now present. A future switch from manual chapters to notebook-generated chapters should be done chapter-by-chapter with visual diff review.
+- Temporary notebook-to-Typst generation for `en/06_langsmith/01` through `05` produced 29 LangSmith screenshot references. Those references initially resolved to `en/assets/images/langsmith/...`, which did not exist. The gap is closed by adding `en/assets/images/langsmith -> ../../../assets/images/langsmith`, avoiding duplicated screenshot assets while preserving the generated relative-path contract.
+
+Verification:
+
+```bash
+python book/scripts/build.py --compile-only
+python en/book/scripts/build.py
+python book/scripts/nb2typ.py en/06_langsmith/01_quickstart.ipynb /tmp/en_langsmith_nb2typ_check/ch01.typ --chapter-number 1
+python book/scripts/nb2typ.py en/06_langsmith/02_tracing_agents.ipynb /tmp/en_langsmith_nb2typ_check/ch02.typ --chapter-number 2
+python book/scripts/nb2typ.py en/06_langsmith/03_datasets_and_evaluation.ipynb /tmp/en_langsmith_nb2typ_check/ch03.typ --chapter-number 3
+python book/scripts/nb2typ.py en/06_langsmith/04_prompt_hub.ipynb /tmp/en_langsmith_nb2typ_check/ch04.typ --chapter-number 4
+python book/scripts/nb2typ.py en/06_langsmith/05_production_monitoring.ipynb /tmp/en_langsmith_nb2typ_check/ch05.typ --chapter-number 5
+```
+
+Result:
+
+- Generated image references checked: 29
+- Missing generated image references after symlink fix: 0
+- Manual/generated Part VI content similarity remains intentionally low (`0.100`-`0.236`) because the manual chapters are compact book prose and the notebooks include objectives, prerequisites, and screenshots.
