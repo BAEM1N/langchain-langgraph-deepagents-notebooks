@@ -49,9 +49,9 @@ Tracked notebook count:
 | Area | Path | Notebooks | Role |
 |---|---:|---:|---|
 | Korean core | `01_beginner`~`07_examples` | **69** | Primary source of truth and default validation scope |
-| English mirror | `en/01_beginner`~`en/07_examples` | **64** | English learner path; `en/06_langsmith` currently starts with Agent Evals |
+| English mirror | `en/01_beginner`~`en/07_examples` | **69** | English learner path with LangSmith 01~06 source-notebook parity restored |
 | Integrations | `08_integration` | **69** | Provider/cloud/local-service integration catalog; excluded from default live harness |
-| **Total** | all tracked `.ipynb` files | **202** | Korean, English, and integration notebooks |
+| **Total** | all tracked `.ipynb` files | **207** | Korean, English, and integration notebooks |
 
 ### Core curriculum
 

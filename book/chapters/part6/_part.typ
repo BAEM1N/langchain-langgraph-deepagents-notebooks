@@ -6,7 +6,7 @@
 #part-page(
   6,
   "LangSmith",
-  subtitle: "Tracing · Evaluation · Monitoring",
+  subtitle: "Tracing · Evaluation · Prompt Ops · Agent Evals",
   chapters: (
     [1. Quickstart: 첫 트레이스],
     [2. 에이전트 트레이스 구조],

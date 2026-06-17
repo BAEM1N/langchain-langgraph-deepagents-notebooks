@@ -49,9 +49,9 @@ uv run jupyter lab
 | 영역 | 경로 | 노트북 | 역할 |
 |---|---:|---:|---|
 | Korean core | `01_beginner`~`07_examples` | **69** | 기본 학습/검증 대상 |
-| English mirror | `en/01_beginner`~`en/07_examples` | **64** | 영어 학습 경로. `en/06_langsmith`는 Agent Evals부터 원본화됨 |
+| English mirror | `en/01_beginner`~`en/07_examples` | **69** | 영어 학습 경로. LangSmith 01~06 원본 노트북 parity 반영 완료 |
 | Integrations | `08_integration` | **69** | provider/cloud/local service 통합 카탈로그. 기본 live harness에서는 제외 |
-| **Total** | 전체 tracked `.ipynb` | **202** | 한국어·영어·통합 예제 전체 |
+| **Total** | 전체 tracked `.ipynb` | **207** | 한국어·영어·통합 예제 전체 |
 
 ### Core curriculum — Korean source of truth
 

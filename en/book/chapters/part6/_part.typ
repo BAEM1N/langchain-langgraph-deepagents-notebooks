@@ -6,7 +6,7 @@
 #part-page(
   6,
   "LangSmith",
-  subtitle: "Tracing · Evaluation · Monitoring",
+  subtitle: "Tracing · Evaluation · Prompt Ops · Agent Evals",
   chapters: (
     [1. Quickstart: Your First Trace],
     [2. Agent Trace Structure],

@@ -1,6 +1,6 @@
 # 06. LangSmith — 트레이싱 · 평가 · 프롬프트 운영
 
-LangSmith는 LangChain/LangGraph/Deep Agents 애플리케이션의 **실행 기록, 데이터셋, 평가, 프롬프트 버전, 운영 모니터링**을 한곳에서 다루는 플랫폼입니다. 이 폴더는 단순 tracing quickstart를 넘어, 실제 에이전트 회귀 테스트와 Agent Evals까지 이어지는 운영 흐름을 다룹니다.
+LangSmith는 LangChain/LangGraph/Deep Agents 애플리케이션의 **실행 기록, 데이터셋, 평가, 프롬프트 버전, 운영 모니터링**을 한곳에서 다루는 플랫폼입니다. 이 폴더는 단순 tracing quickstart를 넘어, 실제 에이전트 회귀 테스트와 Agent Evals까지 이어지는 운영 흐름을 다룹니다. Korean 원본과 English mirror(`en/06_langsmith/01~06`)가 모두 존재합니다.
 
 ---
 

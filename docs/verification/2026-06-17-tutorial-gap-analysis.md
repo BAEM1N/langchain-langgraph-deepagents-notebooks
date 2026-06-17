@@ -407,3 +407,37 @@ Static gates:
 - Changed notebook JSON parse and sequential `cell-0...` ID audit passed for 13 changed notebooks.
 - `git diff --check -- ':!book/agent-handbook.pdf' ':!en/book/agent-handbook-en.pdf'` passed.
 - Exact-value secret scan against secret-like `.env` values passed with zero hits outside ignored local/env paths.
+
+---
+
+## English LangSmith source-notebook parity — 2026-06-17
+
+The English LangSmith source parity debt was closed by creating `en/06_langsmith/01_quickstart.ipynb` through `en/06_langsmith/05_production_monitoring.ipynb` from the verified Korean source notebooks. The existing `en/06_langsmith/06_agent_evals.ipynb` completes the track, so `en/06_langsmith` now has six source notebooks matching the Korean LangSmith track.
+
+Documentation/book updates:
+
+- `README.md` and `en/README.md` now report English mirror notebooks as 69 and total tracked notebooks as 207.
+- `06_langsmith/README.md` now states that Korean and English LangSmith source notebooks both exist.
+- `en/06_langsmith/README.md` was added for the English track.
+- Korean and English Part VI book subtitles now mention Prompt Ops and Agent Evals.
+
+Verification run:
+
+```bash
+UV_NO_SYNC=1 uv run python local/notebook_execution_01_07_gpt41/run_notebooks.py \
+  --force --timeout 300 --allow-langsmith-mutations --only en/06_langsmith
+```
+
+Result:
+
+- Target notebooks: 6
+- Passed: 6
+- Failed: 0
+- Skipped runtime cells: 0
+- LangSmith mutations: enabled with prefix `local-exec-20260617-000153`
+- `08_integration/` remained excluded from the harness scope.
+
+Book builds:
+
+- `python book/scripts/build.py` passed.
+- `python en/book/scripts/build.py` passed.
