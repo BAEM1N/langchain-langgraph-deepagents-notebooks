@@ -1,6 +1,6 @@
 # KO ↔ EN Translation Guide
 This document is the **source of truth for terminology alignment** before translating the Korean notebooks and Typst handbook into English.
-Primary source references used to normalize these terms: `book/chapters/appendix_glossary.typ`, `docs/2026-03-11_glossary_prep.md`, `README.md`, `README.en.md`, and the framework reference docs under `docs/langchain/`, `docs/langgraph/`, and `docs/deepagents/`.
+Primary source references used to normalize these terms: `book/chapters/appendix_glossary.typ`, `README.md`, English README material under `en/`, and the framework reference docs under `docs/langchain/`, `docs/langgraph/`, and `docs/deepagents/`. Earlier glossary prep notes are archived locally under `local/docs_archive/` and are not part of the public docs surface.
 ## How to use this guide
 - Check this guide **before** translating notebook headings, glossary entries, chapter titles, or repeated framework terminology.
 - If a Korean source term appears here, use the preferred English form exactly.
