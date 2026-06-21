@@ -1,0 +1,67 @@
+# Added Official Reference Notes — 2026-06-21
+
+Generated from `local/official_langchain_docs_2026-06-19/inventory.csv` after comparing official OSS Python pages with the local `docs/` tree.
+
+Total added/updated reference notes: 61
+
+- `docs/concepts/context.md`
+- `docs/concepts/memory.md`
+- `docs/concepts/products.md`
+- `docs/concepts/providers-and-models.md`
+- `docs/langchain/academy.md`
+- `docs/langchain/changelog-py.md`
+- `docs/langchain/component-architecture.md`
+- `docs/langchain/event-streaming.md`
+- `docs/langchain/get-help.md`
+- `docs/langchain/install.md`
+- `docs/langchain/philosophy.md`
+- `docs/langchain/frontend/overview.md`
+- `docs/langchain/frontend/branching-chat.md`
+- `docs/langchain/frontend/generative-ui.md`
+- `docs/langchain/frontend/headless-tools.md`
+- `docs/langchain/frontend/human-in-the-loop.md`
+- `docs/langchain/frontend/integrations/overview.md`
+- `docs/langchain/frontend/integrations/ai-elements.md`
+- `docs/langchain/frontend/integrations/assistant-ui.md`
+- `docs/langchain/frontend/integrations/copilotkit.md`
+- `docs/langchain/frontend/integrations/openui.md`
+- `docs/langchain/frontend/join-rejoin.md`
+- `docs/langchain/frontend/markdown-messages.md`
+- `docs/langchain/frontend/message-queues.md`
+- `docs/langchain/frontend/reasoning-tokens.md`
+- `docs/langchain/frontend/structured-output.md`
+- `docs/langchain/frontend/time-travel.md`
+- `docs/langchain/frontend/tool-calling.md`
+- `docs/langchain/test/index.md`
+- `docs/langchain/test/evals.md`
+- `docs/langchain/test/integration-testing.md`
+- `docs/langchain/test/unit-testing.md`
+- `docs/langgraph/install.md`
+- `docs/langgraph/changelog-py.md`
+- `docs/langgraph/backward-compatibility.md`
+- `docs/langgraph/case-studies.md`
+- `docs/langgraph/event-streaming.md`
+- `docs/langgraph/fault-tolerance.md`
+- `docs/langgraph/frontend/overview.md`
+- `docs/langgraph/frontend/graph-execution.md`
+- `docs/langgraph/frontend/custom-stream-channels.md`
+- `docs/deepagents/a2a.md`
+- `docs/deepagents/changelog-py.md`
+- `docs/deepagents/event-streaming.md`
+- `docs/deepagents/mcp.md`
+- `docs/deepagents/memory.md`
+- `docs/deepagents/models.md`
+- `docs/deepagents/programmatic-subagents.md`
+- `docs/deepagents/tools.md`
+- `docs/deepagents/code/overview.md`
+- `docs/deepagents/code/configuration.md`
+- `docs/deepagents/code/data-locations.md`
+- `docs/deepagents/code/mcp-tools.md`
+- `docs/deepagents/code/memory-and-skills.md`
+- `docs/deepagents/code/providers.md`
+- `docs/deepagents/code/remote-sandboxes.md`
+- `docs/deepagents/code/subagents.md`
+- `docs/deepagents/frontend/overview.md`
+- `docs/deepagents/frontend/sandbox.md`
+- `docs/deepagents/frontend/subagent-streaming.md`
+- `docs/deepagents/frontend/todo-list.md`

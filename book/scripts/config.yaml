@@ -1,114 +1,393 @@
 book:
-  title: "Agent Handbook with LangChain, LangGraph, DeepAgents"
-  subtitle: "AI 에이전트 개발 완벽 가이드"
-  author: "BAEM1N"
-  date: "2026"
-  language: "ko"
-
+  title: Agent Handbook with LangChain, LangGraph, DeepAgents
+  subtitle: AI 에이전트 개발 완벽 가이드
+  author: BAEM1N
+  date: '2026'
+  language: ko
 skip_patterns:
-  - "Observability 설정"
-  - "# Observability"
-  - "langfuse_handler"
-  - "lf_config"
-  - "LANGSMITH_TRACING"
-
+- Observability 설정
+- '# Observability'
+- langfuse_handler
+- lf_config
+- LANGSMITH_TRACING
 output_truncate_lines: 30
-
 parts:
-  - number: 1
-    title: "에이전트 입문"
-    subtitle: "Foundations of AI Agents"
-    source_dir: "01_beginner"
-    chapters:
-      - {source: "00_setup.ipynb", output: "ch00.typ", title: "환경 설정", diagrams: []}
-      - {source: "01_llm_basics.ipynb", output: "ch01.typ", title: "LLM 기초", diagrams: ["message-types"]}
-      - {source: "02_langchain_basics.ipynb", output: "ch02.typ", title: "LangChain 기초", diagrams: ["beginner-overview"]}
-      - {source: "03_langchain_memory.ipynb", output: "ch03.typ", title: "LangChain 메모리", diagrams: []}
-      - {source: "04_langgraph_basics.ipynb", output: "ch04.typ", title: "LangGraph 기초", diagrams: ["react-loop-basic"]}
-      - {source: "05_deep_agents_basics.ipynb", output: "ch05.typ", title: "Deep Agents 기초", diagrams: []}
-      - {source: "06_comparison.ipynb", output: "ch06.typ", title: "프레임워크 비교", diagrams: ["framework-selection"]}
-      - {source: "07_mini_project.ipynb", output: "ch07.typ", title: "미니 프로젝트", diagrams: []}
-
-  - number: 2
-    title: "LangChain"
-    subtitle: "Building Blocks for AI Applications"
-    source_dir: "02_langchain"
-    chapters:
-      - {source: "01_introduction.ipynb", output: "ch01.typ", title: "소개", diagrams: ["langchain-arch"]}
-      - {source: "02_quickstart.ipynb", output: "ch02.typ", title: "퀵스타트", diagrams: []}
-      - {source: "03_models_and_messages.ipynb", output: "ch03.typ", title: "모델과 메시지", diagrams: []}
-      - {source: "04_tools_and_structured_output.ipynb", output: "ch04.typ", title: "도구와 구조적 출력", diagrams: ["agent-tool-llm-cycle"]}
-      - {source: "05_memory_and_streaming.ipynb", output: "ch05.typ", title: "메모리와 스트리밍", diagrams: ["memory-flow"]}
-      - {source: "06_middleware.ipynb", output: "ch06.typ", title: "미들웨어", diagrams: ["middleware-pipeline"]}
-      - {source: "07_hitl_and_runtime.ipynb", output: "ch07.typ", title: "HITL과 런타임", diagrams: []}
-      - {source: "08_multi_agent.ipynb", output: "ch08.typ", title: "멀티 에이전트", diagrams: ["multi-agent-patterns"]}
-      - {source: "09_custom_workflow_and_rag.ipynb", output: "ch09.typ", title: "커스텀 워크플로와 RAG", diagrams: []}
-      - {source: "10_production.ipynb", output: "ch10.typ", title: "프로덕션", diagrams: []}
-      - {source: "11_mcp.ipynb", output: "ch11.typ", title: "MCP", diagrams: ["mcp-protocol"]}
-      - {source: "12_frontend_streaming.ipynb", output: "ch12.typ", title: "프론트엔드 스트리밍", diagrams: []}
-      - {source: "13_guardrails.ipynb", output: "ch13.typ", title: "가드레일", diagrams: ["guardrails-flow"]}
-
-  - number: 3
-    title: "LangGraph"
-    subtitle: "Stateful Agent Orchestration"
-    source_dir: "03_langgraph"
-    chapters:
-      - {source: "01_introduction.ipynb", output: "ch01.typ", title: "소개", diagrams: ["stategraph-structure"]}
-      - {source: "02_graph_api.ipynb", output: "ch02.typ", title: "Graph API", diagrams: []}
-      - {source: "03_functional_api.ipynb", output: "ch03.typ", title: "Functional API", diagrams: ["functional-api-flow"]}
-      - {source: "04_workflows.ipynb", output: "ch04.typ", title: "워크플로", diagrams: ["workflow-patterns"]}
-      - {source: "05_agents.ipynb", output: "ch05.typ", title: "에이전트", diagrams: []}
-      - {source: "06_persistence_and_memory.ipynb", output: "ch06.typ", title: "영속성과 메모리", diagrams: ["persistence-checkpointer"]}
-      - {source: "07_streaming.ipynb", output: "ch07.typ", title: "스트리밍", diagrams: []}
-      - {source: "08_interrupts_and_time_travel.ipynb", output: "ch08.typ", title: "인터럽트와 타임 트래블", diagrams: ["interrupt-resume"]}
-      - {source: "09_subgraphs.ipynb", output: "ch09.typ", title: "서브그래프", diagrams: ["subgraph-composition"]}
-      - {source: "10_production.ipynb", output: "ch10.typ", title: "프로덕션", diagrams: []}
-      - {source: "11_local_server.ipynb", output: "ch11.typ", title: "로컬 서버", diagrams: []}
-      - {source: "12_durable_execution.ipynb", output: "ch12.typ", title: "내구적 실행", diagrams: []}
-      - {source: "13_api_guide_and_pregel.ipynb", output: "ch13.typ", title: "API 가이드와 Pregel", diagrams: []}
-      - {source: "14_fault_tolerance.ipynb", output: "ch14.typ", title: "Fault Tolerance", diagrams: []}
-
-  - number: 4
-    title: "Deep Agents"
-    subtitle: "Framework-Agnostic Agent Building"
-    source_dir: "04_deepagents"
-    chapters:
-      - {source: "01_introduction.ipynb", output: "ch01.typ", title: "소개", diagrams: ["deepagent-arch"]}
-      - {source: "02_quickstart.ipynb", output: "ch02.typ", title: "퀵스타트", diagrams: []}
-      - {source: "03_customization.ipynb", output: "ch03.typ", title: "커스터마이징", diagrams: []}
-      - {source: "04_backends.ipynb", output: "ch04.typ", title: "백엔드", diagrams: ["backend-types"]}
-      - {source: "05_subagents.ipynb", output: "ch05.typ", title: "서브에이전트", diagrams: ["subagent-delegation"]}
-      - {source: "06_memory_and_skills.ipynb", output: "ch06.typ", title: "메모리와 스킬", diagrams: ["memory-skills"]}
-      - {source: "07_advanced.ipynb", output: "ch07.typ", title: "고급 기능", diagrams: []}
-      - {source: "08_harness.ipynb", output: "ch08.typ", title: "AgentHarness", diagrams: ["harness-lifecycle"]}
-      - {source: "09_comparison.ipynb", output: "ch09.typ", title: "프레임워크 비교", diagrams: []}
-      - {source: "10_sandboxes_and_acp.ipynb", output: "ch10.typ", title: "샌드박스와 ACP", diagrams: []}
-
-  - number: 5
-    title: "고급 패턴"
-    subtitle: "Advanced Agent Patterns"
-    source_dir: "05_advanced"
-    chapters:
-      - {source: "00_migration.ipynb", output: "ch00.typ", title: "마이그레이션", diagrams: []}
-      - {source: "01_middleware.ipynb", output: "ch01.typ", title: "미들웨어", diagrams: []}
-      - {source: "02_multi_agent_subagents.ipynb", output: "ch02.typ", title: "멀티 에이전트 — 서브에이전트", diagrams: ["supervisor-pattern"]}
-      - {source: "03_multi_agent_handoffs_router.ipynb", output: "ch03.typ", title: "멀티 에이전트 — 핸드오프와 라우터", diagrams: ["handoff-state-machine"]}
-      - {source: "04_context_memory.ipynb", output: "ch04.typ", title: "컨텍스트와 메모리", diagrams: []}
-      - {source: "05_agentic_rag.ipynb", output: "ch05.typ", title: "Agentic RAG", diagrams: ["agentic-rag-pipeline"]}
-      - {source: "06_sql_agent.ipynb", output: "ch06.typ", title: "SQL 에이전트", diagrams: []}
-      - {source: "07_data_analysis.ipynb", output: "ch07.typ", title: "데이터 분석", diagrams: []}
-      - {source: "08_voice_agent.ipynb", output: "ch08.typ", title: "음성 에이전트", diagrams: []}
-      - {source: "09_production.ipynb", output: "ch09.typ", title: "프로덕션 배포", diagrams: ["production-deploy"]}
-
-  - number: 7
-    title: "실전 응용"
-    subtitle: "Real-World Applications"
-    source_dir: "07_examples"
-    chapters:
-      - {source: "01_rag_agent.ipynb", output: "ch01.typ", title: "RAG 에이전트", diagrams: ["rag-agent-flow"]}
-      - {source: "02_sql_agent.ipynb", output: "ch02.typ", title: "SQL 에이전트", diagrams: []}
-      - {source: "03_data_analysis_agent.ipynb", output: "ch03.typ", title: "데이터 분석 에이전트", diagrams: []}
-      - {source: "04_ml_agent.ipynb", output: "ch04.typ", title: "ML 에이전트", diagrams: []}
-      - {source: "05_deep_research_agent.ipynb", output: "ch05.typ", title: "딥 리서치 에이전트", diagrams: ["deep-research-workflow"]}
-      - {source: "06_multimodal_pdf_rag.ipynb", output: "ch06.typ", title: "멀티모달 PDF RAG", diagrams: []}
-      - {source: "07_content_builder_agent.ipynb", output: "ch07.typ", title: "Content Builder 에이전트", diagrams: []}
+- number: 1
+  title: 에이전트 입문
+  subtitle: Foundations of AI Agents
+  source_dir: 01_beginner
+  chapters:
+  - source: 00_setup.ipynb
+    output: ch00.typ
+    title: 환경 설정
+    diagrams: []
+  - source: 01_llm_basics.ipynb
+    output: ch01.typ
+    title: LLM 기초
+    diagrams:
+    - message-types
+  - source: 02_langchain_basics.ipynb
+    output: ch02.typ
+    title: LangChain 기초
+    diagrams:
+    - beginner-overview
+  - source: 03_langchain_memory.ipynb
+    output: ch03.typ
+    title: LangChain 메모리
+    diagrams: []
+  - source: 04_langgraph_basics.ipynb
+    output: ch04.typ
+    title: LangGraph 기초
+    diagrams:
+    - react-loop-basic
+  - source: 05_deep_agents_basics.ipynb
+    output: ch05.typ
+    title: Deep Agents 기초
+    diagrams: []
+  - source: 06_comparison.ipynb
+    output: ch06.typ
+    title: 프레임워크 비교
+    diagrams:
+    - framework-selection
+  - source: 07_mini_project.ipynb
+    output: ch07.typ
+    title: 미니 프로젝트
+    diagrams: []
+- number: 2
+  title: LangChain
+  subtitle: Building Blocks for AI Applications
+  source_dir: 02_langchain
+  chapters:
+  - source: 01_introduction.ipynb
+    output: ch01.typ
+    title: 소개
+    diagrams:
+    - langchain-arch
+  - source: 02_quickstart.ipynb
+    output: ch02.typ
+    title: 퀵스타트
+    diagrams: []
+  - source: 03_models_and_messages.ipynb
+    output: ch03.typ
+    title: 모델과 메시지
+    diagrams: []
+  - source: 04_tools_and_structured_output.ipynb
+    output: ch04.typ
+    title: 도구와 구조적 출력
+    diagrams:
+    - agent-tool-llm-cycle
+  - source: 05_memory_and_streaming.ipynb
+    output: ch05.typ
+    title: 메모리와 스트리밍
+    diagrams:
+    - memory-flow
+  - source: 06_middleware.ipynb
+    output: ch06.typ
+    title: 미들웨어
+    diagrams:
+    - middleware-pipeline
+  - source: 07_hitl_and_runtime.ipynb
+    output: ch07.typ
+    title: HITL과 런타임
+    diagrams: []
+  - source: 08_multi_agent.ipynb
+    output: ch08.typ
+    title: 멀티 에이전트
+    diagrams:
+    - multi-agent-patterns
+  - source: 09_custom_workflow_and_rag.ipynb
+    output: ch09.typ
+    title: 커스텀 워크플로와 RAG
+    diagrams: []
+  - source: 10_production.ipynb
+    output: ch10.typ
+    title: 프로덕션
+    diagrams: []
+  - source: 11_mcp.ipynb
+    output: ch11.typ
+    title: MCP
+    diagrams:
+    - mcp-protocol
+  - source: 12_frontend_streaming.ipynb
+    output: ch12.typ
+    title: 프론트엔드 스트리밍
+    diagrams: []
+  - source: 13_guardrails.ipynb
+    output: ch13.typ
+    title: 가드레일
+    diagrams:
+    - guardrails-flow
+  - source: 14_semantic_search.ipynb
+    output: ch14.typ
+    title: Semantic Search
+    diagrams: []
+- number: 3
+  title: LangGraph
+  subtitle: Stateful Agent Orchestration
+  source_dir: 03_langgraph
+  chapters:
+  - source: 01_introduction.ipynb
+    output: ch01.typ
+    title: 소개
+    diagrams:
+    - stategraph-structure
+  - source: 02_graph_api.ipynb
+    output: ch02.typ
+    title: Graph API
+    diagrams: []
+  - source: 03_functional_api.ipynb
+    output: ch03.typ
+    title: Functional API
+    diagrams:
+    - functional-api-flow
+  - source: 04_workflows.ipynb
+    output: ch04.typ
+    title: 워크플로
+    diagrams:
+    - workflow-patterns
+  - source: 05_agents.ipynb
+    output: ch05.typ
+    title: 에이전트
+    diagrams: []
+  - source: 06_persistence_and_memory.ipynb
+    output: ch06.typ
+    title: 영속성과 메모리
+    diagrams:
+    - persistence-checkpointer
+  - source: 07_streaming.ipynb
+    output: ch07.typ
+    title: 스트리밍
+    diagrams: []
+  - source: 08_interrupts_and_time_travel.ipynb
+    output: ch08.typ
+    title: 인터럽트와 타임 트래블
+    diagrams:
+    - interrupt-resume
+  - source: 09_subgraphs.ipynb
+    output: ch09.typ
+    title: 서브그래프
+    diagrams:
+    - subgraph-composition
+  - source: 10_production.ipynb
+    output: ch10.typ
+    title: 프로덕션
+    diagrams: []
+  - source: 11_local_server.ipynb
+    output: ch11.typ
+    title: 로컬 서버
+    diagrams: []
+  - source: 12_durable_execution.ipynb
+    output: ch12.typ
+    title: 내구적 실행
+    diagrams: []
+  - source: 13_api_guide_and_pregel.ipynb
+    output: ch13.typ
+    title: API 가이드와 Pregel
+    diagrams: []
+  - source: 14_fault_tolerance.ipynb
+    output: ch14.typ
+    title: Fault Tolerance
+    diagrams: []
+  - source: 15_backward_compatibility.ipynb
+    output: ch15.typ
+    title: Backward Compatibility
+    diagrams: []
+  - source: 16_case_studies.ipynb
+    output: ch16.typ
+    title: Case Studies
+    diagrams: []
+- number: 4
+  title: Deep Agents
+  subtitle: Framework-Agnostic Agent Building
+  source_dir: 04_deepagents
+  chapters:
+  - source: 01_introduction.ipynb
+    output: ch01.typ
+    title: 소개
+    diagrams:
+    - deepagent-arch
+  - source: 02_quickstart.ipynb
+    output: ch02.typ
+    title: 퀵스타트
+    diagrams: []
+  - source: 03_customization.ipynb
+    output: ch03.typ
+    title: 커스터마이징
+    diagrams: []
+  - source: 04_backends.ipynb
+    output: ch04.typ
+    title: 백엔드
+    diagrams:
+    - backend-types
+  - source: 05_subagents.ipynb
+    output: ch05.typ
+    title: 서브에이전트
+    diagrams:
+    - subagent-delegation
+  - source: 06_memory_and_skills.ipynb
+    output: ch06.typ
+    title: 메모리와 스킬
+    diagrams:
+    - memory-skills
+  - source: 07_advanced.ipynb
+    output: ch07.typ
+    title: 고급 기능
+    diagrams: []
+  - source: 08_harness.ipynb
+    output: ch08.typ
+    title: AgentHarness
+    diagrams:
+    - harness-lifecycle
+  - source: 09_comparison.ipynb
+    output: ch09.typ
+    title: 프레임워크 비교
+    diagrams: []
+  - source: 10_sandboxes_and_acp.ipynb
+    output: ch10.typ
+    title: 샌드박스와 ACP
+    diagrams: []
+  - source: 12_models_and_tools.ipynb
+    output: ch16.typ
+    title: Models and Tools
+    diagrams: []
+  - source: 13_programmatic_subagents.ipynb
+    output: ch17.typ
+    title: Programmatic Subagents
+    diagrams: []
+  - source: 14_event_streaming.ipynb
+    output: ch18.typ
+    title: Event Streaming
+    diagrams: []
+  - source: 15_permissions.ipynb
+    output: ch19.typ
+    title: Permissions Practice
+    diagrams: []
+  - source: 16_quality_profiles_rubric.ipynb
+    output: ch20.typ
+    title: Quality Profiles and Rubrics
+    diagrams: []
+- number: 5
+  title: 고급 패턴
+  subtitle: Advanced Agent Patterns
+  source_dir: 05_advanced
+  chapters:
+  - source: 00_migration.ipynb
+    output: ch00.typ
+    title: 마이그레이션
+    diagrams: []
+  - source: 01_middleware.ipynb
+    output: ch01.typ
+    title: 미들웨어
+    diagrams: []
+  - source: 02_multi_agent_subagents.ipynb
+    output: ch02.typ
+    title: 멀티 에이전트 — 서브에이전트
+    diagrams:
+    - supervisor-pattern
+  - source: 03_multi_agent_handoffs_router.ipynb
+    output: ch03.typ
+    title: 멀티 에이전트 — 핸드오프와 라우터
+    diagrams:
+    - handoff-state-machine
+  - source: 04_context_memory.ipynb
+    output: ch04.typ
+    title: 컨텍스트와 메모리
+    diagrams: []
+  - source: 05_agentic_rag.ipynb
+    output: ch05.typ
+    title: Agentic RAG
+    diagrams:
+    - agentic-rag-pipeline
+  - source: 06_sql_agent.ipynb
+    output: ch06.typ
+    title: SQL 에이전트
+    diagrams: []
+  - source: 07_data_analysis.ipynb
+    output: ch07.typ
+    title: 데이터 분석
+    diagrams: []
+  - source: 08_voice_agent.ipynb
+    output: ch08.typ
+    title: 음성 에이전트
+    diagrams: []
+  - source: 09_production.ipynb
+    output: ch09.typ
+    title: 프로덕션 배포
+    diagrams:
+    - production-deploy
+  - source: 10_deep_agent_from_scratch.ipynb
+    output: ch10.typ
+    title: Deep Agent from Scratch
+    diagrams: []
+  - source: 11_custom_workflow_agent.ipynb
+    output: ch11.typ
+    title: Custom Workflow Agent
+    diagrams: []
+- number: 6
+  title: LangSmith
+  subtitle: Tracing · Evaluation · Prompt Ops · Agent Evals
+  source_dir: 06_langsmith
+  chapters:
+  - source: 07_testing_strategy.ipynb
+    output: ch07.typ
+    title: Testing Strategy
+    diagrams: []
+  - source: 08_langgraph_testing.ipynb
+    output: ch08.typ
+    title: LangGraph Testing
+    diagrams: []
+  - source: 09_runtime_rubric_evaluation.ipynb
+    output: ch09.typ
+    title: Runtime Rubric Evaluation
+    diagrams: []
+- number: 7
+  title: 실전 응용
+  subtitle: Real-World Applications
+  source_dir: 07_examples
+  chapters:
+  - source: 01_rag_agent.ipynb
+    output: ch01.typ
+    title: RAG 에이전트
+    diagrams:
+    - rag-agent-flow
+  - source: 02_sql_agent.ipynb
+    output: ch02.typ
+    title: SQL 에이전트
+    diagrams: []
+  - source: 03_data_analysis_agent.ipynb
+    output: ch03.typ
+    title: 데이터 분석 에이전트
+    diagrams: []
+  - source: 04_ml_agent.ipynb
+    output: ch04.typ
+    title: ML 에이전트
+    diagrams: []
+  - source: 05_deep_research_agent.ipynb
+    output: ch05.typ
+    title: 딥 리서치 에이전트
+    diagrams:
+    - deep-research-workflow
+  - source: 06_multimodal_pdf_rag.ipynb
+    output: ch06.typ
+    title: 멀티모달 PDF RAG
+    diagrams: []
+  - source: 07_content_builder_agent.ipynb
+    output: ch07.typ
+    title: Content Builder 에이전트
+    diagrams: []
+  - source: 10_personal_assistant_subagents.ipynb
+    output: ch10.typ
+    title: Personal Assistant Subagents
+    diagrams: []
+  - source: 11_customer_support_handoffs.ipynb
+    output: ch11.typ
+    title: Customer Support Handoffs
+    diagrams: []
+  - source: 12_router_knowledge_base.ipynb
+    output: ch12.typ
+    title: Router Knowledge Base
+    diagrams: []
+  - source: 13_skills_sql_assistant.ipynb
+    output: ch13.typ
+    title: Skills SQL Assistant
+    diagrams: []

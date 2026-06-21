@@ -48,22 +48,22 @@ Tracked notebook count:
 
 | Area | Path | Notebooks | Role |
 |---|---:|---:|---|
-| Korean core | `01_beginner`~`07_examples` | **69** | Primary source of truth and default validation scope |
-| English mirror | `en/01_beginner`~`en/07_examples` | **69** | English learner path with LangSmith 01~06 source-notebook parity restored |
+| Korean core | `01_beginner`~`07_examples` | **86** | Primary source of truth and default validation scope |
+| English mirror | `en/01_beginner`~`en/07_examples` | **86** | English learner path with 01~07 source-notebook parity restored |
 | Integrations | `08_integration` | **69** | Provider/cloud/local-service integration catalog; excluded from default live harness |
-| **Total** | all tracked `.ipynb` files | **207** | Korean, English, and integration notebooks |
+| **Total** | all tracked `.ipynb` files | **241** | Korean, English, and integration notebooks |
 
 ### Core curriculum
 
 | Part | Path | Notebooks | Core topics |
 |---:|---|---:|---|
 | 01 | [`01_beginner/`](../01_beginner/) | 8 | LLM basics, messages, prompts, ReAct, framework comparison |
-| 02 | [`02_langchain/`](../02_langchain/) | 13 | LangChain v1, `create_agent`, tools, middleware, MCP, guardrails, streaming |
-| 03 | [`03_langgraph/`](../03_langgraph/) | 14 | Graph/Functional API, persistence, interrupts, subgraphs, local server, Pregel, fault tolerance |
-| 04 | [`04_deepagents/`](../04_deepagents/) | 11 | `create_deep_agent`, backends, subagents, memory/skills, interpreters, async subagents |
-| 05 | [`05_advanced/`](../05_advanced/) | 10 | migration, middleware, multi-agent, RAG, SQL, data analysis, voice, production |
-| 06 | [`06_langsmith/`](../06_langsmith/) | 6 | tracing, datasets/evaluation, prompt hub, monitoring, Agent Evals |
-| 07 | [`07_examples/`](../07_examples/) | 7 | RAG, SQL, data analysis, ML, deep research, multimodal PDF RAG, content builder |
+| 02 | [`02_langchain/`](../02_langchain/) | 14 | LangChain v1, `create_agent`, tools, middleware, MCP, guardrails, streaming, semantic search |
+| 03 | [`03_langgraph/`](../03_langgraph/) | 16 | Graph/Functional API, persistence, interrupts, subgraphs, local server, Pregel, fault tolerance, compatibility, case studies |
+| 04 | [`04_deepagents/`](../04_deepagents/) | 16 | `create_deep_agent`, backends, subagents, memory/skills, models/tools, event streaming, permissions, rubrics |
+| 05 | [`05_advanced/`](../05_advanced/) | 12 | migration, middleware, multi-agent, RAG, SQL, data analysis, voice, production, deep/custom agents |
+| 06 | [`06_langsmith/`](../06_langsmith/) | 9 | tracing, datasets/evaluation, prompt hub, monitoring, Agent Evals, testing strategy, graph testing, runtime rubric |
+| 07 | [`07_examples/`](../07_examples/) | 11 | RAG, SQL, data analysis, ML, deep research, multimodal PDF RAG, content builder, subagents, handoffs, router, skills |
 | 08 | [`08_integration/`](../08_integration/) | 69 | chat models, embeddings, vector stores, retrievers, tools, sandboxes, providers, observability |
 
 ---
@@ -73,10 +73,10 @@ Tracked notebook count:
 | Goal | Suggested path |
 |---|---|
 | Start from scratch | `01_beginner` → `02_langchain/01~05` |
-| Build LangChain apps | `02_langchain` → `05_advanced/01_middleware.ipynb` → `07_examples` |
-| Learn stateful workflows | `03_langgraph` → `03_langgraph/14_fault_tolerance.ipynb` → `05_advanced/02~03` |
-| Build with Deep Agents | `04_deepagents` → `04_deepagents/11_async_subagents.ipynb` → `07_examples/07_content_builder_agent.ipynb` |
-| Operate and evaluate agents | `06_langsmith` → `05_advanced/09_production.ipynb` |
+| Build LangChain apps | `02_langchain` → `02_langchain/14_semantic_search.ipynb` → `05_advanced/01_middleware.ipynb` → `07_examples` |
+| Learn stateful workflows | `03_langgraph` → `03_langgraph/14_fault_tolerance.ipynb` → `03_langgraph/15_backward_compatibility.ipynb` → `05_advanced/02~03` |
+| Build with Deep Agents | `04_deepagents` → `04_deepagents/12_models_and_tools.ipynb` → `04_deepagents/14_event_streaming.ipynb` → `07_examples/07_content_builder_agent.ipynb` |
+| Operate and evaluate agents | `06_langsmith` → `06_langsmith/07_testing_strategy.ipynb` → `06_langsmith/08_langgraph_testing.ipynb` → `05_advanced/09_production.ipynb` |
 | Integrate providers and services | The relevant `08_integration/NN_*` category |
 
 `08_integration/` mixes provider keys, local services, and paid sandboxes, so it is intentionally excluded from the default smoke harness.
@@ -89,8 +89,8 @@ The repository also maintains Typst-generated PDF handbooks.
 
 | Language | PDF | Typst entry | Chapters |
 |---|---|---|---:|
-| Korean | [`../book/agent-handbook.pdf`](../book/agent-handbook.pdf) | [`../book/main.typ`](../book/main.typ) | 81 |
-| English | [`book/agent-handbook-en.pdf`](book/agent-handbook-en.pdf) | [`book/main.typ`](book/main.typ) | 81 |
+| Korean | [`../book/agent-handbook.pdf`](../book/agent-handbook.pdf) | [`../book/main.typ`](../book/main.typ) | 98 |
+| English | [`book/agent-handbook-en.pdf`](book/agent-handbook-en.pdf) | [`book/main.typ`](book/main.typ) | 98 |
 
 Build:
 
@@ -104,15 +104,15 @@ Part layout:
 | Part | Topic | Chapters |
 |---:|---|---:|
 | I | Agent foundations | 8 |
-| II | LangChain v1 | 13 |
-| III | LangGraph v1 | 14 |
-| IV | Deep Agents | 15 |
-| V | Advanced patterns | 10 |
-| VI | LangSmith | 6 |
-| VII | Applied examples | 7 |
+| II | LangChain v1 | 14 |
+| III | LangGraph v1 | 16 |
+| IV | Deep Agents | 20 |
+| V | Advanced patterns | 12 |
+| VI | LangSmith | 9 |
+| VII | Applied examples | 11 |
 | VIII | Integrations | 8 |
 
-Note: Part IV late chapters and Part VI include manually maintained Typst. Do not add those chapters to notebook YAML generation unless you intentionally migrate the manual chapters.
+Regeneration note: the Korean handbook build converts the notebook-derived chapters listed in `book/scripts/config.yaml` before compiling. The English handbook build compiles the curated Typst tree directly; `en/book/scripts/config.yaml` is a targeted regeneration list for the new English notebook-derived chapters only, so older hand-polished chapters are not overwritten accidentally. Part VIII / `08_integration` is a separate handbook lane and is not generated from either notebook YAML config.
 
 ---
 
@@ -138,7 +138,7 @@ The harness:
 - logs to the LangSmith project `langchain-langgraph-deepagents-notebooks`, and
 - namespaces LangSmith mutations with `local-exec-*` prefixes.
 
-Recent verification evidence is in [`../docs/verification/2026-06-17-tutorial-gap-analysis.md`](../docs/verification/2026-06-17-tutorial-gap-analysis.md).
+Recent verification evidence is in [`../docs/verification/2026-06-21-official-docs-implementation-batch-2.md`](../docs/verification/2026-06-21-official-docs-implementation-batch-2.md).
 
 ---
 

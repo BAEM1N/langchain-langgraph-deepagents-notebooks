@@ -13,5 +13,11 @@
     [3. 데이터 분석 에이전트],
     [4. 머신러닝 에이전트],
     [5. 딥 리서치 에이전트],
+    [6. 멀티모달 PDF RAG],
+    [7. Content Builder 에이전트],
+    [10. Personal Assistant Subagents],
+    [11. Customer Support Handoffs],
+    [12. Router Knowledge Base],
+    [13. Skills SQL Assistant],
   ),
 )

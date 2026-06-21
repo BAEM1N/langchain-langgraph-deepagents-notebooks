@@ -14,6 +14,7 @@ import sys
 import time
 from pathlib import Path
 
+import yaml
 
 BOOK_DIR = Path(__file__).parent.parent
 SCRIPTS_DIR = Path(__file__).parent
@@ -42,7 +43,10 @@ def run_diagrams() -> bool:
 
 def run_convert() -> bool:
     """Convert all notebooks to Typst."""
-    step("Step 2: Converting 59 notebooks → Typst")
+    with CONFIG_PATH.open("r", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+    chapter_count = sum(len(part.get("chapters", [])) for part in config["parts"])
+    step(f"Step 2: Converting {chapter_count} notebooks → Typst")
     result = subprocess.run(
         [sys.executable, str(SCRIPTS_DIR / "nb2typ.py"), "--config", str(CONFIG_PATH)],
         cwd=str(BOOK_DIR),
@@ -84,7 +88,7 @@ def run_compile() -> bool:
         print(f"  OK Size: {size_mb:.1f} MB")
         return True
     else:
-        print(f"  FAIL Compilation failed:")
+        print("  FAIL Compilation failed:")
         print(result.stderr[:2000])
         return False
 

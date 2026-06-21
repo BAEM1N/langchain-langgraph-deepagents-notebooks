@@ -1,7 +1,7 @@
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-= Part 3: LangGraph
+= Part III: LangGraph
 
 #part-page(
   3,
@@ -21,5 +21,8 @@
     [11. Local Server],
     [12. Durable Execution],
     [13. API Guide and Pregel],
+    [14. Fault Tolerance],
+    [15. Backward Compatibility],
+    [16. Case Studies],
   ),
 )

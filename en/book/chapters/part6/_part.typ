@@ -14,5 +14,8 @@
     [4. Prompt Hub Versioning],
     [5. Production Monitoring],
     [6. Agent Evals],
+    [7. Testing Strategy],
+    [8. LangGraph Testing],
+    [9. Runtime Rubric Evaluation],
   ),
 )

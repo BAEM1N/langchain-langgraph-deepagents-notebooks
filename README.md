@@ -38,10 +38,10 @@
 
 | 구분 | 수량 | 설명 |
 |---|---:|---|
-| Korean core notebooks | 69 | `01_beginner`~`07_examples` 한국어 원본 학습 경로 |
-| English mirror notebooks | 69 | `en/01_beginner`~`en/07_examples` 영어 학습 경로 |
+| Korean core notebooks | 86 | `01_beginner`~`07_examples` 한국어 원본 학습 경로 |
+| English mirror notebooks | 86 | `en/01_beginner`~`en/07_examples` 영어 학습 경로 |
 | Integration notebooks | 69 | `08_integration` provider·DB·sandbox·observability 통합 카탈로그 |
-| Total notebooks | 207 | tracked `.ipynb` 기준 전체 노트북 |
+| Total notebooks | 241 | tracked `.ipynb` 기준 전체 노트북 |
 | Handbook PDFs | 2 | 한국어/영어 Typst 기반 PDF 핸드북 |
 | Lecture decks | `decks/` | 커밋 가능한 강의용 HTML/PDF/PPTX/대본 산출물 보관 위치 |
 | Local docs | 100+ | LangChain, LangGraph, Deep Agents, Skills, observability 참고 문서 |
@@ -110,12 +110,12 @@ uv run jupyter lab
 | Part | 경로 | 노트북 | 역할 | 주요 주제 |
 |---:|---|---:|---|---|
 | 01 | [`01_beginner/`](01_beginner/) | 8 | 입문 | LLM 기본기, LangChain/LangGraph/Deep Agents 첫 실습, 미니 프로젝트 |
-| 02 | [`02_langchain/`](02_langchain/) | 13 | LangChain 심화 | agents, tools, structured output, memory, middleware, HITL, MCP, guardrails |
-| 03 | [`03_langgraph/`](03_langgraph/) | 14 | LangGraph 심화 | Graph API, Functional API, persistence, streaming, interrupts, subgraphs, fault tolerance |
-| 04 | [`04_deepagents/`](04_deepagents/) | 11 | Deep Agents 심화 | `create_deep_agent`, backend, subagent, memory, skills, sandbox, ACP, async subagents |
-| 05 | [`05_advanced/`](05_advanced/) | 10 | 고급 패턴 | migration, middleware, multi-agent, context/memory, agentic RAG, SQL, voice, production |
-| 06 | [`06_langsmith/`](06_langsmith/) | 6 | 운영·평가 | tracing, datasets, evaluation, prompt hub, production monitoring, Agent Evals |
-| 07 | [`07_examples/`](07_examples/) | 7 | 실전 예제 | RAG, SQL, data analysis, ML, deep research, multimodal PDF RAG, content builder |
+| 02 | [`02_langchain/`](02_langchain/) | 14 | LangChain 심화 | agents, tools, structured output, memory, middleware, HITL, MCP, guardrails, semantic search |
+| 03 | [`03_langgraph/`](03_langgraph/) | 16 | LangGraph 심화 | Graph API, Functional API, persistence, streaming, interrupts, subgraphs, fault tolerance, compatibility, case studies |
+| 04 | [`04_deepagents/`](04_deepagents/) | 16 | Deep Agents 심화 | `create_deep_agent`, backend, subagent, memory, skills, sandbox, ACP, async/programmatic subagents, event streaming, permissions, rubric |
+| 05 | [`05_advanced/`](05_advanced/) | 12 | 고급 패턴 | migration, middleware, multi-agent, context/memory, agentic RAG, SQL, voice, production, custom workflow |
+| 06 | [`06_langsmith/`](06_langsmith/) | 9 | 운영·평가 | tracing, datasets, evaluation, prompt hub, production monitoring, Agent Evals, testing strategy, graph testing, runtime rubric |
+| 07 | [`07_examples/`](07_examples/) | 11 | 실전 예제 | RAG, SQL, data analysis, ML, deep research, multimodal PDF RAG, content builder, subagents, handoffs, router, skills |
 | 08 | [`08_integration/`](08_integration/) | 69 | 통합 카탈로그 | providers, embeddings, vector stores, retrievers, tools, sandboxes, observability |
 
 ---
@@ -125,10 +125,10 @@ uv run jupyter lab
 | 목표 | 추천 순서 |
 |---|---|
 | LLM Agent를 처음 배우기 | `01_beginner` → `02_langchain/01~05` → `07_examples/01_rag_agent.ipynb` |
-| LangChain v1 앱 개발 | `02_langchain` → `05_advanced/01_middleware.ipynb` → `07_examples` |
-| LangGraph로 상태 기반 워크플로 만들기 | `03_langgraph` → `03_langgraph/14_fault_tolerance.ipynb` → `05_advanced/02~03` |
-| Deep Agents 중심으로 빠르게 만들기 | `04_deepagents` → `04_deepagents/11_async_subagents.ipynb` → `07_examples/07_content_builder_agent.ipynb` |
-| 운영·평가 체계 붙이기 | `06_langsmith` → `05_advanced/09_production.ipynb` |
+| LangChain v1 앱 개발 | `02_langchain` → `02_langchain/14_semantic_search.ipynb` → `05_advanced/01_middleware.ipynb` → `07_examples` |
+| LangGraph로 상태 기반 워크플로 만들기 | `03_langgraph` → `03_langgraph/14_fault_tolerance.ipynb` → `03_langgraph/15_backward_compatibility.ipynb` → `05_advanced/02~03` |
+| Deep Agents 중심으로 빠르게 만들기 | `04_deepagents` → `04_deepagents/12_models_and_tools.ipynb` → `04_deepagents/14_event_streaming.ipynb` → `07_examples/07_content_builder_agent.ipynb` |
+| 운영·평가 체계 붙이기 | `06_langsmith` → `06_langsmith/07_testing_strategy.ipynb` → `06_langsmith/08_langgraph_testing.ipynb` → `05_advanced/09_production.ipynb` |
 | provider나 DB 통합 찾아보기 | 필요한 항목만 [`08_integration/`](08_integration/)에서 선택 |
 
 > `08_integration/`은 API key, 로컬 서비스, cloud sandbox, 과금 가능 리소스가 섞여 있으므로 기본 smoke test 대상에서 제외됩니다.
@@ -172,6 +172,10 @@ uv run jupyter lab
 | Deep Research Agent | [`07_examples/05_deep_research_agent.ipynb`](07_examples/05_deep_research_agent.ipynb) | [`deep-research`](07_examples/skills/deep-research/SKILL.md) |
 | Multimodal PDF RAG | [`07_examples/06_multimodal_pdf_rag.ipynb`](07_examples/06_multimodal_pdf_rag.ipynb) | [`multimodal-rag`](07_examples/skills/multimodal-rag/SKILL.md) |
 | Content Builder Agent | [`07_examples/07_content_builder_agent.ipynb`](07_examples/07_content_builder_agent.ipynb) | [`content-builder`](07_examples/skills/content-builder/SKILL.md) |
+| Personal Assistant Subagents | [`07_examples/10_personal_assistant_subagents.ipynb`](07_examples/10_personal_assistant_subagents.ipynb) | 공식 subagents 패턴 |
+| Customer Support Handoffs | [`07_examples/11_customer_support_handoffs.ipynb`](07_examples/11_customer_support_handoffs.ipynb) | 공식 handoffs 패턴 |
+| Router Knowledge Base | [`07_examples/12_router_knowledge_base.ipynb`](07_examples/12_router_knowledge_base.ipynb) | 공식 router 패턴 |
+| Skills SQL Assistant | [`07_examples/13_skills_sql_assistant.ipynb`](07_examples/13_skills_sql_assistant.ipynb) | 공식 skills + SQL safety 패턴 |
 
 Deep Agents에서 skills 디렉토리를 연결하면 예제별 `SKILL.md`를 progressive disclosure 방식으로 사용할 수 있습니다.
 
@@ -229,7 +233,7 @@ UV_NO_SYNC=1 uv run python local/notebook_execution_01_07_gpt41/run_notebooks.py
   --changed-only --force --timeout 300 --allow-langsmith-mutations
 ```
 
-최근 검증 기록은 [`docs/verification/2026-06-17-tutorial-gap-analysis.md`](docs/verification/2026-06-17-tutorial-gap-analysis.md)를 참고하세요.
+최근 검증 기록은 [`docs/verification/2026-06-21-tutorial-update-and-addition-backlog.md`](docs/verification/2026-06-21-tutorial-update-and-addition-backlog.md)를 참고하세요.
 
 ---
 

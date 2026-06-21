@@ -33,8 +33,8 @@
 #include "chapters/part2/ch11.typ"
 #include "chapters/part2/ch12.typ"
 #include "chapters/part2/ch13.typ"
+#include "chapters/part2/ch14.typ"
 
-// ─── Part III: LangGraph ──────────────────────────────────────
 #include "chapters/part3/_part.typ"
 #include "chapters/part3/ch01.typ"
 #include "chapters/part3/ch02.typ"
@@ -50,8 +50,9 @@
 #include "chapters/part3/ch12.typ"
 #include "chapters/part3/ch13.typ"
 #include "chapters/part3/ch14.typ"
+#include "chapters/part3/ch15.typ"
+#include "chapters/part3/ch16.typ"
 
-// ─── Part IV: Deep Agents ─────────────────────────────────────
 #include "chapters/part4/_part.typ"
 #include "chapters/part4/ch01.typ"
 #include "chapters/part4/ch02.typ"
@@ -68,8 +69,12 @@
 #include "chapters/part4/ch13.typ"
 #include "chapters/part4/ch14.typ"
 #include "chapters/part4/ch15.typ"
+#include "chapters/part4/ch16.typ"
+#include "chapters/part4/ch17.typ"
+#include "chapters/part4/ch18.typ"
+#include "chapters/part4/ch19.typ"
+#include "chapters/part4/ch20.typ"
 
-// ─── Part V: 고급 패턴 ───────────────────────────────────────
 #include "chapters/part5/_part.typ"
 #include "chapters/part5/ch00.typ"
 #include "chapters/part5/ch01.typ"
@@ -81,8 +86,9 @@
 #include "chapters/part5/ch07.typ"
 #include "chapters/part5/ch08.typ"
 #include "chapters/part5/ch09.typ"
+#include "chapters/part5/ch10.typ"
+#include "chapters/part5/ch11.typ"
 
-// ─── Part VI: 실전 응용 ───────────────────────────────────────
 #include "chapters/part6/_part.typ"
 #include "chapters/part6/ch01.typ"
 #include "chapters/part6/ch02.typ"
@@ -90,8 +96,10 @@
 #include "chapters/part6/ch04.typ"
 #include "chapters/part6/ch05.typ"
 #include "chapters/part6/ch06.typ"
+#include "chapters/part6/ch07.typ"
+#include "chapters/part6/ch08.typ"
+#include "chapters/part6/ch09.typ"
 
-// ─── Part VII: LangSmith ──────────────────────────────────────
 #include "chapters/part7/_part.typ"
 #include "chapters/part7/ch01.typ"
 #include "chapters/part7/ch02.typ"
@@ -100,8 +108,11 @@
 #include "chapters/part7/ch05.typ"
 #include "chapters/part7/ch06.typ"
 #include "chapters/part7/ch07.typ"
+#include "chapters/part7/ch10.typ"
+#include "chapters/part7/ch11.typ"
+#include "chapters/part7/ch12.typ"
+#include "chapters/part7/ch13.typ"
 
-// ─── Part VIII: Integrations ──────────────────────────────────
 #include "chapters/part8/_part.typ"
 #include "chapters/part8/ch01.typ"
 #include "chapters/part8/ch02.typ"

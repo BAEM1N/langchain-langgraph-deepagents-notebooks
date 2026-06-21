@@ -1,7 +1,7 @@
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-= Part 5: Advanced Patterns
+= Part V: Advanced Patterns
 
 #part-page(
   5,
@@ -18,5 +18,7 @@
     [7. Data Analysis],
     [8. Voice Agent],
     [9. Production Deployment],
+    [10. Deep Agent from Scratch],
+    [11. Custom Workflow Agent],
   ),
 )

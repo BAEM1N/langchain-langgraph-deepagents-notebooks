@@ -1,7 +1,7 @@
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-= Part 2: LangChain
+= Part II: LangChain
 
 #part-page(
   2,
@@ -21,5 +21,6 @@
     [11. MCP],
     [12. Frontend Streaming],
     [13. Guardrails],
+    [14. Semantic Search],
   ),
 )

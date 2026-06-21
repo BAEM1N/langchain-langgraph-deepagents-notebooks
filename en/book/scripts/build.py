@@ -7,6 +7,9 @@ BOOK_DIR = Path(__file__).resolve().parent.parent
 OUTPUT_PDF = BOOK_DIR / "agent-handbook-en.pdf"
 
 def main() -> int:
+    # compile-only boundary: this validates the curated Typst tree, not
+    # freshness of notebook-derived generated chapters. Refresh those with
+    # `python book/scripts/nb2typ.py --config en/book/scripts/config.yaml`.
     typst = shutil.which("typst")
     if not typst:
         print("typst is not installed")
@@ -23,6 +26,7 @@ def main() -> int:
         "--font-path",
         str(shared_fonts),
     ]
+    print("English handbook compile-only: refresh generated chapters with en/book/scripts/config.yaml when notebooks change.")
     result = subprocess.run(cmd, cwd=str(BOOK_DIR))
     return result.returncode
 

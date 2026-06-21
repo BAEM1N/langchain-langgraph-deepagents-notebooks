@@ -14,5 +14,8 @@
     [4. Prompt Hub 버전 관리],
     [5. 프로덕션 모니터링],
     [6. Agent Evals],
+    [7. Testing Strategy],
+    [8. LangGraph Testing],
+    [9. Runtime Rubric Evaluation],
   ),
 )

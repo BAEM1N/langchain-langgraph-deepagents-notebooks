@@ -1,7 +1,7 @@
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-= Part 4: Deep Agents
+= Part IV: Deep Agents
 
 #part-page(
   4,
@@ -18,5 +18,15 @@
     [8. Agent Harness],
     [9. Framework Comparison],
     [10. Sandboxes and ACP],
+    [11. Async Subagents],
+    [12. Going to Production],
+    [13. Context Engineering],
+    [14. Streaming],
+    [15. Permissions],
+    [16. Models and Tools],
+    [17. Programmatic Subagents],
+    [18. Event Streaming],
+    [19. Permissions Practice],
+    [20. Quality Profiles and Rubrics],
   ),
 )

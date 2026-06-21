@@ -6,6 +6,7 @@
 
 | 경로 | 용도 |
 |---|---|
+| [`concepts/`](concepts/) | LangChain/LangGraph/Deep Agents 공통 개념: 제품 선택, provider/model, memory, context |
 | [`langchain/`](langchain/) | LangChain v1 agents, tools, middleware, RAG, streaming, deploy, observability 정리 |
 | [`langgraph/`](langgraph/) | LangGraph v1 Graph API, Functional API, persistence, interrupts, subgraphs, deploy 정리 |
 | [`deepagents/`](deepagents/) | Deep Agents SDK, backend, subagents, memory, skills, sandbox, production 정리 |
@@ -39,10 +40,12 @@
 
 ## 노트북 작성 시 사용법
 
-1. 새 LangChain 코드를 작성하기 전 [`langchain/`](langchain/)과 [`skills/langchain-v1-modern.md`](skills/langchain-v1-modern.md)를 확인합니다.
-2. LangGraph 예제를 만들 때는 [`langgraph/`](langgraph/)와 관련 skills 문서를 먼저 확인합니다.
-3. Deep Agents 예제를 만들 때는 [`deepagents/`](deepagents/)와 `docs/skills/deep-agents-*.md`를 확인합니다.
-4. provider, tracing, 평가, 배포 성격의 예제는 `OBSERVABILITY.md`, `MODEL_PROVIDERS.md`, `verification/` 기록을 함께 확인합니다.
+1. 프레임워크 선택이나 공통 용어가 필요하면 먼저 [`concepts/`](concepts/)를 확인합니다.
+2. 새 LangChain 코드를 작성하기 전 [`langchain/`](langchain/)과 [`skills/langchain-v1-modern.md`](skills/langchain-v1-modern.md)를 확인합니다.
+3. LangGraph 예제를 만들 때는 [`langgraph/`](langgraph/)와 관련 skills 문서를 먼저 확인합니다.
+4. Deep Agents 예제를 만들 때는 [`deepagents/`](deepagents/)와 `docs/skills/deep-agents-*.md`를 확인합니다.
+5. frontend, protocol, CLI, cloud/provider 성격의 예제는 기본 노트북 트랙보다 `08_integration/` 후보인지 먼저 판단합니다.
+6. provider, tracing, 평가, 배포 성격의 예제는 `OBSERVABILITY.md`, `MODEL_PROVIDERS.md`, `verification/` 기록을 함께 확인합니다.
 
 ## 유지보수 체크리스트
 
