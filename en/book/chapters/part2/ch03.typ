@@ -36,6 +36,33 @@ model = ChatOpenAI(
 print("Model initialized:", model.model_name)
 `````)
 
+#code-block(`````python
+# Optional observability setup: LangSmith or Langfuse
+# Set the keys in .env, or uncomment the lines below to enter them manually.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: automatically enabled when LANGSMITH_TRACING=true
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: pass config={"callbacks": [langfuse_handler]} to invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
 == 3.2 Comparing Model Providers
 
 LangChain v1 can initialize models from many providers through the unified `init_chat_model()` API.
@@ -59,7 +86,7 @@ LangChain v1 can initialize models from many providers through the unified `init
   [`langchain-anthropic`],
   [`ANTHROPIC_API_KEY`],
   [Google],
-  [`"google:gemini-2.5-flash-lite"`],
+  [`"google:gemini-2.0-flash"`],
   [`langchain-google-genai`],
   [`GOOGLE_API_KEY`],
   [AWS Bedrock],
@@ -87,6 +114,19 @@ If the provider-specific package is installed, you can create a model with a sin
 When you are using OpenAI directly, `ChatOpenAI` is usually the more straightforward option.
 
 
+#code-block(`````python
+from langchain.chat_models import init_chat_model
+
+# init_chat_model with OpenAI
+model_direct = init_chat_model(
+    model="openai:gpt-5.4",
+    temperature=0,
+)
+
+response = model_direct.invoke("Hello! What is 2+2?", config=lf_config)
+print("Model response:", response.content)
+`````)
+
 == 3.4 `invoke()`, `stream()`, and `batch()` Patterns
 
 Every LangChain v1 model supports three calling patterns:
@@ -111,6 +151,31 @@ Every LangChain v1 model supports three calling patterns:
   [`List[AIMessage]`],
 )
 
+
+#code-block(`````python
+# invoke: single call
+response = model.invoke("Explain what LangChain is in one sentence.", config=lf_config)
+print("invoke result:", response.content)
+`````)
+
+#code-block(`````python
+# stream: token-level streaming
+print("stream result:", end=" ")
+for chunk in model.stream("Count from 1 to 5.", config=lf_config):
+    print(chunk.content, end="", flush=True)
+print()
+`````)
+
+#code-block(`````python
+# batch: process multiple inputs at once
+responses = model.batch([
+    "What is Python?",
+    "What is JavaScript?",
+    "What is Rust?",
+], config=lf_config)
+for i, resp in enumerate(responses):
+    print(f"Response {i+1}: {resp.content[:100]}...")
+`````)
 
 == 3.5 Message Types
 
@@ -142,6 +207,32 @@ LangChain v1's message system clearly separates the roles inside a conversation:
 If you build a list of messages and pass it into `model.invoke()`, you can preserve the conversation context across turns.
 
 
+#code-block(`````python
+from langchain.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
+
+messages = [
+    SystemMessage(content="You are a translation assistant. Translate into Korean."),
+    HumanMessage(content="Hello, how are you?"),
+]
+
+response = model.invoke(messages, config=lf_config)
+print("Translation result:", response.content)
+print(f"Message type: {type(response).__name__}")
+`````)
+
+#code-block(`````python
+# Conversation history — combine multiple message types to build context
+conversation = [
+    SystemMessage(content="You are a math tutor. Answer concisely."),
+    HumanMessage(content="What is a prime number?"),
+    AIMessage(content="A prime number is a natural number greater than 1 that has no positive divisors other than 1 and itself."),
+    HumanMessage(content="Give me five examples."),
+]
+
+response = model.invoke(conversation, config=lf_config)
+print("Response:", response.content)
+`````)
+
 == 3.6 Multimodal Messages (Image Input)
 
 In LangChain v1, you can send text and images together in the `content` of a `HumanMessage`.
@@ -155,109 +246,30 @@ content = [
 `````)
 
 
-== 3.7 Standard Output Format — `output_version="v1"`
-
-Starting from LangChain v1, every provider can emit a unified _content blocks_ serialization. Set `init_chat_model("openai:gpt-5.4", output_version="v1")` or the env var `LC_OUTPUT_VERSION="v1"`, and `AIMessage.content_blocks` will give you text, tool calls, reasoning, thinking, and citations in a single schema.
-
 #code-block(`````python
-import os
-from langchain.chat_models import init_chat_model
+# Example multimodal message structure (requires model support to run)
+from langchain.messages import HumanMessage
 
-os.environ["LC_OUTPUT_VERSION"] = "v1"
-
-model = init_chat_model("openai:gpt-5.4", output_version="v1")
-result = model.invoke("Describe LangChain v1 in one sentence.")
-
-for block in result.content_blocks:
-    print(block["type"], "→", block.get("text", block))
-`````)
-
-Streaming uses the same shape. Read partial blocks from `chunk.content_blocks` and map them to your UI.
-
-#code-block(`````python
-for chunk in model.stream("Explain multimodal input."):
-    for block in chunk.content_blocks:
-        if block["type"] == "text":
-            print(block["text"], end="")
-`````)
-
-#tip-box[`output_version="v1"` is the recommended setting for absorbing provider differences. Legacy code that depends on the string `result.content` still works in `v0`, but new projects should use v1.]
-
-
-== 3.8 Tracking Token Usage — `UsageMetadataCallbackHandler`
-
-For multi-step agent runs, aggregate token usage with a callback handler. Pass `UsageMetadataCallbackHandler` through `config={"callbacks": [...]}`, and `input_tokens` / `output_tokens` / `total_tokens` accumulate across every model call.
-
-#code-block(`````python
-from langchain_core.callbacks import UsageMetadataCallbackHandler
-
-cb = UsageMetadataCallbackHandler()
-result = agent.invoke(
-    {"messages": [{"role": "user", "content": "What is 15 * 27 + 3?"}]},
-    config={"callbacks": [cb]},
+multimodal_msg = HumanMessage(
+    content=[
+        {"type": "text", "text": "What do you see in this image?"},
+        {
+            "type": "image_url",
+            "image_url": {"url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/Camponotus_flavomarginatus_ant.jpg/320px-Camponotus_flavomarginatus_ant.jpg"},
+        },
+    ]
 )
 
-print(cb.usage_metadata)
-# {'gpt-5.4': {'input_tokens': 312, 'output_tokens': 48, 'total_tokens': 360, ...}}
+# Run with a multimodal-capable model
+try:
+    response = model.invoke([multimodal_msg], config=lf_config)
+    print("Multimodal response:", response.content)
+except Exception as e:
+    print(f"Model does not support multimodal input: {e}")
+    print("  -> Multimodal input is supported by vision-capable models such as GPT-4o and Claude.")
 `````)
 
-
-== 3.9 Runtime Config — Per-Invocation Options
-
-The `config=` argument on `invoke()` / `stream()` carries execution metadata for a single call. You can set the LangSmith trace name, tags, metadata, and concurrency limits for tools and sub-agents all at once.
-
-#code-block(`````python
-result = agent.invoke(
-    {"messages": [{"role": "user", "content": "..."}]},
-    config={
-        "run_name": "monthly-report",
-        "tags": ["batch-2025-05", "finance"],
-        "metadata": {"user_id": "u-1234", "tenant": "acme"},
-        "max_concurrency": 5,
-    },
-)
-`````)
-
-#tip-box[`run_name`, `tags`, and `metadata` flow into LangSmith and become filter/search keys in the UI. `max_concurrency` caps the parallel tool and sub-agent calls inside one graph execution.]
-
-
-== 3.10 Connection Resilience — `max_retries` / `timeout`
-
-In production, you have to ride out temporary outages from OpenAI, Anthropic, and other providers. Pass `max_retries` and `timeout` to `init_chat_model()` or `ChatOpenAI()`, and LangChain will retry with exponential backoff.
-
-#code-block(`````python
-from langchain.chat_models import init_chat_model
-
-model = init_chat_model(
-    "openai:gpt-5.4",
-    max_retries=15,   # default is 6 — raise it for resilience
-    timeout=120,      # seconds, for long responses
-)
-`````)
-
-#tip-box[Retries fire on 5xx errors, connection failures, and `429 Too Many Requests`. Client errors like 422 are not retried. Setting the limit too high amplifies cost and latency, so most teams keep it in the 10–20 range.]
-
-
-== 3.11 Prompt Caching — Implicit vs Explicit
-
-When you reuse a long system prompt or RAG context, prompt caching can cut input token costs sharply.
-
-- _Implicit caching_: the provider detects an identical prefix automatically. OpenAI `gpt-5.4` enables this for prefixes of 1024 tokens or more.
-- _Explicit caching_: Anthropic uses `prompt_cache_key` (or a `cache_control` block) to mark cache keys. In LangChain you pass it via `model_kwargs={"prompt_cache_key": "..."}`.
-
-#code-block(`````python
-from langchain_anthropic import ChatAnthropic
-
-model = ChatAnthropic(
-    model="claude-sonnet-4-6",
-    model_kwargs={"prompt_cache_key": "system-v3"},
-)
-`````)
-
-#tip-box[On cache hits, `usage_metadata.input_tokens_details` reports `cache_read` and `cache_creation` separately. Track cache hit rate as an ops metric with `UsageMetadataCallbackHandler`.]
-
-
-== 3.12 Summary
+== 3.7 Summary
 
 Here is a summary of the main ideas from this notebook.
 
@@ -293,4 +305,3 @@ Here is a summary of the main ideas from this notebook.
 
 === Next Steps
 → _#link("./04_tools_and_structured_output.ipynb")[04_tools_and_structured_output.ipynb]_: Learn about tools and structured output.
-

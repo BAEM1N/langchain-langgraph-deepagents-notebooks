@@ -22,7 +22,9 @@ Four human approval decisions are supported when reviewing pending tool calls:
 1. **`approve`** – Execute the tool with the original arguments as proposed by the agent
 2. **`edit`** – Modify the tool arguments before execution
 3. **`reject`** – Skip executing this tool call entirely
-4. **`respond`** – Return the human's message directly as the tool result, skipping execution
+4. **`respond`** – Return the human's message as a successful synthetic tool result for an "ask user" style tool
+
+Use `reject` to deny side effects. Use `respond` only when the human intentionally acts as the tool, such as answering an `ask_user` prompt; otherwise the agent can mistake a denial message for a successful operation.
 
 ## Implementation Requirements
 
@@ -61,8 +63,8 @@ Command(resume={"decisions": [{
 # Reject the call
 Command(resume={"decisions": [{"type": "reject"}]})
 
-# Respond with a synthetic tool result
-Command(resume={"decisions": [{"type": "respond", "message": "..."}]})
+# Answer an ask_user tool with a synthetic result
+Command(resume={"decisions": [{"type": "respond", "message": "Blue."}]})
 ```
 
 The same `config` (identical `thread_id`) must be reused for both the initial invocation and the resume call.
@@ -81,3 +83,4 @@ Each subagent can override the parent agent's `interrupt_on` settings. Subagents
 - Maintain consistent thread IDs across interrupt and resume calls
 - Align decision lists with action request order
 - Configure interrupts based on operational risk levels
+- Reject denied side effects; reserve respond for human-as-tool answers

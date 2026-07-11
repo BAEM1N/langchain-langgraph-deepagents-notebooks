@@ -22,6 +22,32 @@ from langchain_openai import ChatOpenAI
 model = ChatOpenAI(model="gpt-5.4")
 `````)
 
+#code-block(`````python
+# Observability settings (optional) - LangSmith or Langfuse
+# Set the key in .env, or uncomment it below and enter it yourself.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: Automatically activated when LANGSMITH_TRACING=true (no code modification required)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON \u2014 project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: Pass config={"callbacks": [langfuse_handler]} when calling invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON \u2014 {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+`````)
+
 == 11.2 LangGraph CLI installation
 
 LangGraph To run a local server, you must first install the CLI.
@@ -97,9 +123,13 @@ print('env: Environment Variables file path')
 == 11.5 Running the development server
 
 Run the local development server with the `langgraph dev` command.
-`$ langgraph dev`
+
+#code-block(`````bash
+$ langgraph dev
+`````)
+_Expected output:_
+
 #code-block(`````python
-**Expected output:**
 Ready!
 - API: http://127.0.0.1:2024
 - Docs: http://127.0.0.1:2024/docs
@@ -213,22 +243,23 @@ print("# The above code is used when the langgraph dev server is running.")
 
 LangGraph The local server provides a REST API.
 It can be called directly with `curl` or with an HTTP client.
+
+#code-block(`````bash
 curl -s --request POST \
---url "http://localhost:2024/runs/stream" \
---header 'Content-Type: application/json' \
---data '{
-"assistant_id": "agent",
-"input": {
-"messages": [{
-"role": "human",
-"content": "What is LangGraph?"
-}]
-},
-"stream_mode": "messages-tuple"
-}'
-#code-block(`````python
-API documentation can be found at `http://localhost:2024/docs`.
+    --url "http://localhost:2024/runs/stream" \
+    --header 'Content-Type: application/json' \
+    --data '{
+        "assistant_id": "agent",
+        "input": {
+            "messages": [{
+                "role": "human",
+                "content": "What is LangGraph?"
+            }]
+        },
+        "stream_mode": "messages-tuple"
+    }'
 `````)
+API documentation can be found at `http://localhost:2024/docs`.
 
 == 11.10 Deployment Readiness Checklist
 
@@ -300,4 +331,4 @@ Once local development is complete, prepare for production deployment.
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 _References:_
-- #link("../docs/langgraph/02-local-server.md")[Run a Local Server]
+- #link("../../docs/langgraph/02-local-server.md")[Run a Local Server]

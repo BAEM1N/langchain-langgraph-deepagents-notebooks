@@ -33,6 +33,33 @@ model = ChatOpenAI(
 print("Model ready:", model.model_name)
 `````)
 
+#code-block(`````python
+# Optional observability setup: LangSmith or Langfuse
+# Set the keys in .env, or uncomment the lines below to enter them manually.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: automatically enabled when LANGSMITH_TRACING=true
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: pass config={"callbacks": [langfuse_handler]} to invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
 == 5.2 Short-Term Memory: `InMemorySaver`
 
 Short-term memory is the mechanism that remembers previous messages _within a single conversation session_.
@@ -42,10 +69,57 @@ Short-term memory is the mechanism that remembers previous messages _within a si
 - Reusing the same `thread_id` preserves previous conversation context.
 
 
+#code-block(`````python
+from langchain.agents import create_agent
+from langchain.tools import tool
+from langgraph.checkpoint.memory import InMemorySaver
+
+@tool
+def get_time() -> str:
+    """Get the current time."""
+    from datetime import datetime
+    return datetime.now().strftime("%H:%M:%S")
+
+checkpointer = InMemorySaver()
+agent = create_agent(
+    model=model,
+    tools=[get_time],
+    system_prompt="You are a helpful assistant. Remember the conversation context.",
+    checkpointer=checkpointer,
+)
+
+config = {"configurable": {"thread_id": "session-1"}}
+
+# First conversation
+result1 = agent.invoke(
+    {"messages": [{"role": "user", "content": "My name is Alice. What time is it right now?"}]},
+    config={**config, **lf_config},
+)
+print("Response 1:", result1["messages"][-1].content)
+
+# Second conversation — remembers the previous turn
+result2 = agent.invoke(
+    {"messages": [{"role": "user", "content": "What is my name?"}]},
+    config={**config, **lf_config},
+)
+print("Response 2:", result2["messages"][-1].content)
+`````)
+
 == 5.3 Independent Conversations with Different `thread_id` Values
 
 If you use a different `thread_id`, you create a completely _independent conversation session_. Context is not shared with the previous session.
 
+
+#code-block(`````python
+config_b = {"configurable": {"thread_id": "session-2"}}
+
+result3 = agent.invoke(
+    {"messages": [{"role": "user", "content": "Do you know my name?"}]},
+    config={**config_b, **lf_config},
+)
+print("Different session response:", result3["messages"][-1].content)
+print("→ Because this is a different thread_id, it does not know the previous conversation")
+`````)
 
 == 5.4 Message Trimming
 
@@ -56,6 +130,38 @@ As a conversation grows, the token count increases and affects both cost and per
 - `include_system=True`: always preserves the system message
 
 
+#code-block(`````python
+from langchain.messages import trim_messages
+
+# Configure the trimmer: keep only the most recent messages
+trimmer = trim_messages(
+    max_tokens=1000,
+    strategy="last",
+    token_counter=model,
+    include_system=True,
+    allow_partial=False,
+)
+
+# Example of applying trimming through middleware
+from langchain.agents.middleware import before_model
+
+@before_model
+def trim_context(request):
+    """Trim messages to fit within the token budget."""
+    trimmed = trimmer.invoke(request.state["messages"], config=lf_config)
+    return request.override(messages=trimmed)
+
+agent_trimmed = create_agent(
+    model=model,
+    tools=[get_time],
+    system_prompt="You are a helpful assistant.",
+    middleware=[trim_context],
+    checkpointer=InMemorySaver(),
+)
+
+print("Created message-trimming agent")
+`````)
+
 == 5.5 Long-Term Memory: `InMemoryStore`
 
 Long-term memory stores information that persists _across conversation sessions_.
@@ -63,43 +169,6 @@ Long-term memory stores information that persists _across conversation sessions_
 - `InMemoryStore` is a key-value store for user preferences, settings, and similar data.
 - Tools can access the store through the `ToolRuntime` parameter.
 - The same data is available from every session, regardless of `thread_id`.
-
-==== Per-user namespaces (`context_schema` + `runtime.context`)
-
-In real apps you typically scope the store with the current `user_id`. Declare a `context_schema`, read `runtime.context.user_id` inside the tool, and cast Pydantic/dataclass objects with `dict(...)` before writing so the value is JSON-serializable.
-
-#code-block(`````python
-from dataclasses import dataclass
-from langgraph.store.memory import InMemoryStore
-from langchain.tools import tool, ToolRuntime
-
-@dataclass
-class Context:
-    user_id: str
-
-@tool
-def remember_user(user_info: dict, runtime: ToolRuntime[Context]) -> str:
-    """Persist the current user's profile."""
-    namespace = (runtime.context.user_id, "profile")
-    runtime.store.put(namespace, "info", dict(user_info))
-    return "saved"
-
-store = InMemoryStore()
-agent = create_agent(
-    model=model,
-    tools=[remember_user],
-    store=store,
-    context_schema=Context,
-)
-agent.invoke(
-    {"messages": [{"role": "user", "content": "I'm Minji"}]},
-    context=Context(user_id="user_123"),
-)
-`````)
-
-#tip-box[If you forget to pass `store=...` to `create_agent`, `runtime.store` is `None` and the tool cannot access the store. Always wire the store in alongside any long-term memory tool.]
-
-#tip-box[In production, swap `InMemoryStore` for `PostgresStore` (or `AsyncPostgresStore`) from the `langgraph-checkpoint-postgres` package — same interface, persistent storage, and semantic search.]
 
 Differences between short-term and long-term memory:
 
@@ -126,6 +195,52 @@ Differences between short-term and long-term memory:
   [Explicit (through tools)],
 )
 
+
+#code-block(`````python
+from langgraph.store.memory import InMemoryStore
+from langchain.tools import tool, ToolRuntime
+
+store = InMemoryStore()
+
+@tool
+def save_preference(key: str, value: str, runtime: ToolRuntime) -> str:
+    """Store a user preference in long-term memory."""
+    runtime.store.put(("preferences",), key, {"value": value})
+    return f"Preference saved: {key} = {value}"
+
+@tool
+def get_preference(key: str, runtime: ToolRuntime) -> str:
+    """Look up a user preference from long-term memory."""
+    result = runtime.store.get(("preferences",), key)
+    if result:
+        return f"Preference {key} = {result.value.get('value', 'not found')}"
+    return f"{key} preference could not be found"
+
+memory_agent = create_agent(
+    model=model,
+    tools=[save_preference, get_preference],
+    system_prompt="You can store and retrieve user preferences with tools.",
+    store=store,
+    checkpointer=InMemorySaver(),
+)
+
+config = {"configurable": {"thread_id": "memory-test"}}
+
+# Save preference
+result = memory_agent.invoke(
+    {"messages": [{"role": "user", "content": "Please save that my favorite color is blue and my favorite food is pizza."}]},
+    config={**config, **lf_config},
+)
+print("Saved:", result["messages"][-1].content)
+
+# Retrieve the preference in a new session
+config2 = {"configurable": {"thread_id": "memory-test-2"}}
+result2 = memory_agent.invoke(
+    {"messages": [{"role": "user", "content": "What is my favorite color?"}]},
+    config={**config2, **lf_config},
+)
+print("Retrieved:", result2["messages"][-1].content)
+`````)
 
 == 5.6 Streaming Modes
 
@@ -158,100 +273,75 @@ LangChain provides streaming so you can _observe agent execution in real time_. 
 )
 
 
+#code-block(`````python
+# stream_mode="updates" — updates from each node
+print('=== stream_mode="updates" ===')
+for chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "What time is it right now?"}]},
+    config={**{"configurable": {"thread_id": "stream-1"}}, **lf_config},
+    stream_mode="updates",
+):
+    for node, update in chunk.items():
+        print(f"[{node}]", end=" ")
+        if "messages" in update:
+            for msg in update["messages"]:
+                content = msg.content if hasattr(msg, 'content') else str(msg)
+                if content:
+                    print(content[:200])
+
+`````)
+
+#code-block(`````python
+# stream_mode="messages" — token-level streaming
+print('=== stream_mode="messages" ===')
+for msg, metadata in agent.stream(
+    {"messages": [{"role": "user", "content": "Tell me one short joke."}]},
+    config={**{"configurable": {"thread_id": "stream-2"}}, **lf_config},
+    stream_mode="messages",
+):
+    if hasattr(msg, 'content') and msg.content:
+        print(msg.content, end="", flush=True)
+print()
+
+`````)
+
+#code-block(`````python
+# stream_mode="values" — full state snapshot at each step
+print('=== stream_mode="values" ===')
+for state_snapshot in agent.stream(
+    {"messages": [{"role": "user", "content": "What time is it right now?"}]},
+    config={**{"configurable": {"thread_id": "stream-3"}}, **lf_config},
+    stream_mode="values",
+):
+    msgs = state_snapshot["messages"]
+    last_msg = msgs[-1]
+    role = getattr(last_msg, "type", "unknown")
+    content = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+    tool_calls = getattr(last_msg, "tool_calls", None)
+    print(f"[Full state] message count: {len(msgs)} | last message role: {role}")
+    if content:
+        print(f"  Content: {content[:200]}")
+    if tool_calls:
+        print(f"  Tool calls: {[tc['name'] for tc in tool_calls]}")
+
+`````)
+
 === A Note on `stream_mode="custom"`
 
-`stream_mode="custom"` carries user-defined events. With current LangGraph, you can emit them from inside tools or middleware of a `create_agent` agent by calling `get_stream_writer()`.
+`stream_mode="custom"` is for user-defined events. It is not directly supported by agents created with `create_agent`; instead, you must use the _lower-level LangGraph API_ (`StateGraph`) and emit custom events manually through a `StreamWriter`.
 
 #code-block(`````python
-from langgraph.config import get_stream_writer
-from langchain.tools import tool
+# Example at the LangGraph StateGraph level (reference only)
+from langgraph.graph import StateGraph
 
-@tool
-def long_running_task(query: str) -> str:
-    """Reports progress through the custom stream."""
-    writer = get_stream_writer()
-    writer({"step": 1, "status": "fetching"})
+def my_node(state, writer):  # StreamWriter is injected
+    writer("progress", {"step": 1, "status": "processing"})
     # ... work ...
-    writer({"step": 2, "status": "done"})
-    return "ok"
-
-for chunk in agent.stream(
-    {"messages": [{"role": "user", "content": "search"}]},
-    stream_mode="custom",
-):
-    print(chunk)  # whatever the writer emitted
+    writer("progress", {"step": 2, "status": "done"})
+    return state
 `````)
 
-#tip-box[Earlier docs said `stream_mode="custom"` did not work with `create_agent`. Current LangGraph supports it via `get_stream_writer()` — the same mechanism as the `writer` parameter you would receive at the `StateGraph` level.]
-
-=== `version="v2"` Streaming and GraphOutput
-
-`agent.stream(..., version="v2")` delivers structured events, and `agent.invoke(..., version="v2")` returns a `GraphOutput` with `value` (final state) and `interrupts` (pending interrupts).
-
-#code-block(`````python
-for chunk in agent.stream(
-    {"messages": [{"role": "user", "content": "hello"}]},
-    config={"configurable": {"thread_id": "t1"}},
-    version="v2",
-):
-    if chunk["type"] == "updates":
-        print("update:", chunk["data"])
-    elif chunk["type"] == "messages":
-        print("token:", chunk["data"][0].content)
-
-result = agent.invoke(
-    {"messages": [{"role": "user", "content": "hi"}]},
-    config={"configurable": {"thread_id": "t1"}},
-    version="v2",
-)
-print(result.value)       # final state dict
-print(result.interrupts)  # [] when no interrupt is pending
-`````)
-
-=== Accumulating with `chunk_position`
-
-When streaming with `stream_mode="messages"`, the final chunk has `chunk_position == "last"`. Accumulate text and tool calls and flush them on the last chunk.
-
-#code-block(`````python
-buffer, tool_calls = [], []
-for chunk, meta in agent.stream(payload, stream_mode="messages"):
-    buffer.append(chunk.content)
-    if chunk.tool_calls:
-        tool_calls.extend(chunk.tool_calls)
-    if meta.get("chunk_position") == "last":
-        print("text:", "".join(buffer))
-        print("tools:", tool_calls)
-`````)
-
-=== Filtering reasoning via `content_blocks`
-
-Models with extended thinking (e.g., Claude Sonnet 4.6) expose typed `content_blocks` so you can route reasoning to a separate UI region.
-
-#code-block(`````python
-for chunk, _ in agent.stream(payload, stream_mode="messages"):
-    for block in getattr(chunk, "content_blocks", []) or []:
-        if block["type"] == "reasoning":
-            ui.show_reasoning(block["reasoning"])
-        elif block["type"] == "text":
-            ui.show_answer(block["text"])
-`````)
-
-=== Multi-mode streams and interrupts
-
-Passing a list to `stream_mode` yields `(mode, payload)` tuples. The `"__interrupt__"` key in an `updates` payload indicates a pending HITL decision.
-
-#code-block(`````python
-for mode, payload in agent.stream(
-    {"messages": [{"role": "user", "content": "send email"}]},
-    config={"configurable": {"thread_id": "t1"}},
-    stream_mode=["messages", "updates"],
-):
-    if mode == "updates" and "__interrupt__" in payload:
-        interrupt = payload["__interrupt__"]
-        # show approval UI, then resume with Command(resume=...)
-`````)
-
-#tip-box[Use `subgraphs=True` to receive events from nested subgraphs. To skip token streaming altogether, set `disable_streaming=True` on the call (or `streaming=False` on the model).]
+If you are using `create_agent`, the recommended pattern for progress indicators is to combine `stream_mode="updates"` with middleware.
 
 
 == 5.7 Summary
@@ -302,4 +392,3 @@ _Key points:_
 
 === Next Steps
 → _#link("./06_middleware.ipynb")[06_middleware.ipynb]_: Learn about middleware and guardrails.
-

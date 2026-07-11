@@ -36,6 +36,50 @@
 
 테스트, 관측성, 배포에 필요한 패키지를 설치합니다.
 
+#code-block(`````python
+from dotenv import load_dotenv
+
+load_dotenv()
+
+import os
+# Only enable LangSmith tracing if API key is available
+if os.environ.get("LANGSMITH_API_KEY"):
+    os.environ["LANGSMITH_TRACING"] = "true"
+else:
+    os.environ["LANGSMITH_TRACING"] = "false"
+    print("LANGSMITH_API_KEY 미설정. LangSmith 트레이싱 비활성화.")
+`````)
+#output-block(`````
+LANGSMITH_API_KEY 미설정. LangSmith 트레이싱 비활성화.
+`````)
+
+#code-block(`````python
+# Observability 설정 (선택) - LangSmith 또는 Langfuse
+# .env에 키를 설정하거나, 아래 주석을 해제하여 직접 입력하세요.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: LANGSMITH_TRACING=true 시 자동 활성화 (코드 수정 불필요)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    print(f"LangSmith tracing ON — project: {project}")
+
+# Langfuse: invoke/stream 호출 시 config={"callbacks": [langfuse_handler]} 전달
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+#output-block(`````
+Langfuse tracing ON — https://lf.ddok.ai
+`````)
+
 == 9.2 프로덕션 파이프라인 개요
 
 에이전트의 비결정적 특성 때문에 전통적인 소프트웨어 테스트만으로는 품질을 보장할 수 없습니다.
@@ -245,6 +289,25 @@ except ImportError:
 `InMemorySaver` 체크포인터를 사용하면 여러 대화 턴에 걸친 상태 의존적 행동을 테스트할 수 있습니다. `thread_id`를 지정하여 같은 대화 컨텍스트를 유지하면서 여러 호출의 누적 상태를 검증합니다.
 
 #code-block(`````python
+from langchain_core.language_models import GenericFakeChatModel
+from langchain_core.messages import AIMessage
+
+fake_responses = [
+    AIMessage(content="LangGraph는 프레임워크입니다."),
+    AIMessage(content="상태 기반 에이전트를 지원합니다."),
+]
+fake_model = GenericFakeChatModel(
+    messages=iter(fake_responses)
+)
+print(fake_model.invoke("LangGraph란 무엇인가요?", config=lf_config).content)
+`````)
+#output-block(`````
+Langfuse was not able to parse the LLM model. The LLM call will be recorded without model name. Please create an issue: https://github.com/langfuse/langfuse/issues/new/choose
+
+LangGraph는 프레임워크입니다.
+`````)
+
+#code-block(`````python
 def search_tool(query: str) -> str:
     """웹에서 정보를 검색합니다."""
     return f"검색 결과: {query}"
@@ -348,6 +411,24 @@ tracer = LangChainTracer(anonymizer=anonymizer)
 agent.invoke({"messages": [...]}, config={"callbacks": [tracer]})
 `````)
 
+
+#code-block(`````python
+print("LANGSMITH_TRACING:", os.environ.get("LANGSMITH_TRACING"))
+print("LANGSMITH_PROJECT:", os.environ.get("LANGSMITH_PROJECT"))
+
+try:
+    from langsmith import tracing_context
+
+    with tracing_context(project_name="debug-session"):
+        print("이 블록에 대해 트레이싱 활성화됨")
+except Exception as e:
+    print(f"LangSmith 트레이싱 사용 불가: {e}")
+`````)
+#output-block(`````
+LANGSMITH_TRACING: false
+LANGSMITH_PROJECT: None
+이 블록에 대해 트레이싱 활성화됨
+`````)
 
 == 9.6 트레이스 분석
 
@@ -581,16 +662,16 @@ print(json.dumps(langgraph_config, indent=2))
 
 === 그래프 엔트리포인트
 
-`graphs` 필드의 값은 `"./경로/파일.py:변수명"` 형식입니다. 변수는 `CompiledGraph` 인스턴스여야 합니다. LangGraph의 Graph API(`StateGraph`)와 Functional API(`@entrypoint`) 모두 사용 가능합니다.
+`graphs` 필드의 값은 `"./경로/파일.py:변수명"` 형식입니다. 변수는 배포 가능한 compiled graph여야 합니다. `create_agent()`가 반환하는 `CompiledStateGraph`, Graph API(`StateGraph`), Functional API(`@entrypoint`)를 모두 엔트리포인트로 사용할 수 있습니다.
 
 ==== Graph API 예시
 
 #code-block(`````python
 # src/agent.py
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 
-graph = create_react_agent(
-    model="claude-sonnet-4-6",
+graph = create_agent(
+    model="openai:gpt-5.4",
     tools=[search_tool],
     checkpointer=True,
 )

@@ -28,6 +28,33 @@ print("✓ Model ready")
 
 `````)
 
+#code-block(`````python
+# Optional observability setup: LangSmith or Langfuse
+# Set the keys in .env, or uncomment the lines below to enter them manually.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: automatically enabled when LANGSMITH_TRACING=true
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: pass config={"callbacks": [langfuse_handler]} to invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
 == 2.2 Building Tools
 
 When you add the `@tool` decorator, a regular Python function becomes an agent tool.
@@ -87,6 +114,25 @@ print("✓ Agent created")
 
 `````)
 
+#code-block(`````python
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "What is 15 + 27?"}]},
+    config=lf_config,
+)
+print("Agent response:", result["messages"][-1].content)
+
+`````)
+
+#code-block(`````python
+# A compound question that requires the agent to use tools twice
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "Multiply 6 and 7, then add 10."}]},
+    config=lf_config,
+)
+print("Agent response:", result["messages"][-1].content)
+
+`````)
+
 == Summary
 
 #table(
@@ -106,5 +152,4 @@ print("✓ Agent created")
 )
 
 === Next Steps
-→ _#link("./03_langchain_memory_en.ipynb")[03_langchain_memory_en.ipynb]_: Learn about multi-turn conversations and memory.
-
+→ _#link("./03_langchain_memory.ipynb")[03_langchain_memory.ipynb]_: Learn about multi-turn conversations and memory.

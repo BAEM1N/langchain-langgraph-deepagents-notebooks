@@ -33,6 +33,33 @@ db = SQLDatabase.from_uri("sqlite:///Chinook.db")
 print(f"Dialect: {db.dialect}")
 `````)
 
+#code-block(`````python
+# Observability settings (optional) - LangSmith or Langfuse
+# Set the key in .env, or uncomment it below and enter it yourself.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: Automatically enabled when LANGSMITH_TRACING=true (no code modification required)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON \u2014 project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: Pass config={"callbacks": [langfuse_handler]} when calling invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON \u2014 {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
 == 6.2 SQL Agent Overview
 
 SQL Agent follows an _8-step_ process to convert natural language questions into SQL queries:
@@ -45,9 +72,9 @@ SQL Agent follows an _8-step_ process to convert natural language questions into
 
 === Why Do You Need an Agent?
 
-Unlike a simple text-to-SQL pipeline, an agent can inspect schema, generate a query, validate it, and retry when needed. This improves accuracy because the agent can analyze errors and rewrite the query. It also uses the context window efficiently by loading only the schema that is actually needed.
+Unlike a simple text-to-SQL pipeline, an agent can repeatedly inspect schema, generate queries, validate them, and retry when necessary. This improves accuracy because the agent can analyze an error and rewrite the query. It also uses the context window efficiently by loading only the schema that is needed.
 
-=== Example agent execution trace
+=== Example Agent Execution Trace
 
 #code-block(`````python
 User: "What were the top 5 products by sales last month?"
@@ -66,7 +93,7 @@ Agent -> sql_db_query(validated_query)
       <- [("Widget Pro", 45230.00), ("Gadget X", 38100.00), ...]
 `````)
 
-=== Safety guidelines
+=== Safety Guidelines
 
 #table(
   columns: 2,
@@ -76,21 +103,21 @@ Agent -> sql_db_query(validated_query)
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[Concern],
   text(weight: "bold")[Mitigation],
-  [SQL Injection],
-  [Use parameterized queries; the toolkit helps automatically.],
+  [SQL injection],
+  [Use parameterized queries; the toolkit helps here automatically.],
   [DML execution],
-  [Ban INSERT/UPDATE/DELETE in the system prompt and enforce read-only DB permissions.],
+  [Ban INSERT/UPDATE/DELETE in the system prompt and enforce read-only database permissions.],
   [Expensive queries],
   [Enforce LIMIT and require Human-in-the-Loop approval before execution.],
   [Sensitive data],
-  [`include_tables`/`exclude_tables`to restrict accessible tables and enforce column-level permissions],
+  [Restrict accessible tables with `include_tables` / `exclude_tables` and enforce column-level permissions.],
   [Data exposure],
   [Use database views or restricted user permissions.],
 )
 
 === Restricting Accessible Tables
 
-In production, explicitly restrict which tables the agent may access:
+In production, it is best to explicitly restrict which tables the agent may access:
 
 #code-block(`````python
 db = SQLDatabase.from_uri(
@@ -139,7 +166,7 @@ print(f"Total tools: {len(tools)}")
 
 === How ReAct loop works
 
-+ The LLM analyzes the user question and conversation history to decide *which tool* to call next
++ The LLM analyzes the user question and conversation history to choose the _next tool_
 + tool is executed and the results are added to the conversation history
 + LLM will check the results and return to step 1 if additional tool calling is needed
 + Return a text response when the final answer is ready
@@ -173,13 +200,22 @@ print("LangChain SQL Agent created.")
 
 == 6.5 Run test
 
+#code-block(`````python
+response = sql_agent.invoke(
+    {"messages": [{"role": "user",
+     "content": "Which country has the most customers?"}]},
+    config=lf_config,
+)
+print(response["messages"][-1].content)
+`````)
+
 == 6.6 HITL -- `HumanInTheLoopMiddleware`
 
 In a production environment, human approval is required before executing SQL queries. This is because agent-generated queries can be expensive, access unexpected tables, or return results that are different from what you intended.
 
 `HumanInTheLoopMiddleware` intercepts the specified tool(`sql_db_query`) call and suspends execution, allowing human review.
 
-=== 3 review options
+=== Review decisions
 
 When an agent attempts to call `sql_db_query`, execution is suspended and the human chooses one of the following:
 
@@ -189,21 +225,21 @@ When an agent attempts to call `sql_db_query`, execution is suspended and the hu
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Options],
-  text(weight: "bold")[`Command(resume=...)` value],
+  text(weight: "bold")[Option],
+  text(weight: "bold")[Ordered decision payload],
   text(weight: "bold")[Description],
   [_Approve_],
   [`{"decisions": [{"type": "approve"}]}`],
-  [Execute the generated query as-is],
+  [Execute the generated query as is],
   [_Edit_],
-  [`{"decisions": [{"type": "edit", "args": {...}}]}`],
-  [Execute the modified query],
+  [`{"decisions": [{"type": "edit", "edited_action": {...}}]}`],
+  [Run a reviewed query],
   [_Reject_],
   [`{"decisions": [{"type": "reject", "message": "..."}]}`],
-  [Skip execution and return the reason],
+  [Deny execution and return feedback],
 )
 
-#tip-box[The v1 `HumanInTheLoopMiddleware` accepts a `decisions` array so multiple tool calls in the same interrupt can be reviewed together. Each entry maps 1:1 to a queued tool call, and `type` is one of `approve`/`edit`/`reject`.]
+The SQL tool allows these three decisions only. Reserve `respond` for ask-user tools where the human intentionally supplies a successful tool result.
 
 === Why is HITL important?
 
@@ -216,7 +252,9 @@ When an agent attempts to call `sql_db_query`, execution is suspended and the hu
 from langchain.agents.middleware import HumanInTheLoopMiddleware
 
 hitl = HumanInTheLoopMiddleware(
-    interrupt_on={"sql_db_query": True},
+    interrupt_on={
+        "sql_db_query": {"allowed_decisions": ["approve", "edit", "reject"]},
+    },
 )
 sql_agent_hitl = create_agent(
     model=llm, tools=tools,
@@ -225,28 +263,22 @@ sql_agent_hitl = create_agent(
 print("Created SQL Agent with HITL applied.")
 `````)
 
-=== Resume pattern for destructive queries (DELETE / UPDATE)
-
-A read-only SELECT can be released with a plain `approve`, but destructive statements (DELETE/UPDATE/INSERT) are typically `edit`-ed first to add stricter `WHERE` clauses or `LIMIT` guards before execution. When the agent interrupts, deliver the reviewer's decision through the `decisions` array in `Command(resume=...)`.
-
 #code-block(`````python
 from langgraph.types import Command
 
-# Dangerous query — reviewer adds LIMIT and approves the edited statement
-result = sql_agent_hitl.invoke(
-    Command(resume={
-        "decisions": [{
-            "type": "edit",
-            "args": {
-                "query": (
-                    "UPDATE invoices SET status='void' "
-                    "WHERE customer_id=42 AND total < 1 LIMIT 10"
-                )
-            },
-        }],
-    }),
-    config={"configurable": {"thread_id": "sql-session-1"}},
-)
+config = {"configurable": {"thread_id": "sql-review-en"}}
+# Option 1: Approve
+# result = sql_agent_hitl.invoke(
+#     Command(resume={"decisions": [{"type": "approve"}]}),
+#     config=config, version="v2",
+# )
+
+# Option 2: Edit query
+# result = sql_agent_hitl.invoke(
+#     Command(resume={"decisions": [{"type": "reject", "message": "Use SELECT only."}]}),
+#     config=config, version="v2",
+# )
+print("HITL resume options: approve / edit / reject")
 `````)
 
 == 6.7 LangGraph Custom SQL Agent -- StateGraph
@@ -265,9 +297,9 @@ START -> list_tables -> get_schema -> generate_query
       -> check_query -> execute_query -> END
 `````)
 
-Each node receives the shared `State` object and appends messages while the workflow runs. With `tools_condition`, you can implement a conditional branch that either regenerates the query or proceeds to execution based on the validation result.
+Each node receives the shared `State` object and appends messages as the workflow advances. With `tools_condition`, you can implement a conditional branch that either regenerates the query or proceeds to execution depending on the validation result.
 
-=== LangChain `create_agent` Advantages Compared with
+=== Advantages Compared with LangChain `create_agent`
 
 #table(
   columns: 3,
@@ -286,7 +318,7 @@ Each node receives the shared `State` object and appends messages while the work
   [Explicitly implemented with conditional edges],
   [Human review],
   [Middleware-based],
-  [`interrupt()` based, position free],
+  [`interrupt()` based and can be placed exactly where needed],
   [Debugging],
   [Black box],
   [Status of each node can be checked],
@@ -307,9 +339,79 @@ print(f"SQLState keys: {list(SQLState.__annotations__)}")
 
 Each node is responsible for one step of the SQL Agent workflow.
 
+#code-block(`````python
+tool_map = {t.name: t for t in tools}
+
+list_tbl = tool_map["sql_db_list_tables"]
+schema_tl = tool_map["sql_db_schema"]
+query_tl = tool_map["sql_db_query"]
+check_tl = tool_map["sql_db_query_checker"]
+
+
+def list_tables_node(state: SQLState):
+    tables = list_tbl.invoke("", config=lf_config)
+
+    msg = {
+        "role": "assistant",
+        "content": f"Tables: {tables}"
+    }
+
+    return {"messages": [msg]}
+`````)
+
+#code-block(`````python
+def get_schema_node(state: SQLState):
+    """Get the schema of the related table."""
+    resp = llm.invoke(state["messages"] + [
+        {"role": "user",
+         "content": "What are the tables involved? Just tell me your name."}
+    ], config=lf_config)
+    schema = schema_tl.invoke(resp.content.strip(), config=lf_config)
+    msg = {"role": "assistant", "content": f"Schema:\n{schema}"}
+    return {"messages": [msg]}
+`````)
+
 == 6.9 `bind_tools` with `tool_choice` -- Force tool calling
 
 Set _Force_ a call to a specific tool with the `tool_choice` parameter.
+
+#code-block(`````python
+llm_forced = llm.bind_tools(
+    [check_tl], tool_choice="sql_db_query_checker"
+)
+
+def generate_query_node(state: SQLState):
+    """Generates an SQL query."""
+    prompt = "Please write an SQL query. Use checker tool."
+    msgs = state["messages"] + [{"role": "user", "content": prompt}]
+    response = llm_forced.invoke(msgs, config=lf_config)
+    return {"messages": [response]}
+`````)
+
+#code-block(`````python
+def check_query_node(state: SQLState):
+    """
+    Validates the generated query.
+    """
+
+    last = state["messages"][-1]
+
+    if hasattr(last, "tool_calls") and last.tool_calls:
+        query = last.tool_calls[0]["args"].get("query", "")
+
+        result = check_tl.invoke(query, config=lf_config)
+
+        return {
+            "messages": [
+                {
+                    "role": "tool",
+                    "content": result
+                }
+            ]
+        }
+
+    return state
+`````)
 
 == 6.10 Reviewing queries with `interrupt()`
 
@@ -347,6 +449,40 @@ LangGraph's `interrupt()` function _suspenses_ graph execution and waits for ext
   [optional],
 )
 
+#code-block(`````python
+from langgraph.types import interrupt
+
+def execute_query_node(state: SQLState):
+    """
+    Executes the query after human review.
+    """
+
+    query = state["messages"][-1].content
+
+    review = interrupt({
+        "query": query,
+        "action": "review_sql"
+    })
+
+    if review.get("action") == "accept":
+        result = query_tl.invoke(query, config=lf_config)
+
+    elif review.get("action") == "edit":
+        result = query_tl.invoke(review["edited_query"], config=lf_config)
+
+    else:
+        result = f"Rejected: {review.get('reason', '')}"
+
+    return {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": result
+            }
+        ]
+    }
+`````)
+
 == 6.11 `Command(resume=...)` pattern
 
 To resume a graph stopped by `interrupt()`, use `Command(resume=...)`.
@@ -374,6 +510,19 @@ builder.add_edge("execute_query", END)
 checkpointer = InMemorySaver()
 sql_graph = builder.compile(checkpointer=checkpointer)
 print("LangGraph SQL Agent compiled.")
+`````)
+
+#code-block(`````python
+from langgraph.types import Command
+
+config = {"configurable": {"thread_id": "sql-1"}}
+
+# Resume examples after interrupt:
+# sql_graph.invoke(Command(resume={"action": "accept"}), {**config, **lf_config})
+# sql_graph.invoke(Command(resume={
+#     "action": "edit", "edited_query": "SELECT ..."
+# }), {**config, **lf_config})
+print("Command(resume=...) pattern: accept / edit / reject")
 `````)
 
 == Summary
@@ -416,12 +565,12 @@ print("LangGraph SQL Agent compiled.")
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[action],
   text(weight: "bold")[`Command(resume=...)`],
-  [Approve],
-  [`{"decisions": [{"type": "approve"}]}`],
+  [Accept],
+  [`{"action": "accept"}`],
   [Edit],
-  [`{"decisions": [{"type": "edit", "args": {...}}]}`],
+  [`{"action": "edit", "edited_query": "..."}`],
   [Reject],
-  [`{"decisions": [{"type": "reject", "message": "..."}]}`],
+  [`{"action": "reject", "reason": "..."}`],
 )
 
 === 4 SQLDatabaseToolkits tool

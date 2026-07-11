@@ -30,6 +30,32 @@ from dotenv import load_dotenv
 load_dotenv()
 `````)
 
+#code-block(`````python
+# Observability settings (optional) - LangSmith or Langfuse
+# Set the key in .env, or uncomment it below and enter it yourself.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: Automatically enabled when LANGSMITH_TRACING=true (no code modification required)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: Pass config={"callbacks": [langfuse_handler]} when calling invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
 == 7.2 Data Analysis Agent Overview
 
 Deep Agents' data analysis agents _autonomously_ run the following pipelines:
@@ -48,21 +74,21 @@ CSV input -> planning (`write_todos`) -> file reading (`read_file`) -> code gene
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[Step],
   text(weight: "bold")[Description],
-  text(weight: "bold")[Tools Used],
+  text(weight: "bold")[Tools used],
   [_Planning_],
-  [`write_todos`builds a structured task plan and updates TODOs as the analysis progresses],
+  [Builds a structured task plan with `write_todos` and updates TODOs as the analysis progresses],
   [`write_todos`],
   [_File Reading_],
-  [inspects CSV structure, column names, data types, and row counts; image files can also be read multimodally],
+  [Inspects CSV structure, column names, data types, and row counts. Image files can also be read multimodally.],
   [`read_file`],
   [_Code Execution_],
-  [pandas, matplotlib and runs Python code in an isolated backend],
+  [Writes and runs Python code (pandas, matplotlib, etc.) in an isolated backend],
   [Backend `execute`],
   [_Iterative Analysis_],
-  [performs follow-up analysis and uses web search to gather domain context],
+  [Performs follow-up analysis based on initial results and uses web search for domain context],
   [Tavily, `edit_file`],
   [_Result Delivery_],
-  [formats the analysis result and sends it to Slack],
+  [Formats the analysis result and sends it to Slack],
   [`slack_send_message`],
 )
 
@@ -70,7 +96,7 @@ CSV input -> planning (`write_todos`) -> file reading (`read_file`) -> code gene
 
 A Deep Agents data-analysis agent goes beyond simple tool use and can _plan autonomously_:
 
-+ _planning_: `write_todos`to break the analysis into steps and track progress
++ _Planning_: uses `write_todos` to break the analysis into steps and track progress
 + _Adaptive execution_: if an error occurs during analysis, it can revise the code (`edit_file`) and run it again.
 + _subagent Delegation_: Complex tasks are processed in parallel by creating specialized subagent
 + _Context Management_: Store intermediate results in file system tool and refer back to them when needed
@@ -109,10 +135,10 @@ Deep Agents provide a filesystem and code execution environment through a _plugg
 
 === Details by backend type
 
-- *`StateBackend`* (default): Stores files in the LangGraph agent state. It works well as a scratch pad, and large printouts are automatically removed.
-- *`FilesystemBackend`*: Provides local disk access with `root_dir` settings. The `virtual_mode=True` option restricts paths and prevents directory traversal.
-- *`LocalShellBackend`*: Provides *unlimited shell command execution* through the `execute` tool in addition to filesystem access. It runs with full user privileges on the host system.
-- *`CompositeBackend`*: Routes different backends by route. Example: `StateBackend` for temporary files and `StoreBackend` for `/memories/`.
+- _`StateBackend`_ (default): Store files in LangGraph agent state. It is suitable for use as a scratch pad, and large printouts are automatically removed.
+- _`FilesystemBackend`_: Use `root_dir` and `virtual_mode=True` to constrain filesystem-tool paths.
+- _`LocalShellBackend`_: The `execute` tool runs with host privileges. `virtual_mode=True` normalizes file paths but provides no shell isolation.
+- _`CompositeBackend`_: Route different backends per route. Example: `StateBackend` for temporary files, `StoreBackend` for `/memories/`.
 
 === Sandbox Security Principles
 
@@ -123,13 +149,20 @@ Sandboxes provide an isolated environment where agents can run code safely. Core
 - Use Human-in-the-Loop approval for sensitive tasks
 - Block unnecessary network access
 
-#tip-box[_Caution_: `LocalShellBackend` has _unrestricted shell execution permissions_ on the host system. Be sure to use a sandbox backend in production.]
+#tip-box[_Caution_: The local configuration below reduces exposure with a temporary root, minimal environment, and HITL. It is not a security sandbox; use an isolated sandbox backend in production.]
 
 #code-block(`````python
 from deepagents.backends import LocalShellBackend
+from pathlib import Path
+import sys
 
-# For development purposes — local shell backend
-dev_backend = LocalShellBackend(virtual_mode=True)
+work_dir = Path(".agent-work").resolve()
+work_dir.mkdir(exist_ok=True)
+dev_backend = LocalShellBackend(
+    root_dir=work_dir, virtual_mode=True,
+    env={"PATH": f"{Path(sys.executable).parent}:/usr/bin:/bin"},
+    inherit_env=False,
+)
 
 # For Operations — Cloud Sandbox (Choose 1)
 # prod_backend = ... # Use cloud sandbox backend in production
@@ -201,56 +234,6 @@ def tavily_search(query: str) -> str:
     )
 `````)
 
-=== pandas / scikit-learn `@tool` integration
-
-Data analysis agents often treat _each tool as a tiny analysis cell_. The `@tool` decorator runs pandas / scikit-learn code on demand and returns the result back to the model as text. Keeping these tools separate from filesystem access (`read_file`) makes input validation, caching, and unit testing far easier.
-
-#code-block(`````python
-import pandas as pd
-from sklearn.cluster import KMeans
-from langchain_core.tools import tool
-
-@tool
-def summarize_csv(path: str, top_n: int = 5) -> str:
-    """Return shape, dtypes, and the top-N rows of a CSV file."""
-    df = pd.read_csv(path)
-    return (
-        f"shape={df.shape}\n"
-        f"dtypes={df.dtypes.to_dict()}\n"
-        f"head=\n{df.head(top_n).to_string()}"
-    )
-
-@tool
-def cluster_customers(path: str, k: int = 3) -> str:
-    """KMeans clustering over numeric columns only."""
-    df = pd.read_csv(path).select_dtypes("number").dropna()
-    labels = KMeans(n_clusters=k, n_init="auto").fit_predict(df)
-    return f"cluster_sizes={pd.Series(labels).value_counts().to_dict()}"
-`````)
-
-=== `CodeInterpreterMiddleware` and the Skills pattern
-
-For free-form analysis that does not fit a fixed `@tool` signature — "draw a boxplot of this column", for example — `CodeInterpreterMiddleware` lets the agent execute arbitrary code in its own sandbox. Repeatable procedures, on the other hand, are best captured in a `skills/` directory as markdown + code snippets and loaded as _Skills_ the agent can invoke by name.
-
-#code-block(`````python
-from deepagents.middleware import CodeInterpreterMiddleware
-from deepagents.skills import load_skills
-
-skills = load_skills("./skills/data-analysis")  # markdown + snippets
-
-agent = create_deep_agent(
-    model="gpt-5.4",
-    tools=[summarize_csv, cluster_customers, slack_send_message],
-    middleware=[CodeInterpreterMiddleware(backend=backend)],
-    skills=skills,
-    backend=backend,
-    checkpointer=checkpointer,
-    system_prompt="You are a data analyst.",
-)
-`````)
-
-#tip-box[Keep _reproducible analysis recipes_ inside the Skills directory and let `CodeInterpreterMiddleware` handle one-off exploration. This prevents validated procedures from blending with throwaway code.]
-
 == 7.6 Creating an agent
 
 `create_deep_agent()` creates an agent by combining the model, tool, backend, checkpointer, and system prompts.
@@ -286,7 +269,7 @@ from deepagents import create_deep_agent
 from deepagents.backends import LocalShellBackend
 from langgraph.checkpoint.memory import InMemorySaver
 
-backend = LocalShellBackend(virtual_mode=True)
+backend = dev_backend  # development host shell, not a sandbox
 checkpointer = InMemorySaver()
 `````)
 
@@ -296,6 +279,7 @@ agent = create_deep_agent(
     tools=[tavily_search, slack_send_message],
     backend=backend,
     checkpointer=checkpointer,
+    interrupt_on={"execute": True},
     system_prompt="You are a data analyst.",
 )
 `````)
@@ -303,6 +287,15 @@ agent = create_deep_agent(
 == 7.7 Execution — Analysis Request
 
 When an analysis request is sent to `agent.invoke()`, the agent autonomously performs the following pipeline: planning → reading files → executing code → delivering results.
+
+#code-block(`````python
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "Analyze sales data in /tmp/analysis/sales_2025.csv. Find top-performing regions, identify quarterly trends, create visualizations, and send Summary to Slack."}]},
+    config={**lf_config, "configurable": {"thread_id": "data-analysis-1"}},
+)
+print(result)
+
+`````)
 
 == 7.8 Observe the analysis process through streaming
 
@@ -350,13 +343,24 @@ for namespace, chunk in agent.stream(
     # Handle each mode differently
 `````)
 
-=== Tracking the subagent lifecycle
+=== Tracking the Subagent Lifecycle
 
 A subagent goes through three stages:
-
 + _Pending_ — detected when the main agent includes a delegated task in its `model_request`
-+ _Running_ — `tools:UUID` starts when events appear under the namespace
-+ _Complete_ — finishes when the main agent's `tools` node returns its result
++ _Running_ — starts when events appear under the `tools:UUID` namespace
++ _Complete_ — finishes when the main agent's `tools` node returns its result.
+
+#code-block(`````python
+for namespace, chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "Please Summary sales by region."}]},
+    stream_mode="updates",
+    subgraphs=True,
+    config={**lf_config, "configurable": {"thread_id": "data-analysis-1"}},
+):
+    source = f"[subagent: {namespace}]" if namespace else "[main]"
+    print(source, chunk)
+
+`````)
 
 == 7.9 Utilizing built-in tool
 
@@ -375,7 +379,7 @@ Deep Agents automatically provides the following built-ins to agents through the
   [Create and track structured work plans],
   [Creation of TODO list for each stage of analysis],
   [`ls`],
-  [List directory contents (`ls_info()`)],
+  [List directory contents (`BackendProtocol.ls`)],
   [Check CSV file existence],
   [`read_file`],
   [Read file (image multimodal support)],
@@ -401,12 +405,21 @@ Deep Agents automatically provides the following built-ins to agents through the
 === Custom backend implementation
 
 You can implement `BackendProtocol` yourself depending on your needs. Required methods:
-- `ls_info()` -- List directory contents
+- `ls()` -- Return directory contents in `LsResult`
 - `read()` -- Read file with line numbers
-- `grep_raw()` -- Pattern matching that returns structured matches.
-- `glob_info()` -- glob-based file matching
+- `grep()` -- Return structured matches in `GrepResult`
+- `glob()` -- Return glob matches in `GlobResult`
 - `write()` -- Create file (create-only)
 - `edit()` -- find-and-replace that guarantees uniqueness
+
+#code-block(`````python
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "List all CSV files in /tmp/analysis/ using glob, and read the first file to describe its structure."}]},
+    config={**lf_config, "configurable": {"thread_id": "data-analysis-1"}},
+)
+print(result)
+
+`````)
 
 == 7.10 Maintain conversation with checkpointer
 
@@ -437,7 +450,7 @@ checkpointer saves agent state to enable _abort and resume_. A conversation sess
 checkpointer goes beyond simply saving conversation history and allows you to:
 
 - _Interruption Recovery_: Resume from the last completed step in case of network error or timeout
-- *`interrupt()` support*: Saves the graph state in human-in-the-loop flows and resumes at the correct location after the human responds.
+- _`interrupt()` Support_: Save the graph state in Human-in-the-Loop and resume at the correct location after the human responds.
 - _Multi-turn analysis_: Process multiple analysis requests consecutively in the same session while referencing previous results
 
 === Sandbox Lifetime Management
@@ -453,9 +466,26 @@ config = {"configurable": {"thread_id": "analysis-session-1"}}
 agent_with_memory = create_deep_agent(
     model="gpt-5.4",
     tools=[tavily_search, slack_send_message],
-    backend=LocalShellBackend(virtual_mode=True),
+    backend=dev_backend,
     checkpointer=checkpointer,
+    interrupt_on={"execute": True},
 )
+`````)
+
+#code-block(`````python
+r1 = agent_with_memory.invoke(
+    {"messages": [{"role": "user", "content": "Please read /tmp/analysis/sales_2025.csv and Summary."}]},
+    config={**config, **lf_config},
+)
+print("Turn:", r1)
+`````)
+
+#code-block(`````python
+r2 = agent_with_memory.invoke(
+    {"messages": [{"role": "user", "content": "Please compare the Q4 performance of Seoul and Busan."}]},
+    config={**config, **lf_config},
+)
+print("Turn:", r2)
 `````)
 
 == Summary

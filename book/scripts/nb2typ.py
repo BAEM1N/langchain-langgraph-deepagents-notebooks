@@ -472,8 +472,9 @@ def convert_notebook(nb_path: str, output_path: str,
     # Write output
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
+    rendered = '\n'.join(line.rstrip() for line in '\n'.join(parts).splitlines())
     with open(output, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(parts).rstrip() + '\n')
+        f.write(rendered.rstrip() + '\n')
 
     print(f"  OK {Path(nb_path).name} -> {output.name}")
 

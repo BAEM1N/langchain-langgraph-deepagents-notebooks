@@ -22,6 +22,32 @@ print("환경 설정 완료")
 `````)
 
 #code-block(`````python
+# Observability 설정 (선택) - LangSmith 또는 Langfuse
+# .env에 키를 설정하거나, 아래 주석을 해제하여 직접 입력하세요.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: LANGSMITH_TRACING=true 시 자동 활성화 (코드 수정 불필요)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    print(f"LangSmith tracing ON \u2014 project: {project}")
+
+# Langfuse: invoke/stream 호출 시 config={"callbacks": [langfuse_handler]} 전달
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON \u2014 {os.environ.get('LANGFUSE_HOST', '')}")
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+`````)
+#output-block(`````
+Langfuse tracing ON — https://lf.ddok.ai
+`````)
+
+#code-block(`````python
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(model="gpt-5.4")
@@ -29,7 +55,7 @@ model = ChatOpenAI(model="gpt-5.4")
 print(f"모델 설정 완료: {model.model_name}")
 `````)
 #output-block(`````
-모델 설정 완료: gpt-4.1
+모델 설정 완료: gpt-5.4
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))

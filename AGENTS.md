@@ -122,7 +122,7 @@ lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
 1. **문서 기반 작성**: `docs/*.md`와 공식 문서를 근거로 코드 작성
 2. **기본 모델**: `ChatOpenAI(model="gpt-5.4")`
 3. **환경 변수**: `load_dotenv()` → `.env` 파일
-4. **안전 모드**: `FilesystemBackend(virtual_mode=True)`, `LocalShellBackend(virtual_mode=True)`
+4. **백엔드 경계**: `FilesystemBackend(root_dir=..., virtual_mode=True)`로 파일 도구 경로를 제한한다. `LocalShellBackend`는 개발 전용이며 `virtual_mode=True`도 셸 격리를 제공하지 않는다. 운영 코드 실행은 샌드박스 백엔드를 사용한다.
 5. **참고 문서 명시**: 노트북 마지막 셀에 참조 문서 기재
 6. **테스트**: 모든 코드 셀은 실행 가능해야 함
 7. **한국어 설명, 영어 코드**: 주석과 마크다운은 한국어, 변수명과 함수명은 영어

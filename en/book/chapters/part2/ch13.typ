@@ -38,6 +38,33 @@ from langchain.tools import tool
 print("Environment ready.")
 `````)
 
+#code-block(`````python
+# Optional observability setup: LangSmith or Langfuse
+# Set the keys in .env, or uncomment the lines below to enter them manually.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: automatically enabled when LANGSMITH_TRACING=true
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: pass config={"callbacks": [langfuse_handler]} to invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
 == 13.2 Guardrail Concepts
 
 _Guardrails_ are safety mechanisms that validate and filter content during agent execution.
@@ -103,8 +130,6 @@ User input → [input guardrail] → agent execution → [output guardrail] → 
   [Raise an exception when detected],
 )
 
-#note-box[_Scope parameters_ — `PIIMiddleware` exposes three independent toggles: `apply_to_input` (user messages), `apply_to_output` (model responses), and `apply_to_tool_results`. `apply_to_tool_results` defaults to *`False`* — tool return values (for example, database query results) are _not_ scrubbed automatically, so set `apply_to_tool_results=True` explicitly when tool outputs may contain PII.]
-
 
 #code-block(`````python
 # Example PII-detection middleware setup
@@ -123,7 +148,7 @@ agent = create_agent(
             strategy="redact",
             apply_to_input=True),
 
-        # Partially mask credit-card numbers (****-****-****-1234)
+        # Partially mask credit card numbers (****-****-****-1234)
         PIIMiddleware("credit_card",
             strategy="mask",
             apply_to_input=True),
@@ -146,7 +171,7 @@ print("Custom detection: pass a regex or function to the detector parameter")
 
 
 #code-block(`````python
-# Human-in-the-Loop guardrail example
+# Example Human-in-the-Loop guardrail
 print("Human-in-the-Loop guardrail:")
 print("=" * 50)
 print("""
@@ -161,9 +186,9 @@ agent = create_agent(
     middleware=[
         HumanInTheLoopMiddleware(
             interrupt_on={
-                "send_email": True,       # approval required
-                "delete_db": True,         # approval required
-                "search": False,           # automatic
+                "send_email": True,       # requires approval
+                "delete_db": True,         # requires approval
+                "search": False,           # runs automatically
             }
         ),
     ],
@@ -179,14 +204,14 @@ result = agent.invoke(
 )
 # -> paused: waiting for approval before send_email executes
 
-# 2Step: resume after approval
+# Step 2: resume after approval
 result = agent.invoke(
     Command(resume={"decisions": [{"type": "approve"}]}),
     config=config,
 )
 """)
 print("Key point: a checkpointer is required for pause/resume flows.")
-print("On rejection, use {\"type\": \"reject\"} to block the tool call.")
+print("If you reject the action, use {\"type\": \"reject\"} to block the tool call.")
 `````)
 
 == 13.5 Custom Input Guardrails — `before_agent`
@@ -262,7 +287,7 @@ class SafetyGuardrailMiddleware(AgentMiddleware):
 
     def __init__(self):
         super().__init__()
-        self.safety_model = init_chat_model("gpt-5.4-mini")
+        self.safety_model = init_chat_model("gpt-4.1-mini")
 
     @hook_config(can_jump_to=["end"])
     def after_agent(
@@ -290,7 +315,7 @@ class SafetyGuardrailMiddleware(AgentMiddleware):
             )
         return None
 """)
-print("Key point: evaluate safety with a smaller helper model (gpt-5.4-mini).")
+print("Key point: evaluate safety with a smaller helper model (gpt-4.1-mini).")
 print("If the result is UNSAFE, replace the response with a safe fallback message.")
 `````)
 
@@ -490,5 +515,4 @@ This notebook covered:
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 _References:_
-- #link("../docs/langchain/13-guardrails.md")[Guardrails]
-
+- #link("../../docs/langchain/13-guardrails.md")[Guardrails]

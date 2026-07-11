@@ -22,6 +22,32 @@ from langchain_openai import ChatOpenAI
 model = ChatOpenAI(model="gpt-5.4")
 `````)
 
+#code-block(`````python
+# Observability settings (optional) - LangSmith or Langfuse
+# Set the key in .env, or uncomment it below and enter it yourself.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: Automatically activated when LANGSMITH_TRACING=true (no code modification required)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON \u2014 project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: Pass config={"callbacks": [langfuse_handler]} when calling invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON \u2014 {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+`````)
+
 == 13.2 Graph API vs Functional API Overview
 
 LangGraph provides two APIs for building agent workflow.
@@ -199,28 +225,25 @@ Compare the two implementations above side by side:
 
 == 13.7 Combining two APIs
 
-You can use both APIs in the same application.
-A common pattern is to use the Graph API for complex multi-agent coordination, and the Functional API for simpler linear data-processing flows.
+You can use both APIs together in one application.
+The common pattern is to handle complex multi-agent adjustments with the Graph API and simple data pipelines with the Functional API.
 
-#table(
-  columns: 2,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Use Case],
-  text(weight: "bold")[Recommended API],
-  [Complex multi-agent coordination],
-  [Graph API],
-  [Simple preprocessing or validation pipeline],
-  [Functional API],
-  [Need explicit routing and visualization],
-  [Graph API],
-  [Need minimal boilerplate over existing code],
-  [Functional API],
-)
+#code-block(`````python
+# Graph API: complex multi-agent coordination
+coordinator = StateGraph(CoordinatorState)
+coordinator.add_node("planner", planner_agent)
+coordinator.add_node("executor", executor_agent)
+coordinator.add_node("reviewer", reviewer_agent)
+# ...
 
-#note-box[It is normal to start with the Functional API for a small prototype and migrate to the Graph API as the workflow becomes more complex. The reverse is also possible when a graph turns out to be overdesigned.]
+# Functional API: simple data processing
+@entrypoint(checkpointer=saver)
+def preprocess(data: str) -> str:
+    cleaned = clean_data(data).result()
+    validated = validate_data(cleaned).result()
+    return validated
+`````)
+You can migrate from Functional to Graph as complexity increases, or from Graph to Functional if overdesigned.
 
 == 13.8 Pregel Runtime Overview
 
@@ -287,27 +310,7 @@ print("Pregel Results:", result)
 
 == 13.10 Channel Type
 
-Pregel offers five channel types that map directly to Graph API state fields and reducers.
-
-#table(
-  columns: 2,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Type],
-  text(weight: "bold")[Purpose],
-  [`LastValue`],
-  [Stores the most recent value. Default channel for inputs/outputs],
-  [`EphemeralValue`],
-  [Temporary value scoped to a single execution step],
-  [`Topic`],
-  [Configurable PubSub. Multiple values with optional dedup / accumulation],
-  [`BinaryOperatorAggregate`],
-  [Applies a binary operator to current value and update (running totals, etc.)],
-  [_`DeltaChannel`_ (beta, `langgraph≥1.2`)],
-  [Stores incremental deltas per step. Suitable for fast-growing channels (e.g., message lists)],
-)
+Pregel offers three channel types:
 
 #code-block(`````python
 from langgraph.channels import (
@@ -397,48 +400,26 @@ app_agg = Pregel(
 print("BinaryOperatorAggregate:", app_agg.invoke({"a": "foo"}))
 `````)
 
-=== DeltaChannel (beta, `langgraph≥1.2`)
-
-`DeltaChannel` stores _incremental deltas only_ instead of the full accumulated value at each step. It is used to reduce checkpoint cost for high-volume, ever-growing channels such as message lists.
-
-- The reducer must be _associative_ and runs _at reconstruction time, not at write time_.
-- `snapshot_frequency=K` writes a full snapshot every K steps to bound reconstruction cost.
-- The bulk reducer signature is `(current_state, sequence_of_writes) -> new_state`.
-
-#code-block(`````python
-from typing import Annotated, Sequence
-from typing_extensions import TypedDict
-from langgraph.channels import DeltaChannel
-
-def list_reducer(state: list, writes: Sequence[list]) -> list:
-    # (current_state, sequence_of_writes) -> new_state
-    result = list(state)
-    for write in writes:
-        result.extend(write)
-    return result
-
-class State(TypedDict):
-    messages: Annotated[
-        list[str],
-        DeltaChannel(list_reducer, snapshot_frequency=5),
-    ]
-`````)
-
 == 13.11 superstep Execution Model
 
-Pregel runs in *supersteps*.
-In each superstep, nodes (actors) at the same level can run in parallel. Once all of them finish, the channel state is updated and the runtime moves to the next superstep.
+Pregel runs in _superstep(Super-step)_ units.
+In each superstep, nodes (actors) of the same level run in parallel,
+Once all nodes are complete, the channel is updated and then we move on to the next superstep.
 
-#note-box[Features of a superstep: nodes in the same superstep cannot see each other's new outputs, the next step begins only after all nodes finish, a checkpointer can persist state after each step, and execution stops automatically when there are no actors left to run.]
-
-A simple mental model looks like this:
-
-- Superstep 1: Node A and Node B run in parallel
-- Channel update
-- Superstep 2: Node C runs using the results from A and B
-- Channel update
-- Superstep 3: Node D runs
-- End
+#code-block(`````python
+[Super-step 1] Node A and Node B (parallel execution)
+     ↓ Channel update
+[Super-step 2] Node C (based on the results of A and B)
+     ↓ Channel update
+[Super-step 3] Node D
+     ↓
+END
+`````)
+Features of _superstep:_
+- Nodes within the same superstep cannot see each other's output (only refer to the channel value of the previous step)
+- Proceed to the next step only when all nodes are completed
+- If checkpointer is set, save state after each superstep
+- Automatic shutdown if there are no nodes to run
 
 == 13.12 API Selection Criteria Guide
 
@@ -479,7 +460,7 @@ _Step 4: Potential for development_
   [Pregel],
   [LangGraph's internal execution engine, actor-channel model],
   [Channel],
-  [`LastValue` / `EphemeralValue` / `Topic` / `BinaryOperatorAggregate` / `DeltaChannel`(beta)],
+  [LastValue, Topic, BinaryOperatorAggregate 3 types],
   [superstep],
   [Parallel execution of same level nodes → Channel update → Next step],
   [Selection criteria],
@@ -487,9 +468,9 @@ _Step 4: Potential for development_
 )
 
 === Next Steps
-→ Proceed to _#link("../04_deepagents/01_introduction.ipynb")[the Deep Agents track]_!
+→ Proceed to _#link("../04_deepagents/01_introduction.ipynb")[Deep Agents track]_!
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 _References:_
-- #link("../docs/langgraph/18-choosing-apis.md")[Choosing between Graph and Functional APIs]
-- #link("../docs/langgraph/23-pregel.md")[Pregel Runtime]
+- #link("../../docs/langgraph/18-choosing-apis.md")[Choosing between Graph and Functional APIs]
+- #link("../../docs/langgraph/23-pregel.md")[Pregel Runtime]

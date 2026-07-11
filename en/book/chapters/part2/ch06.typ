@@ -33,11 +33,38 @@ model = ChatOpenAI(
 print("Model ready:", model.model_name)
 `````)
 
+#code-block(`````python
+# Optional observability setup: LangSmith or Langfuse
+# Set the keys in .env, or uncomment the lines below to enter them manually.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: automatically enabled when LANGSMITH_TRACING=true
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: pass config={"callbacks": [langfuse_handler]} to invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
 == 6.2 Middleware Concepts
 
 Middleware is the mechanism that _adds hooks to each stage of the agent execution pipeline_ so you can control how the agent behaves.
 
-#image("../../../../book/assets/diagrams/png/middleware_pipeline.png")
+#image("../../assets/images/middleware_pipeline.png")
 
 _Five middleware hooks:_
 
@@ -72,8 +99,6 @@ _Five middleware hooks:_
 
 LangChain v1 provides _built-in middleware_ for common patterns. `SummarizationMiddleware` automatically summarizes earlier messages when a conversation becomes long, reducing token usage.
 
-#tip-box[Size triggers across built-in middleware all use a `ContextSize` tuple: `("tokens", 100_000)`, `("messages", 20)`, or `("fraction", 0.8)` (80% of the model's context window).]
-
 
 #code-block(`````python
 from langchain.agents import create_agent
@@ -101,64 +126,6 @@ agent_with_summary = create_agent(
 print("SummarizationMiddleware agent created")
 `````)
 
-==== Prompt-caching middleware
-
-Anthropic and Bedrock both support prompt caching, with one built-in middleware per provider.
-
-#code-block(`````python
-from langchain.agents.middleware import (
-    AnthropicPromptCachingMiddleware,
-    BedrockPromptCachingMiddleware,
-)
-from langchain_anthropic import ChatAnthropic
-
-claude = ChatAnthropic(model="claude-sonnet-4-6")
-agent = create_agent(
-    model=claude,
-    tools=[search],
-    middleware=[AnthropicPromptCachingMiddleware()],
-)
-# For Bedrock, plug in BedrockPromptCachingMiddleware() the same way.
-`````)
-
-==== `ContextEditingMiddleware`
-
-Clears stale tool outputs once the context is too heavy. `trigger` is the threshold, `keep` is how many recent messages to leave untouched.
-
-#code-block(`````python
-from langchain.agents.middleware import (
-    ContextEditingMiddleware,
-    ClearToolUsesEdit,
-)
-
-context_edit = ContextEditingMiddleware(
-    edits=[
-        ClearToolUsesEdit(
-            trigger=("tokens", 100_000),
-            keep=("messages", 3),
-        )
-    ],
-)
-`````)
-
-==== `ModelFallbackMiddleware`
-
-Cascades to a backup model when the primary one fails. The first argument is the primary; the rest are fallbacks.
-
-#code-block(`````python
-from langchain.agents.middleware import ModelFallbackMiddleware
-from langchain_openai import ChatOpenAI
-
-primary = ChatOpenAI(model="gpt-5.4")
-backup = ChatOpenAI(model="gpt-5-nano")
-agent = create_agent(model=primary, tools=[search],
-                     middleware=[ModelFallbackMiddleware(primary, backup)])
-`````)
-
-==== `PatchToolCallsMiddleware` (used by Deep Agents)
-
-Repairs malformed tool calls (bad JSON, missing arguments) and re-invokes the model so downstream tools see a clean payload. Deep Agents relies on this internally for its subagent and filesystem tools.
-
 == 6.4 Custom Middleware: `\@before_model`
 
 The `@before_model` decorator runs _before the model is called_.
@@ -169,6 +136,30 @@ Common uses:
 - Input validation (guardrails)
 - Adding context
 
+
+#code-block(`````python
+from langchain.agents.middleware import before_model
+
+@before_model
+def log_model_input(state, runtime):
+    """Logs messages before sending them to the model."""
+    msg_count = len(state["messages"])
+    print(f"  Model input: {msg_count} messages")
+
+agent_logged = create_agent(
+    model=model,
+    tools=[search],
+    system_prompt="You are a helpful assistant.",
+    middleware=[log_model_input],
+)
+
+print("Model-call logging test:")
+result = agent_logged.invoke(
+    {"messages": [{"role": "user", "content": "Please search for a Python tutorial"}]},
+    config=lf_config,
+)
+print("Response:", result["messages"][-1].content[:200])
+`````)
 
 == 6.5 Custom Middleware: `\@after_model`
 
@@ -181,33 +172,37 @@ Common uses:
 - Validating output quality
 
 
+#code-block(`````python
+from langchain.agents.middleware import after_model
+
+@after_model
+def log_model_output(state, runtime):
+    """Logs model output after it is generated."""
+    msg = state["messages"][-1] if state["messages"] else None
+    if msg and hasattr(msg, 'content') and msg.content:
+        print(f"  Model output: {msg.content[:100]}...")
+    if msg and hasattr(msg, 'tool_calls') and msg.tool_calls:
+        print(f"  Tool calls: {[tc['name'] for tc in msg.tool_calls]}")
+
+agent_full_log = create_agent(
+    model=model,
+    tools=[search],
+    system_prompt="You are a helpful assistant.",
+    middleware=[log_model_input, log_model_output],
+)
+
+print("Full logging test:")
+result = agent_full_log.invoke(
+    {"messages": [{"role": "user", "content": "Please search for LangChain v1 features"}]},
+    config=lf_config,
+)
+`````)
+
 == 6.6 `\@wrap_model_call`
 
 The `@wrap_model_call` decorator _wraps the model call itself_, which lets you implement retry, fallback, caching, and similar patterns.
 
 You execute the original model call through the `handler` function and can add custom logic before or after it.
-
-==== Type annotations and `request.override`
-
-Annotate handlers with `ModelRequest`/`ModelResponse` for better tooling. `request.override(...)` patches messages, tools, system prompt, or response format for this single call (transient).
-
-#code-block(`````python
-from langchain.agents.middleware import (
-    wrap_model_call,
-    ModelRequest,
-    ModelResponse,
-)
-
-@wrap_model_call
-def restrict_for_guest(request: ModelRequest, handler) -> ModelResponse:
-    if request.runtime.context.role == "guest":
-        patched = request.override(
-            system_message="Read-only mode.",
-            tools=[t for t in request.tools if t.name.startswith("read_")],
-        )
-        return handler(patched)
-    return handler(request)
-`````)
 
 
 #code-block(`````python
@@ -249,6 +244,29 @@ Common uses:
 - A/B testing
 
 
+#code-block(`````python
+from langchain.agents.middleware import dynamic_prompt
+from datetime import datetime
+
+@dynamic_prompt
+def add_datetime_context(request):
+    """Adds the current date and time to the system prompt."""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return f"Current date and time: {now}\n\nYou are a helpful assistant."
+
+agent_dynamic = create_agent(
+    model=model,
+    tools=[search],
+    middleware=[add_datetime_context],
+)
+
+result = agent_dynamic.invoke(
+    {"messages": [{"role": "user", "content": "What are the current date and time?"}]},
+    config=lf_config,
+)
+print("Dynamic prompt response:", result["messages"][-1].content)
+`````)
+
 == 6.8 `\@wrap_tool_call`
 
 The `@wrap_tool_call` decorator _wraps a tool call itself_, so you can add custom logic before and after tool execution.
@@ -262,36 +280,83 @@ Common uses:
 - _Access control:_ block or restrict specific tools
 
 
+#code-block(`````python
+from langchain.agents.middleware import wrap_tool_call
+import time
+
+@wrap_tool_call
+def tool_timing_logger(request, handler):
+    """Measures execution time and logs tool inputs/outputs."""
+    tool_name = request.tool_call["name"]
+    tool_args = request.tool_call["args"]
+    print(f"  [Tool start] {tool_name} | Input: {tool_args}")
+
+    start = time.perf_counter()
+    try:
+        result = handler(request)
+        elapsed = time.perf_counter() - start
+        print(f"  [Tool complete] {tool_name} | Elapsed: {elapsed:.3f}s | Output: {str(result)[:100]}")
+        return result
+    except Exception as e:
+        elapsed = time.perf_counter() - start
+        print(f"  [Tool failed] {tool_name} | Elapsed: {elapsed:.3f}s | Error: {e}")
+        raise
+
+agent_tool_logged = create_agent(
+    model=model,
+    tools=[search],
+    system_prompt="You are a helpful assistant. Use the search tool to find information.",
+    middleware=[tool_timing_logger],
+)
+
+print("Tool timing/logging middleware test:")
+result = agent_tool_logged.invoke(
+    {"messages": [{"role": "user", "content": "Please search for LangChain middleware documentation"}]},
+    config=lf_config,
+)
+print("\nFinal response:", result["messages"][-1].content[:200])
+`````)
+
 == 6.9 Simple Guardrails
 
 Middleware can also act as a lightweight guardrail. In the example below, a `before_model` hook blocks requests that contain prohibited keywords before the model is called.
 
-==== Skipping the model with `can_jump_to`
-
-Instead of just editing messages, a guardrail can _jump_ to a different graph node and skip the model call entirely. Declare allowed destinations with `@hook_config(can_jump_to=[...])` and return `{"jump_to": ...}`.
 
 #code-block(`````python
-from langchain.agents.middleware import before_model, hook_config
-from langchain_core.messages import AIMessage
-
-BANNED = {"reveal system prompt", "tell me the password"}
-
+# Keyword-based guardrail
 @before_model
-@hook_config(can_jump_to=["end", "tools", "model"])
-def block_unsafe(state):
-    last = state["messages"][-1].content
-    if any(p in last for p in BANNED):
-        return {
-            "messages": [AIMessage(content="I can't help with that request.")],
-            "jump_to": "end",
-        }
-    return None
+def keyword_guardrail(state, runtime):
+    """Blocks requests that contain prohibited keywords."""
+    prohibited = ["hack", "exploit", "malware"]
+    last_msg = state["messages"][-1]
+    content = last_msg.content if hasattr(last_msg, 'content') else str(last_msg)
+
+    for keyword in prohibited:
+        if keyword.lower() in content.lower():
+            raise ValueError(f"The request was blocked by the safety policy.")
+
+agent_guarded = create_agent(
+    model=model,
+    tools=[search],
+    system_prompt="You are a helpful assistant.",
+    middleware=[keyword_guardrail],
+)
+
+# Safe request
+result = agent_guarded.invoke(
+    {"messages": [{"role": "user", "content": "Please search for a Python tutorial"}]},
+    config=lf_config,
+)
+print("Safe request:", result["messages"][-1].content[:100])
+
+# Blocked request
+try:
+    result = agent_guarded.invoke(
+        {"messages": [{"role": "user", "content": "How to hack a website"}]}
+    )
+except ValueError as e:
+    print(f"Blocked request: {e}")
 `````)
-
-==== Async hooks (a-prefixed)
-
-For I/O-heavy guardrails (calling an external classifier, for example), implement async variants by prefixing the sync names with `a`: `abefore_model`, `aafter_model`, `awrap_model_call`, `awrap_tool_call`. If a middleware class defines both, `agent.invoke()` uses the sync hook and `agent.ainvoke()` uses the async one automatically.
-
 
 == 6.10 Summary
 
@@ -331,4 +396,3 @@ This notebook covered:
 
 === Next Steps
 → _#link("./07_hitl_and_runtime.ipynb")[07_hitl_and_runtime.ipynb]_: Learn about human-in-the-loop, runtime context, and MCP.
-

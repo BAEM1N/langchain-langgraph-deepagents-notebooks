@@ -173,7 +173,7 @@ agent.invoke({"messages": [{"role": "user", "content": "3+4?"}]})
 == 6.4 What Comes Next
 
 === Mini Project
-→ _#link("./07_mini_project_en.ipynb")[07_mini_project_en.ipynb]_: Build a search + summarization agent
+→ _#link("./07_mini_project.ipynb")[07_mini_project.ipynb]_: Build a search + summarization agent
 
 === Intermediate Tracks
 
@@ -203,4 +203,3 @@ Recommended order:
 + _Deep Agents_ — build production-ready agents
 
 The English intermediate notebooks will be translated next in this same order.
-

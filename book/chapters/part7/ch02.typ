@@ -46,7 +46,26 @@ assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY를 .env에 설정하세
 `````)
 
 #code-block(`````python
+# Observability 설정 (선택)
+import os
+
+# LangSmith — LANGSMITH_* 가 표준. LANGCHAIN_* 는 하위 호환 shim
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    print(f"LangSmith tracing ON — project: {os.environ['LANGSMITH_PROJECT']}")
+
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
+#code-block(`````python
 from langchain_openai import ChatOpenAI
+from langchain.tools import tool
 
 model = ChatOpenAI(model="gpt-5.4")
 
@@ -184,9 +203,50 @@ agent = create_deep_agent(
 )
 `````)
 
+#code-block(`````python
+# 단순 쿼리
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "아티스트가 총 몇 명인가요?"}]},
+    config=lf_config,
+)
+print(response["messages"][-1].content)
+
+`````)
+#output-block(`````
+아티스트는 총 275명입니다.
+`````)
+
+#code-block(`````python
+# 복합 쿼리 (write_todos 활용)
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "장르별 트랙 수와 평균 가격을 알려주세요. 트랙이 많은 순으로 정렬해주세요."}]},
+    config=lf_config,
+)
+print(response["messages"][-1].content)
+
+`````)
+#output-block(`````
+장르별 트랙 수와 평균 가격입니다. 트랙이 많은 순으로 정렬했습니다.
+
+| 장르               | 트랙 수 | 평균 가격 |
+|--------------------|--------|-----------|
+| Rock               | 1297   | 0.99      |
+| Latin              | 579    | 0.99      |
+| Metal              | 374    | 0.99      |
+| Alternative & Punk | 332    | 0.99      |
+| Jazz               | 130    | 0.99      |
+| TV Shows           | 93     | 1.99      |
+| Blues              | 81     | 0.99      |
+| Classical          | 74     | 0.99      |
+| Drama              | 64     | 1.99      |
+| R&B/Soul           | 61     | 0.99      |
+
+모든 장르의 트랙 평균 가격은 대부분 0.99이며, TV Shows와 Drama 장르는 1.99입니다.
+`````)
+
 == 6단계: HITL 에이전트 (4-decision 정책)
 
-`create_deep_agent`의 `interrupt_on` 파라미터로 도구별 승인 정책을 설정합니다. `sql_db_query` 호출 전에 실행이 중단되고, `Command(resume={"decisions": [...]})` 로 재개합니다. _호출 시 `version="v2"`_ 가 필요합니다.
+`interrupt_on`은 도구별로 허용 결정을 좁힙니다. `sql_db_query`는 `approve`·`edit`·`reject`만 허용하고, 사람이 도구 역할을 하는 `ask_user`만 `respond`를 허용합니다. 모든 재개 호출은 같은 `thread_id`와 `version="v2"`를 사용합니다.
 
 #table(
   columns: 3,
@@ -195,44 +255,62 @@ agent = create_deep_agent(
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[결정 유형],
-  text(weight: "bold")[페이로드],
+  text(weight: "bold")[적용 도구],
   text(weight: "bold")[동작],
   [`approve`],
-  [`{"type": "approve"}`],
-  [도구를 그대로 실행],
+  [`sql_db_query`],
+  [제안한 쿼리를 그대로 실행],
   [`edit`],
-  [`{"type": "edit", "edited_action": {"name":"sql_db_query", "args":{"query":"..."}}}`],
-  [인자 수정 후 실행],
+  [`sql_db_query`],
+  [검토한 쿼리로 바꿔 실행],
   [`reject`],
-  [`{"type": "reject", "message": "..."}`],
-  [실행 거부 + 에이전트에 피드백],
+  [`sql_db_query`],
+  [실행을 거부하고 피드백 전달],
   [`respond`],
-  [`{"type": "respond", "message": "..."}`],
-  [도구 호출 생략, 사람 응답이 ToolMessage 가 됨],
+  [`ask_user`],
+  [사람의 답변을 성공한 ToolMessage로 반환],
 )
 
-여기서는 위험한 데이터 변경 도구가 없으므로 `sql_db_query` 에 대해 _네 결정 모두를 허용_합니다. 운영 환경에서는 `allowed_decisions=["approve","reject"]` 처럼 좁혀 두는 것이 안전합니다.
+부작용이나 쿼리를 거부할 때 `respond`를 쓰면 모델이 성공 결과로 오해할 수 있으므로 `reject`를 사용합니다.
 
 #code-block(`````python
 from langgraph.checkpoint.memory import InMemorySaver
 from langchain.agents.middleware import ModelCallLimitMiddleware
 
+@tool
+def ask_user(question: str) -> str:
+    """계속 진행하는 데 필요한 정보를 사용자에게 묻습니다."""
+    return "응답 없음"
+
 hitl_agent = create_deep_agent(
     model=model,
-    tools=sql_tools,
-    system_prompt=SQL_AGENT_PROMPT,
+    tools=[*sql_tools, ask_user],
+    system_prompt=SQL_AGENT_PROMPT + " 정보가 부족하면 ask_user로 확인하세요.",
     backend=FilesystemBackend(root_dir=".", virtual_mode=True),
     skills=["/skills/"],
     checkpointer=InMemorySaver(),
     interrupt_on={
-        "sql_db_query": {
-            "allowed_decisions": ["approve", "edit", "reject", "respond"],
-        },
+        "sql_db_query": {"allowed_decisions": ["approve", "edit", "reject"]},
+        "ask_user": {"allowed_decisions": ["respond"]},
     },
-    middleware=[
-        ModelCallLimitMiddleware(run_limit=15),
-    ],
+    middleware=[ModelCallLimitMiddleware(run_limit=15)],
 )
+`````)
+
+#code-block(`````python
+thread = {"configurable": {"thread_id": "hitl-approve"}}
+result = hitl_agent.invoke(
+    {"messages": [{"role": "user", "content": "고객별 총 구매 금액 상위 5명을 알려주세요."}]},
+    config={**thread, **lf_config},
+    version="v2",
+)
+
+# v2 호출은 GraphOutput 을 반환 — .interrupts 로 대기 중 요청 확인
+print("중단 여부:", bool(result.interrupts))
+for itp in result.interrupts:
+    for req in itp.value.get("action_requests", []):
+        print(f"  → 승인 대기 도구: {req['name']} / 인자: {req['args']}")
+
 `````)
 
 == 7단계: 4-decision 시연
@@ -241,17 +319,98 @@ hitl_agent = create_deep_agent(
 
 === 7-1. `approve` — 제안된 SQL 그대로 실행
 
+#code-block(`````python
+from langgraph.types import Command
+
+resumed = hitl_agent.invoke(
+    Command(resume={"decisions": [{"type": "approve"}]}),
+    config={**thread, **lf_config},
+    version="v2",
+)
+print(resumed.value["messages"][-1].content)
+`````)
+
 === 7-2. `edit` — SQL 인자를 수정한 뒤 실행
 
 검토자가 더 엄격한 `LIMIT` 을 강제하거나 컬럼을 추가하고 싶을 때 사용합니다. `edited_action.args` 로 도구 인자를 덮어씁니다.
+
+#code-block(`````python
+thread_edit = {"configurable": {"thread_id": "hitl-edit"}}
+result = hitl_agent.invoke(
+    {"messages": [{"role": "user", "content": "고객별 총 구매 금액 상위 5명을 알려주세요."}]},
+    config={**thread_edit, **lf_config},
+    version="v2",
+)
+pending = result.interrupts[0].value["action_requests"][0]
+print("원본 SQL:", pending["args"].get("query"))
+
+# 검토자가 더 안전한 형태(LIMIT 3)로 인자를 수정해 재개
+edited_query = (
+    "SELECT c.FirstName || ' ' || c.LastName AS customer, "
+    "ROUND(SUM(i.Total), 2) AS total "
+    "FROM Customer c JOIN Invoice i ON c.CustomerId = i.CustomerId "
+    "GROUP BY c.CustomerId ORDER BY total DESC LIMIT 3"
+)
+
+resumed = hitl_agent.invoke(
+    Command(resume={"decisions": [{
+        "type": "edit",
+        "edited_action": {"name": "sql_db_query", "args": {"query": edited_query}},
+    }]}),
+    config={**thread_edit, **lf_config},
+    version="v2",
+)
+print(resumed.value["messages"][-1].content)
+`````)
 
 === 7-3. `reject` — 실행 거부 후 에이전트에 피드백
 
 `message` 가 ToolMessage 로 추가되어 에이전트가 다음 사고에서 이를 반영합니다.
 
-=== 7-4. `respond` — 도구 실행을 건너뛰고 사람이 직접 답변
+#code-block(`````python
+thread_reject = {"configurable": {"thread_id": "hitl-reject"}}
+result = hitl_agent.invoke(
+    {"messages": [{"role": "user", "content": "Employee 테이블에서 모든 직원의 개인정보(주소, 전화번호)를 조회해주세요."}]},
+    config={**thread_reject, **lf_config},
+    version="v2",
+)
+print("거부 대상 SQL:", result.interrupts[0].value["action_requests"][0]["args"].get("query"))
 
-`respond` 는 도구 호출 자체를 생략합니다. 검토자의 `message` 가 그대로 ToolMessage 가 되어 에이전트의 다음 응답에 반영됩니다. "이번엔 굳이 쿼리하지 말고 내가 알려준 값을 써" 같은 시나리오에 적합합니다.
+resumed = hitl_agent.invoke(
+    Command(resume={"decisions": [{
+        "type": "reject",
+        "message": "개인정보(주소·전화번호) 조회는 보안 정책상 금지. 집계 통계만 응답해 주세요.",
+    }]}),
+    config={**thread_reject, **lf_config},
+    version="v2",
+)
+print(resumed.value["messages"][-1].content)
+`````)
+
+=== 7-4. `respond` — `ask_user`에 사람이 직접 답변
+
+`respond`는 질문형 도구를 실행하지 않고 사람의 `message`를 성공한 ToolMessage로 반환합니다. 아래에서는 에이전트가 기준 시점을 묻고, 사람이 답합니다. SQL 실행을 거부하는 상황이라면 `respond`가 아니라 `reject`를 사용합니다.
+
+#code-block(`````python
+thread_resp = {"configurable": {"thread_id": "hitl-respond"}}
+result = hitl_agent.invoke(
+    {"messages": [{"role": "user", "content": "트랙 수를 알려주세요. 먼저 어느 기준 시점으로 볼지 저에게 물어보세요."}]},
+    config={**thread_resp, **lf_config},
+    version="v2",
+)
+request = result.interrupts[0].value["action_requests"][0]
+print("질문형 도구:", request["name"], request["args"])
+
+resumed = hitl_agent.invoke(
+    Command(resume={"decisions": [{
+        "type": "respond",
+        "message": "현재 데이터베이스 시점을 기준으로 답해주세요.",
+    }]}),
+    config={**thread_resp, **lf_config},
+    version="v2",
+)
+print(resumed.value["messages"][-1].content)
+`````)
 
 #chapter-summary-header()
 
@@ -268,18 +427,16 @@ hitl_agent = create_deep_agent(
   [_안전 규칙_],
   [Skills + 프롬프트로 READ-ONLY 정책 적용],
   [_HITL 정책_],
-  [`interrupt_on={"sql_db_query": {"allowed_decisions": [...]}}`],
+  [SQL은 `approve/edit/reject`, `ask_user`는 `respond`만 허용],
   [_HITL 호출_],
-  [`version="v2"` → `GraphOutput.interrupts` 검사 → `Command(resume={"decisions":[...]})` 재개],
-  [_4-decision_],
-  [`approve` (그대로) / `edit` (인자 수정) / `reject` (피드백 후 거부) / `respond` (도구 생략, 사람 답변)],
+  [`version="v2"` → `GraphOutput.interrupts` → `Command(resume={"decisions":[...]})`],
 )
 
 
 #references-box[
-- `docs/langchain/17-human-in-the-loop.md` — HITL 4-decision · `version="v2"` 사양
+- `docs/langchain/17-human-in-the-loop.md` — HITL 결정 의미와 `version="v2"` 사양
 - `docs/deepagents/examples/03-text-to-sql-agent.md`
-- #link("https://python.langchain.com/docs/tutorials/sql_qa/")[LangChain SQL Agent Tutorial]
+- #link("https://docs.langchain.com/oss/python/langchain/sql-agent")[LangChain SQL Agent Tutorial]
 _다음 단계:_ → #link("./03_data_analysis_agent.ipynb")[03_data_analysis_agent.ipynb]: 데이터 분석 에이전트를 구축합니다.
 ]
 #chapter-end()

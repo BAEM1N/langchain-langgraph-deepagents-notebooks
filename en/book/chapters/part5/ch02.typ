@@ -24,11 +24,37 @@ load_dotenv()
 model = ChatOpenAI(model="gpt-5.4")
 `````)
 
+#code-block(`````python
+# Observability settings (optional) - LangSmith or Langfuse
+# Set the key in .env, or uncomment it below and enter it yourself.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: Automatically enabled when LANGSMITH_TRACING=true (no code modification required)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: Pass config={"callbacks": [langfuse_handler]} when calling invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
 == 2.2 Subagents Architecture Overview
 
 The Subagents pattern consists of a _three-tier architecture_. The supervisor is responsible for all routing, subagent does not interact directly with the user, and returns results to the supervisor.
 
-#image("../../../../book/assets/diagrams/png/supervisor_subagents.png")
+#image("../../assets/images/supervisor_subagents.png")
 
 #table(
   columns: 3,
@@ -114,7 +140,7 @@ Each subagent is created by `create_agent()` and has three core elements:
 
 + _Specialized system prompts_: Define domain-specific roles and behavioral guidelines
 + _Set tool by domain_: Separate concerns by assigning only tool for that domain
-+ *`name` identifier*: used by the supervisor to identify and call a subagent
++ _`name` identifier_: Used by the supervisor to identify and call subagent
 
 The recommended granularity of subagent is domain-level (calendar, email, etc.). Too much granularity increases the routing burden on the supervisor, while too much integration reduces the benefits of context isolation.
 
@@ -149,6 +175,28 @@ Advantages of this pattern:
 
 _Choose an input/output strategy_: You can pass just the query (simple) or the entire context (sophisticated). When returning results, you have the option of returning only the final result or returning the entire history.
 
+#code-block(`````python
+@tool("schedule_event", description="Calendar event scheduling")
+def call_calendar(query: str) -> str:
+    """Delegate calendar tasks to a calendar agent."""
+    result = calendar_agent.invoke(
+        {"messages": [{"role": "user", "content": query}]},
+        config=lf_config,
+)
+    return result["messages"][-1].content
+`````)
+
+#code-block(`````python
+@tool("manage_email", description="Send, read and search email")
+def call_email(query: str) -> str:
+    """Delegate email tasks to email agents."""
+    result = email_agent.invoke(
+        {"messages": [{"role": "user", "content": query}]},
+        config=lf_config,
+)
+    return result["messages"][-1].content
+`````)
+
 == 2.6 Supervisor Agent Assembly
 
 The supervisor is created by passing the wrapped subagent tool to `tools`. The supervisor's system prompts include task decomposition and delegation instructions.
@@ -176,6 +224,15 @@ User: "Schedule a meeting with Sarah tomorrow at 2 PM and send the invitation em
 Supervisor → call_calendar → create_calendar_event
 Supervisor → call_email → send_email
 Supervisor: "The meeting and invitation email are complete"
+`````)
+
+#code-block(`````python
+# response = supervisor.invoke({
+#     "messages": [{"role": "user",
+# "content": "I have a meeting with Sarah tomorrow at 2 o'clock."
+# "Send me an invitation email."}]
+# }, config=lf_config)
+# print(response["messages"][-1].content)
 `````)
 
 == 2.8 HITL (Human-in-the-Loop) Integration
@@ -224,6 +281,13 @@ supervisor_hitl = create_agent(
     middleware=[hitl],
     system_prompt="You are a personal assistant.",
 )
+`````)
+
+#code-block(`````python
+from langgraph.types import Command
+
+# result = supervisor_hitl.invoke(Command(resume="approve"), config=lf_config)
+# result = supervisor_hitl.invoke(Command(resume={"type": "reject", "reason": "I changed my mind"}), config=lf_config)
 `````)
 
 == 2.9 Passing context (ToolRuntime)
@@ -340,78 +404,18 @@ There are two approaches to the tool pattern:
 
 The single dispatch pattern specifies the target of the call with the `agent_name` parameter. Because subagent registered in the agent registry is called by looking up its name, subagent can be added or removed independently in distributed teams, providing excellent scalability.
 
-=== Three ways to expose a single dispatch tool
-
-#table(
-  columns: 3,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Style],
-  text(weight: "bold")[How],
-  text(weight: "bold")[When to use],
-  [_Literal enum_],
-  [`agent_name: Literal["calendar", "email"]`],
-  [≤ 5 domains, stable routing],
-  [_Dict registry_],
-  [Add/remove via dict without code change],
-  [6-20 domains, frequent changes],
-  [_Vector search routing_],
-  [Embed descriptions, match against user query],
-  [20+ domains, semantic routing],
-)
-
-=== `SubAgentMiddleware` — Deep Agents integration
-Instead of wrapping each subagent with `@tool`, `deepagents.SubAgentMiddleware` registers the dispatch tool automatically and merges subagent results into the supervisor state.
-
 #code-block(`````python
-from deepagents.middleware import SubAgentMiddleware
+from typing import Literal
 
-supervisor = create_agent(
-    model="gpt-5.4",
-    tools=[],  # middleware adds the dispatch tool
-    middleware=[SubAgentMiddleware(subagents=[
-        {"name": "calendar", "description": "schedule", "agent": calendar_agent},
-        {"name": "email", "description": "send/read email", "agent": email_agent},
-    ])],
-    system_prompt="You are a personal assistant.",
-)
+AGENT_REGISTRY = {"calendar": calendar_agent, "email": email_agent}
+
+@tool("delegate", description="Delegate to a professional agent")
+def dispatch(agent_name: Literal["calendar", "email"], query: str) -> str:
+    """Routes the task to the specified subagent."""
+    agent = AGENT_REGISTRY[agent_name]
+    result = agent.invoke({"messages": [{"role": "user", "content": query}]}, config=lf_config)
+    return result["messages"][-1].content
 `````)
-
-=== `checkpointer=True` — inherit the parent checkpointer
-Since v1.2, `create_agent(checkpointer=True)` automatically inherits the parent graph's checkpointer, so subagents resume under the same `thread_id` without passing an explicit instance. Useful when HITL middleware is applied at the subagent level.
-
-#code-block(`````python
-calendar_agent = create_agent(
-    model="gpt-5.4",
-    tools=[create_calendar_event],
-    checkpointer=True,  # inherit from parent graph
-    middleware=[HumanInTheLoopMiddleware(interrupt_on={
-        "create_calendar_event": {"allowed_decisions": ["approve", "reject"]},
-    })],
-    name="calendar_agent",
-)
-`````)
-
-=== `ToolRuntime[None, CustomState]`
-When you need _custom state_ in tools but no context, parametrise `ToolRuntime` with `None` as the first type and the state schema as the second.
-
-#code-block(`````python
-from typing import NotRequired
-from langchain.tools import tool, ToolRuntime
-from langchain.agents import AgentState
-
-class JobState(AgentState):
-    pending_jobs: NotRequired[list[str]]
-
-@tool
-def list_pending(runtime: ToolRuntime[None, JobState]) -> str:
-    return ", ".join(runtime.state.get("pending_jobs", []))
-`````)
-
-=== Async 5-tool dispatch pattern
-A production-ready async subagent pattern exposes five tools, one responsibility each: `start_job`, `check_job`, `cancel_job`, `list_jobs`, `wait_for`. Pair these with an external queue (Celery, Redis Streams, Cloud Tasks) so job state survives process restarts.
 
 #code-block(`````python
 supervisor_dispatch = create_agent(

@@ -25,6 +25,32 @@ load_dotenv()
 model = ChatOpenAI(model="gpt-5.4")
 `````)
 
+#code-block(`````python
+# Observability settings (optional) - LangSmith or Langfuse
+# Set the key in .env, or uncomment it below and enter it yourself.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: Automatically enabled when LANGSMITH_TRACING=true (no code modification required)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: Pass config={"callbacks": [langfuse_handler]} when calling invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
 == 1.2 Middleware Architecture Overview
 
 The agent loop is a repeating cycle of _model call → tool selection → tool execution → termination decision_. Middleware enables fine-grained control by inserting hooks into each step of this cycle.
@@ -77,7 +103,7 @@ from langchain.agents.middleware import (
 agent = create_agent(
     model="gpt-5.4", tools=[],
     middleware=[
-        SummarizationMiddleware(model="gpt-5.4-mini", trigger=("messages", 50)),
+        SummarizationMiddleware(model="gpt-4.1-mini", trigger=("messages", 50)),
         HumanInTheLoopMiddleware(interrupt_on={}),
     ],
 )
@@ -100,7 +126,7 @@ When a conversation becomes long enough to exceed the context window, it automat
   text(weight: "bold")[Example],
   [`model`],
   [Summary Lightweight model to use for creation (reduces costs)],
-  [`"gpt-5.4-mini"`],
+  [`"gpt-4.1-mini"`],
   [`trigger`],
   [Summary Trigger condition],
   [`("tokens", 4000)`, `("messages", 50)`, `("fraction", 0.8)`],
@@ -121,7 +147,7 @@ When a conversation becomes long enough to exceed the context window, it automat
 from langchain.agents.middleware import SummarizationMiddleware
 
 summarizer = SummarizationMiddleware(
-    model="gpt-5.4-mini",
+    model="gpt-4.1-mini",
     trigger=("tokens", 4000),
     keep=("messages", 20),
 )
@@ -131,7 +157,7 @@ summarizer = SummarizationMiddleware(
 
 Stop agent execution before high-risk tool calling and wait for human approval. Use when human supervision is required for high-risk tasks or compliance workflows, such as database writes, financial transactions, and email sending.
 
-*`checkpointer` required* — a checkpointer is absolutely required to restore state after an interruption.
+_`checkpointer` Required_ — checkpointer is absolutely required to restore state after an interruption.
 
 === Decision type
 
@@ -175,6 +201,14 @@ agent = create_agent(
     checkpointer=InMemorySaver(),
     middleware=[hitl],
 )
+`````)
+
+#code-block(`````python
+from langgraph.types import Command
+
+# result = agent.invoke(Command(resume="approve"), config=lf_config)
+# result = agent.invoke(Command(resume={"type": "edit", "args": {"to": "new@ex.com"}}), config=lf_config)
+# result = agent.invoke(Command(resume={"type": "reject", "reason": "Not needed"}), config=lf_config)
 `````)
 
 == 1.5 ModelCallLimitMiddleware & ToolCallLimitMiddleware
@@ -242,10 +276,10 @@ If you pass a fallback model to the constructor in order, it will try the fallba
 #code-block(`````python
 from langchain.agents.middleware import ModelFallbackMiddleware
 
-# gpt-5.4 failed -> gpt-5.4-mini -> claude
+# gpt-5.4 failed -> gpt-4.1-mini -> claude
 fallback = ModelFallbackMiddleware(
-    "gpt-5.4-mini",
-    "claude-sonnet-4-6",
+    "gpt-4.1-mini",
+    "claude-3-5-sonnet-20241022",
 )
 `````)
 
@@ -289,7 +323,7 @@ Personally identifiable information (PII) is automatically detected and processe
 === Custom Detector
 In addition to the built-in PII types, you can create custom detectors in three ways:
 + _Regular Expression String_: Simple pattern matching
-+ *Compiled regular expressions (`re.compile`):* complex regular expressions
++ _Compiled Regular Expressions (`re.compile`)_: Complex regular expressions
 + _Function_: Advanced detection that requires validation logic (returns: `list[dict]` — contains `text`, `start`, `end` keys)
 
 #code-block(`````python
@@ -361,45 +395,15 @@ When there are more than 10 tools, Lightweight LLM analyzes the user query and s
   [`[]`],
 )
 
-Using a lightweight model like `gpt-5.4-mini` as the model of choice allows for effective tool filtering while reducing cost.
+Using a lightweight model like `gpt-4.1-mini` as the model of choice allows for effective tool filtering while reducing cost.
 
 #code-block(`````python
 from langchain.agents.middleware import LLMToolSelectorMiddleware
 
 tool_selector = LLMToolSelectorMiddleware(
-    model="gpt-5.4-mini",
+    model="gpt-4.1-mini",
     max_tools=3,
     always_include=["search"],
-)
-`````)
-
-=== ContextEditingMiddleware
-For long multi-turn conversations, `ContextEditingMiddleware` clears _old tool results_ once a token threshold is crossed, while keeping the most recent N. Where `SummarizationMiddleware` writes a single summary blob, this one prunes tool-result by tool-result.
-
-#code-block(`````python
-from langchain.agents.middleware import ContextEditingMiddleware, ClearToolUsesEdit
-
-agent = create_agent(
-    model="gpt-5.4",
-    tools=[search_tool],
-    middleware=[
-        ContextEditingMiddleware(
-            edits=[ClearToolUsesEdit(trigger=100_000, keep=3, placeholder="[cleared]")],
-        ),
-    ],
-)
-`````)
-
-=== PatchToolCallsMiddleware (Deep Agents)
-Some models produce slightly malformed tool-call JSON. `PatchToolCallsMiddleware` (from `deepagents`) repairs common defects so tool calls do not fail outright.
-
-#code-block(`````python
-from deepagents.middleware.patch_tool_calls import PatchToolCallsMiddleware
-
-agent = create_agent(
-    model="claude-sonnet-4-6",
-    tools=[search_tool, write_file],
-    middleware=[PatchToolCallsMiddleware()],
 )
 `````)
 
@@ -421,66 +425,6 @@ You can control agent flow by returning a dictionary from `after_model`, etc.:
 - `{"jump_to": "end"}` — Terminate agent immediately
 - Go to `{"jump_to": "tools"}` — tool execution phase
 - `{"jump_to": "model"}` — Go to model call step
-
-Since v1.2, declare legal jump targets statically with `@hook_config(can_jump_to=[...])`. The graph is validated at compile time so an invalid jump target fails fast.
-
-#code-block(`````python
-from langchain.agents.middleware import after_model, hook_config, AgentState
-from langgraph.runtime import Runtime
-from langchain.messages import AIMessage
-
-@after_model
-@hook_config(can_jump_to=["end"])
-def block_unsafe(state: AgentState, runtime: Runtime) -> dict | None:
-    last = state["messages"][-1]
-    if "BLOCKED" in last.content:
-        return {"messages": [AIMessage("Cannot respond.")], "jump_to": "end"}
-    return None
-`````)
-
-=== Type annotations — `ModelRequest`/`ToolCallRequest`/`ModelResponse`
-v1 ships dataclasses for hook signatures:
-- `ModelRequest` (`wrap_model_call` input): `messages`, `tools`, `model`, `system_message`, `response_format`, `state`, `runtime`.
-- `ToolCallRequest` (`wrap_tool_call` input): `tool_call`, `state`, `runtime`.
-- `ModelResponse`: return type of the inner handler.
-- `ExtendedModelResponse`: wraps `ModelResponse` + `Command` for persistent state updates.
-
-#code-block(`````python
-from typing import Callable
-from langchain.agents.middleware import (
-    wrap_model_call, wrap_tool_call,
-    ModelRequest, ModelResponse, ToolCallRequest,
-)
-from langchain.messages import ToolMessage
-from langgraph.types import Command
-
-@wrap_model_call
-def add_cache_marker(
-    request: ModelRequest,
-    handler: Callable[[ModelRequest], ModelResponse],
-) -> ModelResponse:
-    cached = request.override(system_message=f"{request.system_message}\n[CACHE]")
-    return handler(cached)
-`````)
-
-=== `request.override(...)`
-`ModelRequest.override(...)` returns a modified copy without mutating shared state, so multiple middleware can cooperate safely. `messages`, `tools`, `model`, `system_message`, `system_prompt`, `response_format` are all overridable.
-
-=== `ExtendedModelResponse`
-Return `ExtendedModelResponse` from `wrap_model_call` when you need a state update to survive the call:
-
-#code-block(`````python
-from langchain.agents.middleware import ExtendedModelResponse
-
-@wrap_model_call
-def track_tokens(request, handler) -> ExtendedModelResponse:
-    response = handler(request)
-    tokens = response.message.usage_metadata.get("total_tokens", 0)
-    return ExtendedModelResponse(
-        model_response=response,
-        command=Command(update={"total_tokens": tokens}),
-    )
-`````)
 
 #code-block(`````python
 from langchain.agents.middleware import before_model
@@ -533,7 +477,7 @@ When registering multiple middleware, you can prevent unexpected behavior by acc
 
 `middleware=[A, B, C]` Upon registration:
 
-#image("../../../../book/assets/diagrams/png/middleware_execution_order.png")
+#image("../../assets/images/middleware_execution_order.png")
 
 === Practical tips
 - _PII detection must be registered before logging_ so that PII is not included in the log.
@@ -572,201 +516,15 @@ from langgraph.checkpoint.memory import InMemorySaver
 #code-block(`````python
 middleware_stack = [
     PIIMiddleware("email", strategy="redact", apply_to_input=True),
-    ModelFallbackMiddleware("gpt-5.4-mini", "claude-sonnet-4-6"),
+    ModelFallbackMiddleware("gpt-4.1-mini", "claude-3-5-sonnet-20241022"),
     ModelCallLimitMiddleware(thread_limit=50, run_limit=10),
-    SummarizationMiddleware(model="gpt-5.4-mini", trigger=("tokens", 4000)),
+    SummarizationMiddleware(model="gpt-4.1-mini", trigger=("tokens", 4000)),
 ]
 
 production_agent = create_agent(
     model="gpt-5.4", tools=[], checkpointer=InMemorySaver(), middleware=middleware_stack,
 )
 `````)
-
-== 1.12 Provider-specific Middleware
-
-While the seven built-in middleware above cover _provider-agnostic_ patterns, provider-specific middleware wires _vendor-only features_ into the agent. Capabilities that must be toggled on a provider's server — Anthropic prompt cache, Bedrock TTL cache, OpenAI Moderation API — are exposed as dedicated middleware.
-
-=== Anthropic Prompt Caching
-
-`langchain_anthropic.middleware.AnthropicPromptCachingMiddleware` attaches `cache_control` markers automatically at the _system prompt · tool definitions · last message_ positions when calling Claude models. Agents that repeatedly send long system prompts or RAG context can cut input-token cost by up to 90%.
-
-#table(
-  columns: 3,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Parameter],
-  text(weight: "bold")[Default],
-  text(weight: "bold")[Description],
-  [`type`],
-  [`"ephemeral"`],
-  [The only type Anthropic currently supports],
-  [`ttl`],
-  [`"5m"`],
-  [`"5m"` or `"1h"` (1h is an Anthropic beta)],
-  [`min_messages_to_cache`],
-  [`0`],
-  [Attach `cache_control` only when message count is at least this value],
-  [`unsupported_model_behavior`],
-  [`"warn"`],
-  [When applied to non-Anthropic models: `"warn"` / `"ignore"` / `"raise"`],
-)
-
-#code-block(`````python
-from langchain.agents import create_agent
-from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
-
-agent = create_agent(
-    model="anthropic:claude-sonnet-4-6",
-    tools=[],
-    middleware=[
-        AnthropicPromptCachingMiddleware(
-            ttl="1h",
-            min_messages_to_cache=2,
-            unsupported_model_behavior="warn",
-        ),
-    ],
-)
-`````)
-
-On successive calls, check `usage_metadata.input_token_details` for `cache_creation_input_tokens` (first call) and `cache_read_input_tokens` (subsequent calls) to confirm cache hits.
-
-=== Claude native tool middleware
-
-Claude models are trained on native tool schemas (`bash_20250124`, `text_editor_20250728`, `memory_20250818`) that the Anthropic server interprets directly. Compared to building the same behavior with a generic `@tool` decorator, _tool-schema token usage approaches zero_ and error rates are lower. LangChain ships middleware that wraps these native tools in two variants — state-backed and filesystem-backed.
-
-- `ClaudeBashToolMiddleware` — native bash execution tool. Takes `workspace_root`, `startup_commands`, `execution_policy` (`HostExecutionPolicy` / `DockerExecutionPolicy` / `CodexSandboxExecutionPolicy`), and `redaction_rules`. The Docker policy is the recommended default.
-- `StateClaudeTextEditorMiddleware` / `FilesystemClaudeTextEditorMiddleware` — native text editor supporting `view` / `create` / `str_replace` / `insert` / `delete` / `rename`. The state variant writes into the `text_editor_files` state key; the filesystem variant writes into an actual `root_path` directory.
-- `StateClaudeMemoryMiddleware` / `FilesystemClaudeMemoryMiddleware` — native memory tool that follows the `/memories/*` path contract. The state variant, combined with a checkpointer, is restored on `thread_id` resume; the filesystem variant persists to disk across process restarts.
-- `StateFileSearchMiddleware` — native tool that runs `glob` / `grep` across the virtual files accumulated by the text editor or memory middleware. `state_key="text_editor_files"` is the default; switch to `"memory_files"` to search memory-side files.
-
-#code-block(`````python
-from langchain_anthropic.middleware import (
-    ClaudeBashToolMiddleware,
-    StateClaudeTextEditorMiddleware,
-    StateClaudeMemoryMiddleware,
-    StateFileSearchMiddleware,
-)
-from langchain.agents.middleware import DockerExecutionPolicy
-
-agent = create_agent(
-    model="anthropic:claude-sonnet-4-6",
-    middleware=[
-        ClaudeBashToolMiddleware(execution_policy=DockerExecutionPolicy()),
-        StateClaudeTextEditorMiddleware(allowed_path_prefixes=["/src"]),
-        StateClaudeMemoryMiddleware(),
-        StateFileSearchMiddleware(state_key="text_editor_files"),
-    ],
-)
-`````)
-
-#warning-box[LangChain 1.2 `create_agent` rejects duplicate instances of the same middleware class. To search both text-editor files and memory files with `StateFileSearchMiddleware` at once, split them into separate subclasses.]
-
-=== Bedrock Prompt Caching
-
-In enterprise setups that call Claude/Nova through AWS Bedrock, use `langchain_aws.middleware.BedrockPromptCachingMiddleware`. Parameter names and semantics are almost identical to `AnthropicPromptCachingMiddleware`, but the target package and model-specific constraints differ.
-
-#table(
-  columns: 3,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Item],
-  text(weight: "bold")[ChatBedrockConverse + Anthropic],
-  text(weight: "bold")[ChatBedrockConverse + Nova],
-  [System-prompt cache],
-  [O],
-  [O],
-  [Tool-definition cache],
-  [O],
-  [X],
-  [Message cache],
-  [O],
-  [O (excluding tool-result messages)],
-  [TTL `"1h"`],
-  [O],
-  [X (5m only)],
-)
-
-The `type` parameter only takes effect on `ChatBedrock` (the legacy invoke-model wrapper); on `ChatBedrockConverse` it is pinned to `"default"`. For a checkpoint to actually hit, the cached block must be roughly _1,024 tokens or more_. For Nova models, pin `ttl="5m"` and set `unsupported_model_behavior="warn"` so an accidental `"1h"` is not silently ignored.
-
-#code-block(`````python
-from langchain_aws.middleware import BedrockPromptCachingMiddleware
-
-agent = create_agent(
-    model="bedrock_converse:anthropic.claude-sonnet-4-v6:0",
-    tools=[],
-    middleware=[
-        BedrockPromptCachingMiddleware(
-            ttl="1h",
-            min_messages_to_cache=2,
-            unsupported_model_behavior="warn",
-        ),
-    ],
-)
-`````)
-
-=== OpenAI Content Moderation (in depth)
-
-Here is the full parameter set for `OpenAIModerationMiddleware`, which we introduced briefly earlier. `check_tool_results` adds a scan over tool outputs before they enter the model; it is cost-effective only in pipelines that mix in _third-party authored content_ such as web search or email.
-
-#table(
-  columns: 3,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Parameter],
-  text(weight: "bold")[Default],
-  text(weight: "bold")[Description],
-  [`model`],
-  [`"omni-moderation-latest"`],
-  [Moderation model. Pinning to `"omni-moderation-2024-09-26"` etc. is supported],
-  [`check_input`],
-  [`True`],
-  [Scan user messages before they reach the model],
-  [`check_output`],
-  [`True`],
-  [Scan model-generated responses before returning],
-  [`check_tool_results`],
-  [`False`],
-  [Scan tool outputs before they enter the model],
-  [`exit_behavior`],
-  [`"end"`],
-  [`"end"` (end the graph) / `"error"` (raise) / `"replace"` (swap message only)],
-  [`violation_message`],
-  [default template],
-  [Supports the `{categories}` · `{category_scores}` · `{original_content}` variables],
-  [`client` / `async_client`],
-  [`None`],
-  [Inject a pre-configured OpenAI client (optional)],
-)
-
-#code-block(`````python
-from langchain_openai.middleware import OpenAIModerationMiddleware
-
-agent = create_agent(
-    model="openai:gpt-5.4",
-    tools=[search_tool],
-    middleware=[
-        OpenAIModerationMiddleware(
-            model="omni-moderation-latest",
-            check_input=True,
-            check_output=True,
-            check_tool_results=False,
-            exit_behavior="replace",
-            violation_message=(
-                "A safety-policy violation was detected "
-                "(categories: {categories}). The original content is not recorded."
-            ),
-        ),
-    ],
-)
-`````)
-
-#tip-box[In production it is common to always keep `check_input` on and run `check_output` under a sampling strategy (for example, 10% random sampling). The Moderation API itself adds call cost and latency.]
 
 == Summary
 
@@ -788,11 +546,7 @@ agent = create_agent(
   [`before`: forward, `after`: reverse, `wrap`: nested],
   [_Production_],
   [PII → Fallback → Limit → Summarization → ToolSelector → HITL],
-  [_Provider-specific_],
-  [Anthropic (caching · bash · editor · memory · search), Bedrock (caching), OpenAI (Moderation)],
 )
-
-Middleware is a powerful tool for controlling a single agent's behavior. But solving complex domain problems requires multi-agent architectures where several agents collaborate. The next chapter covers multi-agent systems that coordinate subagents with the supervisor pattern.
 
 === Next Steps
 → _#link("./02_multi_agent_subagents.ipynb")[02_multi_agent_subagents.ipynb]_: Multi-Agent: Learn the Subagents pattern.

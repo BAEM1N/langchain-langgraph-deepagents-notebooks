@@ -103,9 +103,11 @@ YAML frontmatter 의 `description` 이 항상 노출되고, 본문은 `SkillsMid
 | `ls(path)` | `LsResult` | entries 는 결정적으로 정렬 |
 | `read(file_path, offset=0, limit=2000)` | `ReadResult` | 누락 파일은 `ReadResult(error=...)` |
 | `grep(pattern, path=None, glob=None)` | `GrepResult` | 오류 시 raise 대신 `error=` 반환 |
-| `glob(pattern, path="/")` | `list[FileInfo]` | 무매칭은 빈 리스트 |
+| `glob(pattern, path="/")` | `GlobResult` | 무매칭은 `matches=[]` |
 | `write(file_path, content)` | `WriteResult` | create-only, 충돌 시 `error=` |
 | `edit(file_path, old_string, new_string, replace_all=False)` | `EditResult` | `replace_all=False` 면 unique 매칭 강제, `occurrences` 포함 |
+
+현재 안정판 `deepagents==0.6.12`에는 `BackendProtocol.delete`가 없다. 공식 호스팅 문서의 선택적 `delete(file_path) -> DeleteResult`는 `0.7.0a6` 프리릴리스에서 확인되므로, 안정판 0.7 채택 전에는 현재 실습 API로 가르치지 않는다.
 
 ## TodoList + Dispatch 패턴
 

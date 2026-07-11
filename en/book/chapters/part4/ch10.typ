@@ -25,6 +25,29 @@ print("Environment setup complete")
 `````)
 
 #code-block(`````python
+# Optional observability setup: LangSmith or Langfuse
+# Set the keys in .env, or uncomment the lines below to enter them manually.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
+#code-block(`````python
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(model="gpt-5.4")
@@ -137,51 +160,42 @@ print("                       |-- code execution")
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Package / Provider],
+  text(weight: "bold")[Provider],
   text(weight: "bold")[Characteristics],
   text(weight: "bold")[Best Fit],
-  [`langchain-modal` / Modal],
+  [_Modal_],
   [GPU support, ML workloads],
   [AI / ML tasks, data processing],
-  [`langchain-daytona` / Daytona],
+  [_Daytona_],
   [TypeScript / Python support, fast cold starts],
   [Web development, rapid iteration],
-  [`langchain-runloop` / Runloop],
+  [_Runloop_],
   [Disposable devboxes, isolated execution],
   [Code testing, one-off tasks],
-  [`langsmith[sandbox]` / LangSmith],
-  [LangSmith Deployments integration (private beta)],
-  [Operations on top of LangSmith],
-  [`langchain-agentcore-codeinterpreter` / AgentCore],
-  [AWS Bedrock-backed code interpreter],
-  [AWS-native deployments],
 )
 
 
 #code-block(`````python
-# Modal sandbox — canonical pattern via langchain-modal
-# pip install langchain-modal deepagents
-import modal
-from deepagents import create_deep_agent
-from langchain_anthropic import ChatAnthropic
-from langchain_modal import ModalSandbox
+# Example Modal sandbox configuration (reference only)
+modal_config = {
+    "provider": "modal",
+    "image": "python:3.12-slim",
+    "gpu": "T4",
+    "timeout": 300,
+}
 
-app = modal.App.lookup("your-app")
-modal_sandbox = modal.Sandbox.create(app=app)
-backend = ModalSandbox(sandbox=modal_sandbox)
+print("=== Modal sandbox configuration ===")
+for key, value in modal_config.items():
+    print(f"  {key}: {value}")
 
-agent = create_deep_agent(
-    model=ChatAnthropic(model="claude-sonnet-4-6"),
-    system_prompt="You are a Python coding assistant with sandbox access.",
-    backend=backend,
-)
+print()
+print("Example code (reference only):")
+print('  from deepagents.backends.sandbox import ModalSandbox')
+print('  agent = create_deep_agent(')
+print('      model="gpt-5.4",')
+print('      backend=ModalSandbox(image="python:3.12-slim", gpu="T4"),')
+print('  )')
 
-try:
-    result = agent.invoke({
-        "messages": [{"role": "user", "content": "Create a small Python package and run pytest"}],
-    })
-finally:
-    modal_sandbox.terminate()   # required: free resources
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -220,27 +234,8 @@ If credentials are stored in environment variables or mounted files inside the s
 )
 
 === Lifecycle Management
-
-To avoid unnecessary cost, sandboxes need _explicit shutdown_. There are two operational modes.
-
-#table(
-  columns: 3,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Mode],
-  text(weight: "bold")[Lifetime],
-  text(weight: "bold")[Best fit],
-  [_Thread-scoped (default)_],
-  [One sandbox per conversation thread. Created on the first run, reused on subsequent turns of the same thread, and cleaned up via an idle TTL.],
-  [Chat-style agents and conversational sessions],
-  [_Assistant-scoped_],
-  [All threads of the same assistant share one sandbox. Files, packages, and repositories accumulate across conversations. Always set a TTL or periodic snapshot policy.],
-  [Long-running coding sessions, accumulated workspaces],
-)
-
-Operational checklist: for one-off scripts, use `try/finally` and terminate immediately. For chat / long sessions, use a per-thread sandbox with TTL-based cleanup. On LangSmith Deployments, wire termination into the session-end hook.
+To avoid unnecessary cost, sandboxes need _explicit shutdown_.
+In chat-style applications, a common pattern is to assign one sandbox per conversation thread and configure a TTL (Time-to-Live).
 
 
 #code-block(`````python
@@ -298,29 +293,31 @@ ACP allows agents to interact with editors directly for code editing, file navig
 
 
 #code-block(`````python
-# ACP server — canonical pattern (asyncio + acp.run_agent)
+# Example ACP server implementation (reference only)
+acp_server_code = """
 # pip install deepagents-acp
-import asyncio
-
-from acp import run_agent
 from deepagents import create_deep_agent
+from deepagents_acp import AgentServerACP
 from langgraph.checkpoint.memory import MemorySaver
 
-from deepagents_acp.server import AgentServerACP
+# Create the agent
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-6",
+    system_prompt="You are a coding assistant.",
+    checkpointer=MemorySaver(),
+)
 
+# Run the ACP server (stdio mode)
+server = AgentServerACP(agent)
+server.run()
+"""
 
-async def main() -> None:
-    agent = create_deep_agent(
-        model="anthropic:claude-sonnet-4-6",
-        system_prompt="You are a helpful coding assistant",
-        checkpointer=MemorySaver(),
-    )
-    server = AgentServerACP(agent)
-    await run_agent(server)
+print("=== ACP server implementation example ===")
+print(acp_server_code)
 
+print("Install: pip install deepagents-acp")
+print("Run: python acp_server.py (stdio mode)")
 
-if __name__ == "__main__":
-    asyncio.run(main())
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -361,17 +358,9 @@ if __name__ == "__main__":
 }
 `````)
 
-=== Toad CLI
-
-_Toad_ is a process manager for running ACP servers as local development tools. It handles start, stop, and restart automatically so you do not have to manage processes by hand.
-
-#code-block(`````bash
-# Install
-uv tool install -U batrachian-toad
-
-# Run — pass the ACP server command and the working directory
-toad acp "python path/to/your_server.py" .
-`````)
+=== Extra Tool: Toad
+_Toad_ is a process manager for running ACP servers as local development tools.
+You can install it with `uv`.
 
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -396,38 +385,35 @@ If you combine sandboxes with ACP, you get a _complete architecture_ in which th
 
 
 #code-block(`````python
-# Sandbox + ACP integration — canonical pattern
-import asyncio
-
-import modal
-from acp import run_agent
+# Example sandbox + ACP integration (reference only)
+integrated_config = """
 from deepagents import create_deep_agent
-from langchain_anthropic import ChatAnthropic
-from langchain_modal import ModalSandbox
+from deepagents.backends.sandbox import ModalSandbox
+from deepagents_acp import AgentServerACP
 from langgraph.checkpoint.memory import MemorySaver
 
-from deepagents_acp.server import AgentServerACP
+# Combine a sandbox backend with an ACP server
+agent = create_deep_agent(
+    model="gpt-5.4",
+    system_prompt="You are a coding assistant.",
+    backend=ModalSandbox(image="python:3.12-slim"),
+    checkpointer=MemorySaver(),
+    interrupt_on={"execute": True},
+)
 
+# Connect the agent to the editor through ACP
+server = AgentServerACP(agent)
+server.run()
+"""
 
-async def main() -> None:
-    app = modal.App.lookup("your-app")
-    modal_sandbox = modal.Sandbox.create(app=app)
-    try:
-        agent = create_deep_agent(
-            model=ChatAnthropic(model="claude-sonnet-4-6"),
-            system_prompt="You are a coding assistant.",
-            backend=ModalSandbox(sandbox=modal_sandbox),
-            checkpointer=MemorySaver(),
-            interrupt_on={"execute": True},   # HITL approval before code execution
-        )
-        server = AgentServerACP(agent)
-        await run_agent(server)
-    finally:
-        modal_sandbox.terminate()
+print("=== Sandbox + ACP integration example ===")
+print(integrated_config)
 
+print("What this setup gives you:")
+print("  1. The editor interacts with the agent through ACP")
+print("  2. Code execution runs safely inside a Modal sandbox")
+print("  3. execute calls require Human-in-the-Loop approval")
 
-if __name__ == "__main__":
-    asyncio.run(main())
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -474,6 +460,5 @@ if __name__ == "__main__":
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 _References:_
-- #link("../docs/deepagents/11-sandboxes.md")[Sandboxes]
-- #link("../docs/deepagents/14-acp.md")[Agent Client Protocol (ACP)]
-
+- #link("../../docs/deepagents/11-sandboxes.md")[Sandboxes]
+- #link("../../docs/deepagents/14-acp.md")[Agent Client Protocol (ACP)]

@@ -52,7 +52,7 @@ lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 print(f"Model configured: {model.model_name}")
 
@@ -68,21 +68,32 @@ Human-in-the-Loop is a workflow in which the agent _requires human approval_ bef
 #image("../../assets/images/hitl_flow.png")
 
 === Required Condition
-- _Checkpointer_: required to preserve the agent's state between interrupt and resume
+- _Checkpointer_: required to preserve state between interrupt and resume
+- _`version="v2"`_: exposes `GraphOutput.interrupts` and `.value`
+- _Same `thread_id`_: required for the initial and resumed invocations
+
+Use `reject` to deny file, email, or SQL side effects. Reserve `respond` for an `ask_user` tool because its message becomes a successful synthetic tool result.
 
 
 #code-block(`````python
 from deepagents import create_deep_agent
+from langchain.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
 
-# Choose which tools require approval with interrupt_on
+@tool
+def ask_user(question: str) -> str:
+    """Ask the user for information needed to continue."""
+    return "No response provided"
+
 hitl_agent = create_deep_agent(
     model=model,
+    tools=[ask_user],
     system_prompt="You are a file management assistant. Respond in English.",
     checkpointer=MemorySaver(),  # required!
     interrupt_on={
-        "write_file": True,
-        "edit_file": True,
+        "write_file": {"allowed_decisions": ["approve", "edit", "reject"]},
+        "edit_file": {"allowed_decisions": ["approve", "edit", "reject"]},
+        "ask_user": {"allowed_decisions": ["respond"]},
     },
 )
 
@@ -98,42 +109,38 @@ config = {"configurable": {"thread_id": "hitl-demo"}}
 result = hitl_agent.invoke(
     {"messages": [{"role": "user", "content": "Create a file named config.yaml and write 'debug: true'."}]},
     config={**config, **lf_config},
+    version="v2",
 )
 
-# Inspect interrupts
-if "__interrupt__" in result:
-    interrupt_info = result["__interrupt__"]
+interrupts = result.interrupts
+if interrupts:
     print("The agent was interrupted")
-    print(f"Pending approvals: {len(interrupt_info)}")
-    for item in interrupt_info:
-        val = item.value if hasattr(item, 'value') else item
-        print(f"  - Interrupt payload: {val}")
+    print(f"Pending approvals: {len(interrupts)}")
+    for item in interrupts:
+        print(f"  - Interrupt payload: {item.value}")
 else:
     print("Completed without interruption:")
-    print(result["messages"][-1].content)
+    print(result.value["messages"][-1].content)
 
 `````)
 
 #code-block(`````python
 from langgraph.types import Command
 
-# Resume with approval
-if "__interrupt__" in result:
+# Denied side effects use reject; respond is only for ask_user.
+approve_decision = {"type": "approve"}
+reject_decision = {"type": "reject", "message": "File write denied."}
+respond_decision = {"type": "respond", "message": "Blue."}
+
+if interrupts:
     resumed = hitl_agent.invoke(
-        Command(
-            resume={
-                "decisions": [
-                    {"type": "approve"}
-                    # {"type": "reject"}
-                    # {"type": "edit", "args": {"content": "debug: false"}}
-                ]
-            }
-        ),
+        Command(resume={"decisions": [approve_decision]}),
         config={**config, **lf_config},
+        version="v2",
     )
 
-    print("✅ Resumed after approval:")
-    print(resumed["messages"][-1].content)
+    print("Resumed after approval:")
+    print(resumed.value["messages"][-1].content)
 
 `````)
 

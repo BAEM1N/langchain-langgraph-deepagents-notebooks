@@ -33,6 +33,33 @@ load_dotenv()
 True
 `````)
 
+#code-block(`````python
+# Observability 설정 (선택) - LangSmith 또는 Langfuse
+# .env에 키를 설정하거나, 아래 주석을 해제하여 직접 입력하세요.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: LANGSMITH_TRACING=true 시 자동 활성화 (코드 수정 불필요)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    print(f"LangSmith tracing ON — project: {project}")
+
+# Langfuse: invoke/stream 호출 시 config={"callbacks": [langfuse_handler]} 전달
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+#output-block(`````
+Langfuse tracing ON — https://lf.ddok.ai
+`````)
+
 == 7.2 데이터 분석 에이전트 개요
 
 Deep Agents의 데이터 분석 에이전트는 다음 파이프라인을 _자율적으로_ 실행합니다:
@@ -113,8 +140,8 @@ Deep Agents는 _플러그형 백엔드 아키텍처_로 파일시스템 및 코�
 === 백엔드 유형별 상세
 
 - _`StateBackend`_ (기본값): 파일을 LangGraph 에이전트 상태에 저장합니다. 스크래치패드 용도로 적합하며, 큰 출력물은 자동 제거됩니다.
-- _`FilesystemBackend`_: `root_dir` 설정으로 로컬 디스크 접근을 제공합니다. `virtual_mode=True` 옵션으로 경로 제한 및 디렉터리 탐색 방지가 가능합니다.
-- _`LocalShellBackend`_: 파일시스템 접근에 더해 `execute` 도구로 _무제한 셸 명령 실행_을 제공합니다. 호스트 시스템에 대한 전체 사용자 권한으로 실행됩니다.
+- _`FilesystemBackend`_: `root_dir`와 `virtual_mode=True`로 파일 도구의 경로를 제한합니다.
+- _`LocalShellBackend`_: `execute` 도구가 호스트 권한으로 실행됩니다. `virtual_mode=True`는 파일 경로를 정규화할 뿐 셸 접근을 격리하지 않습니다.
 - _`CompositeBackend`_: 경로별로 다른 백엔드를 라우팅합니다. 예: 임시 파일은 `StateBackend`, `/memories/`는 `StoreBackend`.
 
 === 샌드박스 보안 원칙
@@ -126,13 +153,20 @@ Deep Agents는 _플러그형 백엔드 아키텍처_로 파일시스템 및 코�
 - 민감한 작업에는 Human-in-the-Loop 승인을 사용하세요
 - 불필요한 네트워크 접근을 차단하세요
 
-#warning-box[_주의_: `LocalShellBackend`는 호스트 시스템에 대한 _무제한 셸 실행 권한_을 가집니다. 프로덕션에서는 반드시 샌드박스 백엔드를 사용하세요.]
+#warning-box[_주의_: 아래 로컬 설정은 임시 작업 경로·최소 환경·HITL로 피해 범위를 줄인 개발용 구성이지 보안 샌드박스가 아닙니다. 프로덕션에서는 격리된 샌드박스 백엔드를 사용하세요.]
 
 #code-block(`````python
 from deepagents.backends import LocalShellBackend
+from pathlib import Path
+import sys
 
-# 개발용 — 로컬 셸 백엔드
-dev_backend = LocalShellBackend(virtual_mode=True)
+work_dir = Path(".agent-work").resolve()
+work_dir.mkdir(exist_ok=True)
+dev_backend = LocalShellBackend(
+    root_dir=work_dir, virtual_mode=True,
+    env={"PATH": f"{Path(sys.executable).parent}:/usr/bin:/bin"},
+    inherit_env=False,
+)
 
 # 운영용 — 클라우드 샌드박스 (택 1)
 # prod_backend = ...  # 프로덕션에서는 클라우드 샌드박스 백엔드를 사용하세요
@@ -242,7 +276,7 @@ from deepagents import create_deep_agent
 from deepagents.backends import LocalShellBackend
 from langgraph.checkpoint.memory import InMemorySaver
 
-backend = LocalShellBackend(virtual_mode=True)
+backend = dev_backend  # 개발 전용 호스트 셸; 샌드박스 아님
 checkpointer = InMemorySaver()
 `````)
 
@@ -252,6 +286,7 @@ agent = create_deep_agent(
     tools=[tavily_search, slack_send_message],
     backend=backend,
     checkpointer=checkpointer,
+    interrupt_on={"execute": True},
     system_prompt="당신은 데이터 분석가입니다.",
 )
 `````)
@@ -300,6 +335,18 @@ print(agent_anatomy)
 == 7.7 실행 — 분석 요청
 
 `agent.invoke()`로 분석 요청을 전달하면 에이전트가 자율적으로 계획 수립 → 파일 읽기 → 코드 실행 → 결과 전달 파이프라인을 수행합니다.
+
+#code-block(`````python
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "/tmp/analysis/sales_2025.csv의 매출 데이터를 분석하세요. 성과가 좋은 지역을 찾고, 분기별 트렌드를 파악하고, 시각화를 만들고, 요약을 Slack에 전송하세요."}]},
+    config={**lf_config, "configurable": {"thread_id": "data-analysis-1"}},
+)
+print(result)
+
+`````)
+#output-block(`````
+{'messages': [HumanMessage(content='/tmp/analysis/sales_2025.csv의 매출 데이터를 분석하세요. 성과가 좋은 지역을 찾고, 분기별 트렌드를 파악하고, 시각화를 만들고, 요약을 Slack에 전송하세요.', additional_kwargs={}, response_metadata={}, id='1d5d86c0-c9dc-4737-8035-adb3b27cc96a'), AIMessage(content='', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 17, 'prompt_tokens': 5783, 'total_tokens': 5800, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 0}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_7489de2aa1', 'id': 'chatcmpl-DGT0YGAgyIfk4nkKM5vy5rKsr2roW', 'service_tier': 'default', 'finish_reason': 'tool_calls', 'logprobs': None}, id='lc_run--019cc422-8a57-7512-919e-6eac8fdcfd76-0', tool_calls=[{'name': 'ls', 'args': {'path': '/tmp/analysis'}, 'id': 'call_4s1M8adXje2zjGbZKOoKM4V7', 'type': 'tool_call'}], invalid_tool_calls=[], usage_metadata={'input_tokens': 5783, 'output_tokens': 17, 'total_tokens': 5800, 'input_token_details': {'audio': 0, 'cache_read': 0}, 'output_token_details': {'audio': 0, 'reasoning': 0}}), ToolMessage(content='[]', name='ls', id='732258fb-d01c-4b8a-a5a9-cf0f98fa5083', tool_call_id='call_4s1M8adXje2zjGbZKOoKM4V7'), AIMessage(content='', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 28, 'prompt_tokens': 5808, 'total_tokens': 5836, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 0}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_43061bafe9', 'id': 'chatcmpl-DGT0bej2HOa18EX8yz2qdpKA2DPm0', 'service_tier': 'default', 'finish_reason': 'tool_calls', 'logprobs': None}, id='lc_run--019cc422-9c33-79b3-b30b-336756390220-0', tool_calls=[{'name': 'read_file', 'args': {'file_path': '/tmp/analysis/sales_2025.csv', 'limit': 100}, 'id': 'call_ewIPajv6qAULI5yUHaL3nUs2', 'type': 'tool_call'}], invalid_tool_calls=[], usage_metadata={'input_tokens': 5808, 'output_tokens': 28, 'total_tokens': 5836, 'input_token_details': {'audio': 0, 'cache_read': 0}, 'output_token_details': {'audio': 0, 'reasoning': 0}}), ToolMessage(content="Error: File '/tmp/analysis/sales_2025.csv' not found", name='read_file', id='cdd6b209-209a-42b8-9a78-acd437fa22c8', tool_call_id='call_ewIPajv6qAULI5yUHaL3nUs2'), AIMessage(content='파일 /tmp/analysis/sales_2025.csv이 존재하지 않습니다. 경로를 확인하거나 파일을 업로드해 주세요.', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 29, 'prompt_tokens': 5860, 'total_tokens': 5889, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 5760}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_7489de2aa1', 'id': 'chatcmpl-DGT0dHZDAPtyYzMUSrsY1jAf3luFV', 'service_tier': 'default', 'finish_reason': 'stop', 'logprobs': None}, id='lc_run--019cc422-a3f3-7222-ae4e-92a44d883e1b-0', tool_calls=[], invalid_tool_calls=[], usage_metadata={'input_tokens': 5860, 'output_tokens': 29, 'total_tokens': 5889, 'input_token_details': {'audio': 0, 'cache_read': 5760}, 'output_token_details': {'audio': 0, 'reasoning': 0}})]}
+`````)
 
 == 7.8 스트리밍으로 분석 과정 관찰
 
@@ -354,6 +401,24 @@ for namespace, chunk in agent.stream(
 + _Running_ -- `tools:UUID` 네임스페이스에서 이벤트가 발생할 때 시작
 + _Complete_ -- 메인 에이전트의 `tools` 노드가 결과를 반환할 때 완료
 
+#code-block(`````python
+for namespace, chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "지역별 매출을 요약해 주세요."}]},
+    stream_mode="updates",
+    subgraphs=True,
+    config={**lf_config, "configurable": {"thread_id": "data-analysis-1"}},
+):
+    source = f"[subagent: {namespace}]" if namespace else "[main]"
+    print(source, chunk)
+
+`````)
+#output-block(`````
+[main] {'PatchToolCallsMiddleware.before_agent': {'messages': Overwrite(value=[HumanMessage(content='/tmp/analysis/sales_2025.csv의 매출 데이터를 분석하세요. 성과가 좋은 지역을 찾고, 분기별 트렌드를 파악하고, 시각화를 만들고, 요약을 Slack에 전송하세요.', additional_kwargs={}, response_metadata={}, id='1d5d86c0-c9dc-4737-8035-adb3b27cc96a'), AIMessage(content='', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 17, 'prompt_tokens': 5783, 'total_tokens': 5800, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 0}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_7489de2aa1', 'id': 'chatcmpl-DGT0YGAgyIfk4nkKM5vy5rKsr2roW', 'service_tier': 'default', 'finish_reason': 'tool_calls', 'logprobs': None}, id='lc_run--019cc422-8a57-7512-919e-6eac8fdcfd76-0', tool_calls=[{'name': 'ls', 'args': {'path': '/tmp/analysis'}, 'id': 'call_4s1M8adXje2zjGbZKOoKM4V7', 'type': 'tool_call'}], invalid_tool_calls=[], usage_metadata={'input_tokens': 5783, 'output_tokens': 17, 'total_tokens': 5800, 'input_token_details': {'audio': 0, 'cache_read': 0}, 'output_token_details': {'audio': 0, 'reasoning': 0}}), ToolMessage(content='[]', name='ls', id='732258fb-d01c-4b8a-a5a9-cf0f98fa5083', tool_call_id='call_4s1M8adXje2zjGbZKOoKM4V7'), AIMessage(content='', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 28, 'prompt_tokens': 5808, 'total_tokens': 5836, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 0}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_43061bafe9', 'id': 'chatcmpl-DGT0bej2HOa18EX8yz2qdpKA2DPm0', 'service_tier': 'default', 'finish_reason': 'tool_calls', 'logprobs': None}, id='lc_run--019cc422-9c33-79b3-b30b-336756390220-0', tool_calls=[{'name': 'read_file', 'args': {'file_path': '/tmp/analysis/sales_2025.csv', 'limit': 100}, 'id': 'call_ewIPajv6qAULI5yUHaL3nUs2', 'type': 'tool_call'}], invalid_tool_calls=[], usage_metadata={'input_tokens': 5808, 'output_tokens': 28, 'total_tokens': 5836, 'input_token_details': {'audio': 0, 'cache_read': 0}, 'output_token_details': {'audio': 0, 'reasoning': 0}}), ToolMessage(content="Error: File '/tmp/analysis/sales_2025.csv' not found", name='read_file', id='cdd6b209-209a-42b8-9a78-acd437fa22c8', tool_call_id='call_ewIPajv6qAULI5yUHaL3nUs2'), AIMessage(content='파일 /tmp/analysis/sales_2025.csv이 존재하지 않습니다. 경로를 확인하거나 파일을 업로드해 주세요.', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 29, 'prompt_tokens': 5860, 'total_tokens': 5889, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 5760}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_7489de2aa1', 'id': 'chatcmpl-DGT0dHZDAPtyYzMUSrsY1jAf3luFV', 'service_tier': 'default', 'finish_reason': 'stop', 'logprobs': None}, id='lc_run--019cc422-a3f3-7222-ae4e-92a44d883e1b-0', tool_calls=[], invalid_tool_calls=[], usage_metadata={'input_tokens': 5860, 'output_tokens': 29, 'total_tokens': 5889, 'input_token_details': {'audio': 0, 'cache_read': 5760}, 'output_token_details': {'audio': 0, 'reasoning': 0}}), HumanMessage(content='지역별 매출을 요약해 주세요.', additional_kwargs={}, response_metadata={}, id='56bc6094-2107-4d7c-9b85-9483d1dd2bb3')])}}
+
+[main] {'model': {'messages': [AIMessage(content='파일이 존재하지 않아 분석을 진행할 수 없습니다. /tmp/analysis/sales_2025.csv 파일을 업로드하거나 정확한 경로를 확인해 주세요.  \n파일이 준비되면 지역별 매출 요약을 바로 진행하겠습니다.', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 55, 'prompt_tokens': 5906, 'total_tokens': 5961, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 0}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_34cce20b66', 'id': 'chatcmpl-DGT0eTOr7GIwqhuMpqrCExglEMlNk', 'service_tier': 'default', 'finish_reason': 'stop', 'logprobs': None}, id='lc_run--019cc422-aa89-7fa3-b237-a7cd77eda4d4-0', tool_calls=[], invalid_tool_calls=[], usage_metadata={'input_tokens': 5906, 'output_tokens': 55, 'total_tokens': 5961, 'input_token_details': {'audio': 0, 'cache_read': 0}, 'output_token_details': {'audio': 0, 'reasoning': 0}})]}}
+[main] {'TodoListMiddleware.after_model': None}
+`````)
+
 == 7.9 빌트인 도구 활용
 
 Deep Agents는 백엔드를 통해 다음 빌트인 도구를 자동으로 에이전트에게 제공합니다. 에이전트는 분석 과정에서 이 도구들을 자율적으로 선택하여 사용합니다.
@@ -371,7 +436,7 @@ Deep Agents는 백엔드를 통해 다음 빌트인 도구를 자동으로 에�
   [구조화된 작업 계획 수립 및 추적],
   [분석 단계별 TODO 리스트 생성],
   [`ls`],
-  [디렉터리 내용 나열 (`ls_info()`)],
+  [디렉터리 내용 나열 (`BackendProtocol.ls`)],
   [CSV 파일 존재 여부 확인],
   [`read_file`],
   [파일 읽기 (이미지 멀티모달 지원)],
@@ -397,10 +462,10 @@ Deep Agents는 백엔드를 통해 다음 빌트인 도구를 자동으로 에�
 === 커스텀 백엔드 구현
 
 필요에 따라 `BackendProtocol`을 직접 구현할 수 있습니다. 필수 메서드:
-- `ls_info()` -- 디렉터리 내용 나열
+- `ls()` -- `LsResult`로 디렉터리 내용 나열
 - `read()` -- 줄 번호와 함께 파일 읽기
-- `grep_raw()` -- 구조화된 매치를 반환하는 패턴 매칭
-- `glob_info()` -- glob 기반 파일 매칭
+- `grep()` -- `GrepResult`로 구조화된 매치 반환
+- `glob()` -- `GlobResult`로 glob 매치 반환
 - `write()` -- 파일 생성 (create-only)
 - `edit()` -- 유일성을 보장하는 find-and-replace
 
@@ -455,7 +520,7 @@ Deep Agents 0.6+ 는 `CodeInterpreterMiddleware` 로 _에이전트 루프 내부
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[구분],
-  text(weight: "bold")[Backend `execute` (sandbox)],
+  text(weight: "bold")[Backend `execute` (host 또는 sandbox provider)],
   text(weight: "bold")[`CodeInterpreterMiddleware` (interpreter)],
   [실행 위치],
   [격리 외부 런타임/컨테이너],
@@ -467,7 +532,7 @@ Deep Agents 0.6+ 는 `CodeInterpreterMiddleware` 로 _에이전트 루프 내부
   [실행 결과만 반환],
   [interpreter 메모리에 변수 유지],
   [보안 경계],
-  [provider sandbox 정책],
+  [LocalShell은 없음, sandbox는 provider 정책],
   [QuickJS + allowlist bridge],
 )
 
@@ -483,6 +548,18 @@ agent = create_deep_agent(
 
 `pip install -U "deepagents[quickjs]"` 로 설치합니다. 큰 후보군을 변수로 유지하면서 일부만 모델 컨텍스트로 돌려보내거나, top-level `task(...)`로 여러 서브에이전트 결과를 코드에서 병합할 때 적합합니다.
 
+
+#code-block(`````python
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "glob을 사용하여 /tmp/analysis/의 모든 CSV 파일을 나열하고, 첫 번째 파일을 읽어 구조를 설명해 주세요."}]},
+    config={**lf_config, "configurable": {"thread_id": "data-analysis-1"}},
+)
+print(result)
+
+`````)
+#output-block(`````
+{'messages': [HumanMessage(content='/tmp/analysis/sales_2025.csv의 매출 데이터를 분석하세요. 성과가 좋은 지역을 찾고, 분기별 트렌드를 파악하고, 시각화를 만들고, 요약을 Slack에 전송하세요.', additional_kwargs={}, response_metadata={}, id='1d5d86c0-c9dc-4737-8035-adb3b27cc96a'), AIMessage(content='', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 17, 'prompt_tokens': 5783, 'total_tokens': 5800, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 0}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_7489de2aa1', 'id': 'chatcmpl-DGT0YGAgyIfk4nkKM5vy5rKsr2roW', 'service_tier': 'default', 'finish_reason': 'tool_calls', 'logprobs': None}, id='lc_run--019cc422-8a57-7512-919e-6eac8fdcfd76-0', tool_calls=[{'name': 'ls', 'args': {'path': '/tmp/analysis'}, 'id': 'call_4s1M8adXje2zjGbZKOoKM4V7', 'type': 'tool_call'}], invalid_tool_calls=[], usage_metadata={'input_tokens': 5783, 'output_tokens': 17, 'total_tokens': 5800, 'input_token_details': {'audio': 0, 'cache_read': 0}, 'output_token_details': {'audio': 0, 'reasoning': 0}}), ToolMessage(content='[]', name='ls', id='732258fb-d01c-4b8a-a5a9-cf0f98fa5083', tool_call_id='call_4s1M8adXje2zjGbZKOoKM4V7'), AIMessage(content='', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 28, 'prompt_tokens': 5808, 'total_tokens': 5836, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 0}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_43061bafe9', 'id': 'chatcmpl-DGT0bej2HOa18EX8yz2qdpKA2DPm0', 'service_tier': 'default', 'finish_reason': 'tool_calls', 'logprobs': None}, id='lc_run--019cc422-9c33-79b3-b30b-336756390220-0', tool_calls=[{'name': 'read_file', 'args': {'file_path': '/tmp/analysis/sales_2025.csv', 'limit': 100}, 'id': 'call_ewIPajv6qAULI5yUHaL3nUs2', 'type': 'tool_call'}], invalid_tool_calls=[], usage_metadata={'input_tokens': 5808, 'output_tokens': 28, 'total_tokens': 5836, 'input_token_details': {'audio': 0, 'cache_read': 0}, 'output_token_details': {'audio': 0, 'reasoning': 0}}), ToolMessage(content="Error: File '/tmp/analysis/sales_2025.csv' not found", name='read_file', id='cdd6b209-209a-42b8-9a78-acd437fa22c8', tool_call_id='call_ewIPajv6qAULI5yUHaL3nUs2'), AIMessage(content='파일 /tmp/analysis/sales_2025.csv이 존재하지 않습니다. 경로를 확인하거나 파일을 업로드해 주세요.', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 29, 'prompt_tokens': 5860, 'total_tokens': 5889, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 5760}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_7489de2aa1', 'id': 'chatcmpl-DGT0dHZDAPtyYzMUSrsY1jAf3luFV', 'service_tier': 'default', 'finish_reason': 'stop', 'logprobs': None}, id='lc_run--019cc422-a3f3-7222-ae4e-92a44d883e1b-0', tool_calls=[], invalid_tool_calls=[], usage_metadata={'input_tokens': 5860, 'output_tokens': 29, 'total_tokens': 5889, 'input_token_details': {'audio': 0, 'cache_read': 5760}, 'output_token_details': {'audio': 0, 'reasoning': 0}}), HumanMessage(content='지역별 매출을 요약해 주세요.', additional_kwargs={}, response_metadata={}, id='56bc6094-2107-4d7c-9b85-9483d1dd2bb3'), AIMessage(content='파일이 존재하지 않아 분석을 진행할 수 없습니다. /tmp/analysis/sales_2025.csv 파일을 업로드하거나 정확한 경로를 확인해 주세요.  \n파일이 준비되면 지역별 매출 요약을 바로 진행하겠습니다.', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 55, 'prompt_tokens': 5906, 'total_tokens': 5961, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 0}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_34cce20b66', 'id': 'chatcmpl-DGT0eTOr7GIwqhuMpqrCExglEMlNk', 'service_tier': 'default', 'finish_reason': 'stop', 'logprobs': None}, id='lc_run--019cc422-aa89-7fa3-b237-a7cd77eda4d4-0', tool_calls=[], invalid_tool_calls=[], usage_metadata={'input_tokens': 5906, 'output_tokens': 55, 'total_tokens': 5961, 'input_token_details': {'audio': 0, 'cache_read': 0}, 'output_token_details': {'audio': 0, 'reasoning': 0}}), HumanMessage(content='glob을 사용하여 /tmp/analysis/의 모든 CSV 파일을 나열하고, 첫 번째 파일을 읽어 구조를 설명해 주세요.', additional_kwargs={}, response_metadata={}, id='6ed3a004-5990-4893-b815-95d2c90a323e'), AIMessage(content='', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 21, 'prompt_tokens': 5998, 'total_tokens': 6019, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 5760}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_43061bafe9', 'id': 'chatcmpl-DGT0iOspzHDSZzzmqj9DWkEHXMWLu', 'service_tier': 'default', 'finish_reason': 'tool_calls', 'logprobs': None}, id='lc_run--019cc422-b7f5-7a61-aa56-dd4588d805b8-0', tool_calls=[{'name': 'glob', 'args': {'pattern': '*.csv', 'path': '/tmp/analysis'}, 'id': 'call_wDB8AfK2sPZVrg7d4c22dTHC', 'type': 'tool_call'}], invalid_tool_calls=[], usage_metadata={'input_tokens': 5998, 'output_tokens': 21, 'total_tokens': 6019, 'input_token_details': {'audio': 0, 'cache_read': 5760}, 'output_token_details': {'audio': 0, 'reasoning': 0}}), ToolMessage(content='[]', name='glob', id='86f00740-84d2-48bc-9325-5ec97312ea14', tool_call_id='call_wDB8AfK2sPZVrg7d4c22dTHC'), AIMessage(content='/tmp/analysis 폴더에 CSV 파일이 존재하지 않습니다.  \nCSV 파일을 해당 경로에 업로드해 주시면, 파일을 나열하고 구조를 분석해 드릴 수 있습니다.', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 44, 'prompt_tokens': 6027, 'total_tokens': 6071, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 0}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_34cce20b66', 'id': 'chatcmpl-DGT0jpQ9kHZZKWgMImRZ9rI1gVKjJ', 'service_tier': 'default', 'finish_reason': 'stop', 'logprobs': None}, id='lc_run--019cc422-bde0-7b33-9e0e-81674e008f75-0', tool_calls=[], invalid_tool_calls=[], usage_metadata={'input_tokens': 6027, 'output_tokens': 44, 'total_tokens': 6071, 'input_token_details': {'audio': 0, 'cache_read': 0}, 'output_token_details': {'audio': 0, 'reasoning': 0}})]}
+`````)
 
 == 7.10 체크포인터로 대화 유지
 
@@ -529,9 +606,32 @@ config = {"configurable": {"thread_id": "analysis-session-1"}}
 agent_with_memory = create_deep_agent(
     model="gpt-5.4",
     tools=[tavily_search, slack_send_message],
-    backend=LocalShellBackend(virtual_mode=True),
+    backend=dev_backend,
     checkpointer=checkpointer,
+    interrupt_on={"execute": True},
 )
+`````)
+
+#code-block(`````python
+r1 = agent_with_memory.invoke(
+    {"messages": [{"role": "user", "content": "/tmp/analysis/sales_2025.csv를 읽고 요약해 주세요."}]},
+    config={**config, **lf_config},
+)
+print("턴:", r1)
+`````)
+#output-block(`````
+턴: {'messages': [HumanMessage(content='/tmp/analysis/sales_2025.csv를 읽고 요약해 주세요.', additional_kwargs={}, response_metadata={}, id='36dfbfd9-8f34-444e-8b88-3fb9c4dbdaa0'), AIMessage(content='', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 28, 'prompt_tokens': 5742, 'total_tokens': 5770, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 0}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_6af5b542fa', 'id': 'chatcmpl-DGT0mfHzuiD9pb8qJ5UqKSd0MZ1Jo', 'service_tier': 'default', 'finish_reason': 'tool_calls', 'logprobs': None}, id='lc_run--019cc422-c7a9-7b71-88c0-08088b4b2781-0', tool_calls=[{'name': 'read_file', 'args': {'file_path': '/tmp/analysis/sales_2025.csv', 'limit': 100}, 'id': 'call_4fAuNT5TvJSVNNkXC19CD7T2', 'type': 'tool_call'}], invalid_tool_calls=[], usage_metadata={'input_tokens': 5742, 'output_tokens': 28, 'total_tokens': 5770, 'input_token_details': {'audio': 0, 'cache_read': 0}, 'output_token_details': {'audio': 0, 'reasoning': 0}}), ToolMessage(content="Error: File '/tmp/analysis/sales_2025.csv' not found", name='read_file', id='13b2f488-231c-4a20-b9ae-43bcace42cc4', tool_call_id='call_4fAuNT5TvJSVNNkXC19CD7T2'), AIMessage(content='해당 경로에 /tmp/analysis/sales_2025.csv 파일이 존재하지 않습니다. 파일 경로를 다시 확인해주시거나, 올바른 파일 경로를 알려주시면 읽어서 요약해드릴 수 있습니다.', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 52, 'prompt_tokens': 5794, 'total_tokens': 5846, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 0}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_43061bafe9', 'id': 'chatcmpl-DGT0on8tycn5s987PPRapcw9hVvmV', 'service_tier': 'default', 'finish_reason': 'stop', 'logprobs': None}, id='lc_run--019cc422-d06b-7223-9bb5-52c90e75ff73-0', tool_calls=[], invalid_tool_calls=[], usage_metadata={'input_tokens': 5794, 'output_tokens': 52, 'total_tokens': 5846, 'input_token_details': {'audio': 0, 'cache_read': 0}, 'output_token_details': {'audio': 0, 'reasoning': 0}})]}
+`````)
+
+#code-block(`````python
+r2 = agent_with_memory.invoke(
+    {"messages": [{"role": "user", "content": "서울과 부산의 Q4 실적을 비교해 주세요."}]},
+    config={**config, **lf_config},
+)
+print("턴:", r2)
+`````)
+#output-block(`````
+턴: {'messages': [HumanMessage(content='/tmp/analysis/sales_2025.csv를 읽고 요약해 주세요.', additional_kwargs={}, response_metadata={}, id='36dfbfd9-8f34-444e-8b88-3fb9c4dbdaa0'), AIMessage(content='', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 28, 'prompt_tokens': 5742, 'total_tokens': 5770, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 0}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_6af5b542fa', 'id': 'chatcmpl-DGT0mfHzuiD9pb8qJ5UqKSd0MZ1Jo', 'service_tier': 'default', 'finish_reason': 'tool_calls', 'logprobs': None}, id='lc_run--019cc422-c7a9-7b71-88c0-08088b4b2781-0', tool_calls=[{'name': 'read_file', 'args': {'file_path': '/tmp/analysis/sales_2025.csv', 'limit': 100}, 'id': 'call_4fAuNT5TvJSVNNkXC19CD7T2', 'type': 'tool_call'}], invalid_tool_calls=[], usage_metadata={'input_tokens': 5742, 'output_tokens': 28, 'total_tokens': 5770, 'input_token_details': {'audio': 0, 'cache_read': 0}, 'output_token_details': {'audio': 0, 'reasoning': 0}}), ToolMessage(content="Error: File '/tmp/analysis/sales_2025.csv' not found", name='read_file', id='13b2f488-231c-4a20-b9ae-43bcace42cc4', tool_call_id='call_4fAuNT5TvJSVNNkXC19CD7T2'), AIMessage(content='해당 경로에 /tmp/analysis/sales_2025.csv 파일이 존재하지 않습니다. 파일 경로를 다시 확인해주시거나, 올바른 파일 경로를 알려주시면 읽어서 요약해드릴 수 있습니다.', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 52, 'prompt_tokens': 5794, 'total_tokens': 5846, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 0}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_43061bafe9', 'id': 'chatcmpl-DGT0on8tycn5s987PPRapcw9hVvmV', 'service_tier': 'default', 'finish_reason': 'stop', 'logprobs': None}, id='lc_run--019cc422-d06b-7223-9bb5-52c90e75ff73-0', tool_calls=[], invalid_tool_calls=[], usage_metadata={'input_tokens': 5794, 'output_tokens': 52, 'total_tokens': 5846, 'input_token_details': {'audio': 0, 'cache_read': 0}, 'output_token_details': {'audio': 0, 'reasoning': 0}}), HumanMessage(content='서울과 부산의 Q4 실적을 비교해 주세요.', additional_kwargs={}, response_metadata={}, id='7fbdc5c7-8c63-4b83-9290-4b15608a03c5'), AIMessage(content='/\ufefftmp/analysis/sales_2025.csv 파일이 존재하지 않아 데이터를 확인할 수 없습니다.  \n해당 파일을 업로드하거나, 정확한 경로를 제공해주시면 서울과 부산의 Q4 실적 비교를 도와드릴 수 있습니다.\n\n파일을 제공해 주시겠어요?', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 67, 'prompt_tokens': 5866, 'total_tokens': 5933, 'completion_tokens_details': {'accepted_prediction_tokens': 0, 'audio_tokens': 0, 'reasoning_tokens': 0, 'rejected_prediction_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 0}}, 'model_provider': 'openai', 'model_name': 'gpt-4.1-2025-04-14', 'system_fingerprint': 'fp_8b8e9510d4', 'id': 'chatcmpl-DGT0so89XJXBX5tyMeFeZaZ3vfp7a', 'service_tier': 'default', 'finish_reason': 'stop', 'logprobs': None}, id='lc_run--019cc422-ddd4-7880-baac-80c6e96bebe9-0', tool_calls=[], invalid_tool_calls=[], usage_metadata={'input_tokens': 5866, 'output_tokens': 67, 'total_tokens': 5933, 'input_token_details': {'audio': 0, 'cache_read': 0}, 'output_token_details': {'audio': 0, 'reasoning': 0}})]}
 `````)
 
 #chapter-summary-header()

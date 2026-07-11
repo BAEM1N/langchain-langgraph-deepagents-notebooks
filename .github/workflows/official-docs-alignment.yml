@@ -1,0 +1,27 @@
+name: Official docs alignment
+
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * 1"
+
+jobs:
+  local:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - run: uv run python -m unittest tests.test_official_docs_alignment -v
+      - run: uv run python scripts/check_official_docs_alignment.py --local
+      - run: uv run python scripts/audit_notebook_cells.py --format markdown
+
+  online:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - run: uv run python scripts/check_official_docs_alignment.py --online

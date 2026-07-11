@@ -88,11 +88,11 @@ Langfuse tracing ON — https://lf.ddok.ai
 #code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 print("\u2713 모델 설정 완료:", model.model_name)
 `````)
 #output-block(`````
-✓ 모델 설정 완료: gpt-4.1
+✓ 모델 설정 완료: gpt-5.4
 `````)
 
 == 0.3 동작 확인
@@ -120,7 +120,7 @@ print("\u2713 모델 응답:", response.content)
   [환경 변수],
   [`load_dotenv()`로 `.env` 파일 로드],
   [모델],
-  [`ChatOpenAI(model="gpt-4.1")`],
+  [`ChatOpenAI(model="gpt-5.4")`],
   [테스트],
   [`model.invoke("...")` → 응답 확인],
 )

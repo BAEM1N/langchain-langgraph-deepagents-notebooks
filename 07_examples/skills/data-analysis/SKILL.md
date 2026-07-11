@@ -33,7 +33,9 @@ allowed-tools: execute write_todos data_summary
 - [ ] 결과는 마크다운 표로 정리
 
 ## 코드 실행 규칙
-- `LocalShellBackend(virtual_mode=True)` 사용 필수
+- `LocalShellBackend`는 로컬 개발에서만 사용하며 보안 sandbox로 간주하지 않기
+- 임시 `root_dir`, `virtual_mode=True`, 최소 `env`, `inherit_env=False`를 함께 설정하기
+- `execute`에는 HITL 승인을 적용하고 운영에서는 sandbox backend 사용하기
 - `execute` 도구로 Python/pandas 코드 실행
 - 한 번에 너무 많은 코드를 실행하지 않기 — 단계별 실행
 - 에러 발생 시 원인 분석 후 수정된 코드 재실행

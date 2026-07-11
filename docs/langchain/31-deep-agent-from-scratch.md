@@ -41,14 +41,23 @@ from deepagents import create_deep_agent
 from deepagents.backends import LocalShellBackend
 from langgraph.checkpoint.memory import InMemorySaver
 
+backend = LocalShellBackend(
+    root_dir="./agent-work",
+    virtual_mode=True,
+    env={"PATH": "/usr/bin:/bin"},
+    inherit_env=False,
+)
 agent = create_deep_agent(
     model="openai:gpt-5.4",
     tools=[analyze_csv],
-    backend=LocalShellBackend(virtual_mode=True),
+    backend=backend,
     checkpointer=InMemorySaver(),
+    interrupt_on={"execute": True},
     system_prompt="You are a careful data analyst.",
 )
 ```
+
+This is a development-only host shell. `root_dir` and `virtual_mode=True` constrain filesystem-tool paths, not shell access; `execute` still has no shell isolation. Use a sandbox backend in production.
 
 The point is not to replace `create_deep_agent()`, but to make the hidden harness layers visible before learners use the shortcut.
 

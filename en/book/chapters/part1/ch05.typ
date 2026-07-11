@@ -28,6 +28,33 @@ print("✓ Model ready")
 
 `````)
 
+#code-block(`````python
+# Optional observability setup: LangSmith or Langfuse
+# Set the keys in .env, or uncomment the lines below to enter them manually.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: automatically enabled when LANGSMITH_TRACING=true
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: pass config={"callbacks": [langfuse_handler]} to invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
 == 5.2 Creating an Agent
 
 `create_deep_agent()` takes a LangChain model and returns an agent that already includes _built-in tools_ such as file reading, file writing, and search.
@@ -72,6 +99,23 @@ print(f"✓ Agent created (type: {type(agent).__name__})")
 
 `````)
 
+#code-block(`````python
+result = agent.invoke(
+    {
+        "messages": [
+            {
+                "role": "user",
+                "content": "Hello! What tools can you use? Please give me a short list."
+            }
+        ]
+    },
+    config=lf_config,
+)
+
+print(result["messages"][-1].content)
+
+`````)
+
 == 5.3 Adding a Custom Tool
 
 If you write a Python function with a _docstring_ and _type hints_, it becomes a tool directly.
@@ -85,6 +129,25 @@ A custom tool is just a normal Python function, and Deep Agents automatically co
 
 If you pass a list of functions to the `tools` parameter of `create_deep_agent()`, those functions are added to the tool list alongside the built-in capabilities such as file operations and todo planning. You can also guide the agent's behavior with the `system_prompt` parameter.
 
+
+#code-block(`````python
+def greet(name: str) -> str:
+    """Greet a person by name."""
+    return f"Hello, {name}! Welcome to Deep Agents."
+
+custom_agent = create_deep_agent(
+    model=model,
+    tools=[greet],
+    system_prompt="You are a friendly assistant. If someone introduces themselves, use the greet tool.",
+)
+
+result = custom_agent.invoke(
+    {"messages": [{"role": "user", "content": "My name is Alice."}]},
+    config=lf_config,
+)
+print(result["messages"][-1].content)
+
+`````)
 
 == Summary
 
@@ -105,5 +168,4 @@ If you pass a list of functions to the `tools` parameter of `create_deep_agent()
 )
 
 === Next Steps
-→ _#link("./06_comparison_en.ipynb")[06_comparison_en.ipynb]_: Compare the three frameworks and choose your next learning track.
-
+→ _#link("./06_comparison.ipynb")[06_comparison.ipynb]_: Compare the three frameworks and choose your next learning track.

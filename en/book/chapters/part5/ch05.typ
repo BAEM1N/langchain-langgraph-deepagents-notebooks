@@ -31,6 +31,33 @@ embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 print("Environment ready.")
 `````)
 
+#code-block(`````python
+# Observability settings (optional) - LangSmith or Langfuse
+# Set the key in .env, or uncomment it below and enter it yourself.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: Automatically enabled when LANGSMITH_TRACING=true (no code modification required)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON \u2014 project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: Pass config={"callbacks": [langfuse_handler]} when calling invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON \u2014 {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
 == 5.2 RAG Overview
 
 Retrieval-Augmented Generation (RAG) is a pattern that improves the accuracy of LLM responses by retrieving external knowledge. LLM has two key limitations:
@@ -319,6 +346,21 @@ RAG Agent can automatically run multiple discovery steps:
 
 This approach is suitable for complex research questions, but multiple LLM calls increase costs and delays.
 
+#code-block(`````python
+from langchain.agents import create_agent
+
+rag_agent = create_agent(
+    model=llm, tools=[retrieve],
+    system_prompt="You are a research assistant."
+    "Use retrieve to search before answering.",
+)
+response = rag_agent.invoke(
+    {"messages": [{"role": "user", "content": "What is LangGraph?"}]},
+    config=lf_config,
+)
+print(response["messages"][-1].content)
+`````)
+
 == 5.7 LangChain RAG Chain -- `\@dynamic_prompt` Middleware
 
 Implement RAG with a single LLM call. `@dynamic_prompt` retrieves the document before the LLM call and automatically injects it into the system prompt. Because it is a middleware method, it operates in a _single pass_ without an agent loop.
@@ -359,11 +401,21 @@ from langchain.agents.middleware import dynamic_prompt
 
 @dynamic_prompt
 def rag_prompt(request):
-    """It retrieves the document and injects it into the system prompt."""
+    """Retrieve documents and inject them into the system prompt."""
     user_msg = request.state["messages"][-1].content
     docs = vector_store.similarity_search(user_msg, k=4)
     ctx = "\n\n".join(d.page_content for d in docs)
     return f"Answer based on the following context:\n\n{ctx}"
+
+`````)
+
+#code-block(`````python
+chain = create_agent(model=llm, middleware=[rag_prompt])
+resp = chain.invoke(
+    {"messages": [{"role": "user", "content": "How do agents work?"}]},
+    config=lf_config,
+)
+print(resp["messages"][-1].content)
 `````)
 
 == 5.8 LangGraph Custom RAG -- Building StateGraph
@@ -372,7 +424,7 @@ Build your own RAG agent that allows detailed control with LangGraph `StateGraph
 
 === Architecture
 
-The custom RAG graph follows this high-level flow — a _Rewrite → Retrieve → Agent_ loop with a relevance gate in between:
+The workflow routes retrieved documents by relevance.
 
 #code-block(`````python
         [generate_query_or_respond]
@@ -390,13 +442,7 @@ The custom RAG graph follows this high-level flow — a _Rewrite → Retrieve �
   [END]    [generate_query_or_respond]
 `````)
 
-- `generate_query_or_respond` decides whether the model should search or answer directly.
-- If a tool call is made, `retrieve` runs the search.
-- `grade_documents` evaluates whether the retrieved documents are relevant.
-- If the documents are relevant, `generate_answer` produces the final answer.
-- If the documents are not relevant, `rewrite_question` rewrites the query and loops back to `generate_query_or_respond`.
-
-#note-box[Because `rewrite_question` can loop back to `generate_query_or_respond`, add a `retry_count` field to state so the graph cannot loop forever — 2–3 attempts is a sane default before falling back to "answer with what we have".]
+=== Role of Each Node
 
 #table(
   columns: 2,
@@ -411,12 +457,15 @@ The custom RAG graph follows this high-level flow — a _Rewrite → Retrieve �
   [`retrieve`],
   [Runs retrieval through a `ToolNode`.],
   [`grade_documents`],
-  [Evaluates document relevance with structured output (`GradeDocuments`).],
+  [Evaluates document relevance through structured output (`GradeDocuments`).],
   [`rewrite_question`],
-  [Rewrites the query into something more specific when the results are not relevant.],
+  [Rewrites the query when the retrieved results are not relevant.],
   [`generate_answer`],
   [Generates the final answer from relevant documents.],
 )
+
+=== Preventing Infinite Loops
+Because `rewrite_question` can loop back to `generate_query_or_respond`, it is a good idea to add `retry_count` to state.
 
 #code-block(`````python
 from langgraph.graph import MessagesState
@@ -431,6 +480,18 @@ print(f"AgentState keys: {list(AgentState.__annotations__)}")
 == 5.9 `generate_query_or_respond` node
 
 This is the entry node. Determines whether LLM will call retrieve tool or respond directly.
+
+#code-block(`````python
+llm_with_tools = llm.bind_tools([retrieve])
+
+def generate_query_or_respond(state: AgentState):
+    """Decide whether you want to search or respond directly."""
+    system = ("You are a useful assistant."
+              "For knowledge base questions, use retrieve tool.")
+    msgs = [{"role": "system", "content": system}] + state["messages"]
+    response = llm_with_tools.invoke(msgs, config=lf_config)
+    return {"messages": [response]}
+`````)
 
 == 5.10 `grade_documents` Node -- Evaluate relevance with structured output
 
@@ -452,17 +513,10 @@ grader = llm.with_structured_output(GradeDocuments)
 
 #code-block(`````python
 def grade_documents(state: AgentState):
-    """
-    Evaluates the relevance of the retrieved documents.
-    """
+    """Evaluates the relevance of the retrieved documents."""
 
     msgs = state["messages"]
-
-    user_q = next(
-        (m.content for m in msgs if m.type == "human"),
-        ""
-    )
-
+    user_q = next((m.content for m in msgs if m.type == "human"), "")
     tool_content = msgs[-1].content
 
     grade = grader.invoke(
@@ -470,19 +524,51 @@ def grade_documents(state: AgentState):
         f"Are these documents relevant?"
     )
 
-    return {
-        "relevance": grade.relevance,
-        "messages": msgs
-    }
+    return {"relevance": grade.relevance, "messages": msgs}
+
 `````)
 
 == 5.11 `rewrite_question` node
 
 When retrieved documents are irrelevant, rewrite the original question to be more specific to improve search quality.
 
+#code-block(`````python
+def rewrite_question(state: AgentState):
+    """Rewrites the question to improve retrieval quality."""
+
+    user_q = next((m.content for m in state["messages"] if m.type == "human"), "")
+    prompt = (
+        f"Rewrite the question using different wording.\n"
+        f"Original: {user_q}\n"
+        f"Rewritten:"
+    )
+    response = llm.invoke(prompt, config=lf_config)
+
+    return {"messages": [{"role": "human", "content": response.content}]}
+
+`````)
+
 == 5.12 `generate_answer` node
 
 Once relevant documents are identified, the search results and the original question are combined to generate the final answer.
+
+#code-block(`````python
+def generate_answer(state: AgentState):
+    """Generates the answer using the retrieved documents."""
+
+    user_q = next((m.content for m in state["messages"] if m.type == "human"), "")
+    docs = next((m.content for m in state["messages"] if m.type == "tool"), "")
+
+    prompt = (
+        f"Answer using only the context below.\n"
+        f"Context:\n{docs}\n\n"
+        f"Question: {user_q}"
+    )
+
+    resp = llm.invoke(prompt, config=lf_config)
+    return {"messages": [{"role": "assistant", "content": resp.content}]}
+
+`````)
 
 == 5.13 Graph assembly & execution
 
@@ -526,6 +612,19 @@ graph.add_edge("generate_answer", END)
 
 app = graph.compile()
 print("Graph compilation successful.")
+`````)
+
+#code-block(`````python
+for event in app.stream(
+    {"messages": [{"role": "user", "content": "What is LangGraph?"}]},
+    config=lf_config,
+):
+    for node_name, output in event.items():
+        print(f"--- {node_name} ---")
+        if "messages" in output:
+            last = output["messages"][-1]
+            txt = last.content if hasattr(last, "content") else str(last)
+            print(txt[:200])
 `````)
 
 == Summary

@@ -3,15 +3,14 @@
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-#chapter(1, "RAG Agent", subtitle: "5 Building Blocks + 3-Node Pattern")
+#chapter(1, "RAG Agent", subtitle: "Vector Search-Based Question Answering")
 
 == Learning Objectives
 
-- Understand the _five building blocks_ of LangChain RAG (document loaders, text splitters, embedding models, vector stores, retrievers)
-- Compare the three RAG architectures: _2-Step_, _Agentic_, and _Hybrid_
-- Separate query rewriting from retrieval with the `Rewrite → Retrieve → Agent` three-node pattern
+- Build a vector search pipeline with `InMemoryVectorStore`
 - Define a retrieval tool with the `content_and_artifact` return pattern
-- Build a RAG agent with `create_deep_agent` and apply v1 middleware (`ModelCallLimitMiddleware`, `ToolRetryMiddleware`)
+- Create and query a RAG agent with `create_deep_agent`
+- Apply v1 middleware (`ModelCallLimitMiddleware`, `ToolRetryMiddleware`)
 - Use the _Skills system_ to progressively disclose RAG domain knowledge
 
 
@@ -26,11 +25,9 @@
   text(weight: "bold")[Item],
   text(weight: "bold")[Details],
   [_Framework_],
-  [LangChain v1 + Deep Agents],
-  [_5 building blocks_],
-  [Document loaders · Text splitters · Embedding models · Vector stores · Retrievers],
-  [_Architecture_],
-  [2-Step (static RAG) · Agentic (tool calls) · Hybrid (Rewrite → Retrieve → Agent)],
+  [LangChain + Deep Agents],
+  [_Core components_],
+  [`InMemoryVectorStore`, `OpenAIEmbeddings`, `RecursiveCharacterTextSplitter`],
   [_Agent pattern_],
   [`content_and_artifact` tool → `create_deep_agent`],
   [_Backend_],
@@ -38,8 +35,6 @@
   [_Skill_],
   [`skills/rag-agent/SKILL.md` — progressive disclosure of RAG domain knowledge],
 )
-
-#tip-box[See `docs/langchain/24-retrieval.md` for a side-by-side comparison of the 2-Step, Agentic, and Hybrid RAG architectures.]
 
 
 #code-block(`````python
@@ -52,73 +47,29 @@ assert os.environ.get("OPENAI_API_KEY"), "Set OPENAI_API_KEY in .env"
 `````)
 
 #code-block(`````python
-from langchain_openai import ChatOpenAI
+# Optional observability setup
+import os
 
-model = ChatOpenAI(model="gpt-5.4")
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
 
 `````)
 
-== The 5 RAG Building Blocks
-
-LangChain RAG consists of five composable building blocks. Each one is replaceable, and the way you wire them together defines the architecture.
-
-#table(
-  columns: 2,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Block],
-  text(weight: "bold")[Role],
-  [_Document loaders_],
-  [Load PDFs, web pages, or databases into `Document` objects],
-  [_Text splitters_],
-  [Split long documents into retrieval-friendly chunks],
-  [_Embedding models_],
-  [Convert text into vectors (e.g. `OpenAIEmbeddings`)],
-  [_Vector stores_],
-  [Persist embeddings and run similarity search (FAISS, Chroma, InMemory)],
-  [_Retrievers_],
-  [Return the top-N relevant documents for a query — usually wrapped as an agent tool],
-)
-
-== 2-Step / Agentic / Hybrid Architectures
-
-The same building blocks produce three different architectures depending on how they are composed.
-
-#table(
-  columns: 4,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Architecture],
-  text(weight: "bold")[Flow],
-  text(weight: "bold")[Strengths],
-  text(weight: "bold")[Trade-offs],
-  [_2-Step RAG_],
-  [Query → retrieve → LLM response (static)],
-  [Simple, fast, predictable],
-  [No re-querying or multi-retrieval],
-  [_Agentic RAG_],
-  [Agent calls `retrieve` on demand],
-  [Handles multi-step and comparison queries],
-  [Higher token usage],
-  [_Hybrid_],
-  [Three nodes: `Rewrite → Retrieve → Agent`],
-  [Better recall through query rewriting],
-  [More graph wiring up front],
-)
-
-== The Rewrite → Retrieve → Agent 3-Node Pattern
-
-The Hybrid layout pulls _query rewriting_ and _retrieval_ out into separate nodes and lets the agent synthesize the final answer. This separation keeps retrieval accuracy stable even when the user's question is vague or carries multiple intents.
-
 #code-block(`````python
-# Conceptual graph — implement each node with LangGraph
-# rewrite_node:   original query → rewritten retrieval query
-# retrieve_node:  vectorstore.similarity_search(query, k=K)
-# agent_node:     create_deep_agent + tools=[retrieve_tool]
+from langchain_openai import ChatOpenAI
+
+model = ChatOpenAI(model="gpt-4.1")
+
 `````)
 
 == Step 1: Create Sample Documents
@@ -251,6 +202,16 @@ agent = create_deep_agent(
 Use a simple query (single retrieval) and a comparison-style query (multiple retrieval steps) to verify that the RAG agent works as expected.
 
 
+#code-block(`````python
+# Simple query
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "What is LangGraph?"}]},
+    config=lf_config,
+)
+print(response["messages"][-1].content)
+
+`````)
+
 == Summary
 
 #table(
@@ -275,8 +236,7 @@ Use a simple query (single retrieval) and a comparison-style query (multiple ret
 
 _References:_
 - `docs/langchain/24-retrieval.md`
-- #link("https://python.langchain.com/docs/tutorials/rag/")[LangChain RAG Tutorial]
+- #link("https://docs.langchain.com/oss/python/langchain/rag")[LangChain RAG Tutorial]
 - `docs/deepagents/10-skills.md`
 
 _Next Step:_ → #link("./02_sql_agent.ipynb")[02_sql_agent.ipynb]: Build a SQL agent.
-

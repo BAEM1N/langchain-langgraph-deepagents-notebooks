@@ -48,28 +48,19 @@ In v1, the `langchain` namespace has been significantly reduced to five core mod
 
 Chains, Retrievers, Hub, and Indexing API, which were previously used in the `langchain` package, have all been separated into a separate package called `langchain-classic`. If you need to keep your existing code, change the import path after installation to `pip install langchain-classic`:
 
-Note that message and tool imports also moved: v0 used `langchain_core.messages` and `langchain_core.tools`, but v1 re-exports the same symbols under `langchain.messages` and `langchain.tools`. Both paths still work, but new v1 code should prefer the shorter form.
-
 #code-block(`````python
-# v1 preferred imports
-from langchain.messages import HumanMessage, AIMessage, ToolMessage
-from langchain.tools import tool, ToolRuntime, BaseTool
-`````)
-
-The 
-== v0 — Legacy approach
+# v0 — Legacy approach
 from langchain.chains import LLMChain
 from langchain.retrievers import MultiQueryRetriever
 from langchain import hub
 
-== v1 — langchain-classicmigration path
+# v1 — langchain-classicmigration path
 from langchain_classic.chains import LLMChain
 from langchain_classic.retrievers import MultiQueryRetriever
 from langchain_classic import hub
-#code-block(`````python
+`````)
 
 Because of this split, the v1 `langchain` package became a lightweight layer focused on agent building, while legacy functionality is maintained separately.
-`````)
 
 == 0.2 Agent creation API changes
 
@@ -96,6 +87,33 @@ agent = create_agent(
     system_prompt="You are a math assistant.",  # v0: prompt=
 )
 print("✓ v1 agent creation completed")
+`````)
+
+#code-block(`````python
+# Observability settings (optional) - LangSmith or Langfuse
+# Set the key in .env, or uncomment it below and enter it yourself.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: Automatically enabled when LANGSMITH_TRACING=true (no code modification required)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON \u2014 project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: Pass config={"callbacks": [langfuse_handler]} when calling invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON \u2014 {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
 `````)
 
 === Major changes
@@ -130,6 +148,25 @@ print("✓ v1 agent creation completed")
 
 In v1, custom state must inherit from `TypedDict` based on `AgentState`.
 
+#code-block(`````python
+from langchain.agents import AgentState, create_agent
+
+class CustomState(AgentState):
+    user_id: str
+
+agent = create_agent(
+    model=model,
+    tools=[add],
+    state_schema=CustomState,
+)
+
+result = agent.invoke({
+    "messages": [{"role": "user", "content": "How much is 3+4?"}],
+    "user_id": "user_123",
+}, config=lf_config)
+print(result["messages"][-1].content)
+`````)
+
 == 0.4 Runtime context injection (new)
 
 In v1, _immutable runtime data_ can be passed to the agent via the `context_schema` and `context` parameters. This is a pattern that safely passes data that varies from request to request, such as user ID, role, and session information, but does not change during execution, to the agent and tool.
@@ -142,9 +179,62 @@ _How it works:_
 
 Context is read-only data that _does not change_ between tool calling, unlike agent state (`AgentState`). The state is updated during the agent loop, but the context is fixed when calling `invoke`.
 
+#code-block(`````python
+from dataclasses import dataclass
+from langchain.tools import tool, ToolRuntime
+
+@dataclass
+class UserContext:
+    user_id: str
+    role: str
+
+@tool
+def get_role(runtime: ToolRuntime[UserContext]) -> str:
+    """Query the current user's roles."""
+    return f"User {runtime.context.user_id} role: {runtime.context.role}"
+
+agent = create_agent(
+    model=model,
+    tools=[get_role],
+    context_schema=UserContext,
+)
+
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "What is my role?"}]},
+    context=UserContext(user_id="u1", role="admin"),
+    config=lf_config,
+)
+print(result["messages"][-1].content)
+`````)
+
 == 0.5 Dynamic Prompts — Middleware Approach (New)
 
 Instead of the static prompt in v0, `@dynamic_prompt` creates a prompt dynamically based on the runtime context.
+
+#code-block(`````python
+from langchain.agents.middleware import dynamic_prompt, ModelRequest
+
+@dynamic_prompt
+def role_based_prompt(request: ModelRequest) -> str:
+    role = request.runtime.context.role
+    if role == "admin":
+        return "You are an administrator assistant with full access."
+    return "You are a read-only assistant."
+
+agent = create_agent(
+    model=model,
+    tools=[add],
+    context_schema=UserContext,
+    middleware=[role_based_prompt],
+)
+
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "hello!"}]},
+    context=UserContext(user_id="u1", role="admin"),
+    config=lf_config,
+)
+print(result["messages"][-1].content)
+`````)
 
 == 0.6 tool Error handling — `\@wrap_tool_call` (new)
 
@@ -178,29 +268,19 @@ In v1, messages support provider-agnostic `content_blocks`.
 structured output was split into two branches: `ToolStrategy` (based on tool calling) and `ProviderStrategy` (native).
 
 #code-block(`````python
-from pydantic import BaseModel
-from langchain.agents.structured_output import ToolStrategy, ProviderStrategy
+# Standard content block
 
-class Weather(BaseModel):
-    location: str
-    temperature_c: float
+response = model.invoke(
+    "Please say hello.",
+    config=lf_config
+)
 
-# Tool-call based — works on any model
-agent_tool = create_agent(model=model, tools=[add],
-                          response_format=ToolStrategy(schema=Weather))
+for block in response.content_blocks:
+    print(f"  [{block['type']}] {block.get('text', '')[:100]}")
 
-# Provider-native — uses OpenAI JSON mode / Anthropic tool_use etc.
-agent_provider = create_agent(model=model, tools=[add],
-                              response_format=ProviderStrategy(schema=Weather))
-`````)
+# .text property (v0: .text() method → ​​v1: .text property)
 
-v1 models default to `output_version="v1"`, which enables standard content blocks and the `content_blocks` property automatically. Set `output_version="v0"` to restore legacy behaviour.
-
-#code-block(`````python
-from langchain_openai import ChatOpenAI
-
-model_v1 = ChatOpenAI(model="gpt-5.4", output_version="v1")
-model_v0 = ChatOpenAI(model="gpt-5.4", output_version="v0")
+print(f"\n.text: {response.text[:100]}")
 `````)
 
 == 0.8 Streaming changes
@@ -221,6 +301,21 @@ model_v0 = ChatOpenAI(model="gpt-5.4", output_version="v0")
   [method `.text()`],
   [Property `.text`],
 )
+
+#code-block(`````python
+for chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "How much is 5+3?"}]},
+    context=UserContext(user_id="u1", role="admin"),
+    stream_mode="updates",
+    config=lf_config,
+):
+    for node_name, update in chunk.items():
+        # v1: node_name is "model" (in v0 it is "agent")
+        if "messages" in update:
+            last = update["messages"][-1]
+            if hasattr(last, "content") and last.content:
+                print(f"[{node_name}] {last.content[:200]}")
+`````)
 
 == 0.9 Guitar Breaking Change
 
@@ -244,7 +339,7 @@ model_v0 = ChatOpenAI(model="gpt-5.4", output_version="v0")
   [The `example` parameter has been removed. Use `additional_kwargs`.],
   [_AIMessageChunk_],
   [Added `chunk_position` attribute (value `'last'` in last chunk).],
-  [`.text` properties],
+  [_`.text` Properties_],
   [`.text()` method changed to `.text` property.],
   [_File Encoding_],
   [Files open with UTF-8 encoding by default.],

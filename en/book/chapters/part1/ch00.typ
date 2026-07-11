@@ -60,8 +60,10 @@ import os
 
 # LangSmith: Automatically activated when LANGSMITH_TRACING=true (no code modification required)
 if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
-    project = os.environ.get("LANGSMITH_PROJECT", "default")
-    print(f"LangSmith tracing ON \u2014 project: {project}")
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON \u2014 project: {os.environ['LANGCHAIN_PROJECT']}")
 
 # Langfuse: Pass config={"callbacks": [langfuse_handler]} when calling invoke/stream
 langfuse_handler = None

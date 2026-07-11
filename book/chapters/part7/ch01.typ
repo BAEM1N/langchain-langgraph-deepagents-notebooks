@@ -44,6 +44,24 @@ assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY를 .env에 설정하세
 `````)
 
 #code-block(`````python
+# Observability 설정 (선택)
+import os
+
+# LangSmith — LANGSMITH_* 가 표준. LANGCHAIN_* 는 하위 호환 shim
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    print(f"LangSmith tracing ON — project: {os.environ['LANGSMITH_PROJECT']}")
+
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
+#code-block(`````python
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(model="gpt-5.4")
@@ -273,6 +291,21 @@ Prompt 'deep-research-agent-label:production' not found during refresh, evicting
 단순 질의(하나의 검색)와 비교 질의(다중 검색)로 에이전트의 RAG 동작을 확인합니다.
 
 
+#code-block(`````python
+# 단순 질의
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "LangGraph가 뭔가요?"}]},
+    config=lf_config,
+)
+print(response["messages"][-1].content)
+
+`````)
+#output-block(`````
+LangGraph는 상태 기반 워크플로를 구축하기 위한 프레임워크입니다. 그래프 API와 Functional API를 통해 복잡한 LLM(대형 언어 모델) 기반 애플리케이션의 흐름을 정의하고 관리할 수 있습니다.
+
+출처: 검색 결과(내부 문서 검색)
+`````)
+
 == 8단계: Hybrid RAG — `Rewrite → Retrieve → Agent` 3-node 패턴
 
 Agentic RAG 는 에이전트가 한 번에 검색·답변을 다 결정하지만, 도메인 어휘가 풍부할수록 _질의 재작성(rewrite)_ 을 분리하면 재현율이 올라갑니다. LangGraph 의 `StateGraph` 로 3개 노드를 명시적으로 구성합니다.
@@ -291,6 +324,66 @@ Agentic RAG 는 에이전트가 한 번에 검색·답변을 다 결정하지만
 `````)
 
 `retrieve` 도구는 4단계에서 이미 정의했으므로 그대로 재사용합니다.
+
+#code-block(`````python
+from typing import TypedDict
+from langgraph.graph import StateGraph, START, END
+
+
+class HybridState(TypedDict):
+    question: str
+    rewritten: str
+    contexts: list
+    answer: str
+
+
+def rewrite_node(state: HybridState) -> dict:
+    """질의를 벡터 검색에 친화적인 키워드 형태로 재작성합니다."""
+    prompt = (
+        "다음 질문을 한국어 벡터 검색용 핵심 키워드 한 줄로 다시 써주세요. "
+        "불필요한 조사·어미는 제거하고 명사 중심으로 작성합니다.\n\n"
+        f"질문: {state['question']}"
+    )
+    rewritten = model.invoke(prompt).content.strip()
+    return {"rewritten": rewritten}
+
+
+def retrieve_node(state: HybridState) -> dict:
+    """재작성된 질의로 벡터 스토어에서 K=3 컨텍스트를 조회합니다."""
+    docs = vectorstore.similarity_search(state["rewritten"], k=3)
+    return {"contexts": [d.page_content for d in docs]}
+
+
+def agent_node(state: HybridState) -> dict:
+    """검색 결과를 컨텍스트로 주입한 뒤 에이전트가 최종 답변을 생성합니다."""
+    context_block = "\n\n".join(f"- {c}" for c in state["contexts"])
+    user_msg = (
+        f"다음 컨텍스트만 근거로 사용해 질문에 답하세요.\n\n"
+        f"[컨텍스트]\n{context_block}\n\n[질문] {state['question']}"
+    )
+    out = agent.invoke({"messages": [{"role": "user", "content": user_msg}]}, config=lf_config)
+    return {"answer": out["messages"][-1].content}
+
+
+graph = (
+    StateGraph(HybridState)
+    .add_node("rewrite", rewrite_node)
+    .add_node("retrieve", retrieve_node)
+    .add_node("agent", agent_node)
+    .add_edge(START, "rewrite")
+    .add_edge("rewrite", "retrieve")
+    .add_edge("retrieve", "agent")
+    .add_edge("agent", END)
+    .compile()
+)
+
+result = graph.invoke({"question": "LangGraph 와 Deep Agents 차이는?"})
+print("재작성 질의:", result["rewritten"])
+print("검색 컨텍스트 수:", len(result["contexts"]))
+print()
+print(result["answer"])
+
+`````)
 
 #chapter-summary-header()
 
@@ -319,7 +412,7 @@ Agentic RAG 는 에이전트가 한 번에 검색·답변을 다 결정하지만
 
 #references-box[
 - `docs/langchain/24-retrieval.md` — 5 building blocks · 2-Step / Agentic / Hybrid 아키텍처
-- #link("https://python.langchain.com/docs/tutorials/rag/")[LangChain RAG Tutorial]
+- #link("https://docs.langchain.com/oss/python/langchain/rag")[LangChain RAG Tutorial]
 - `docs/deepagents/10-skills.md`
 _다음 단계:_ → #link("./02_sql_agent.ipynb")[02_sql_agent.ipynb]: SQL 에이전트를 구축합니다.
 ]

@@ -46,9 +46,28 @@ assert os.environ.get("OPENAI_API_KEY"), "Set OPENAI_API_KEY in .env"
 `````)
 
 #code-block(`````python
+# Optional observability setup
+import os
+
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
+#code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-5.4")
+model = ChatOpenAI(model="gpt-4.1")
 
 `````)
 
@@ -84,13 +103,21 @@ Deep Agents supports multiple backends. For data analysis, code execution matter
   [Production],
 )
 
-#tip-box[⚠️ `LocalShellBackend` runs commands on the host system. Always use `virtual_mode=True`.]
+#tip-box[⚠️ `LocalShellBackend` provides no shell isolation. `virtual_mode=True` constrains filesystem-tool paths only. The example below is for development; use a sandbox backend in production.]
 
 
 #code-block(`````python
 from deepagents.backends import LocalShellBackend
+from pathlib import Path
+import sys
 
-backend = LocalShellBackend(root_dir=".", virtual_mode=True)
+work_dir = Path(".agent-work").resolve()
+work_dir.mkdir(exist_ok=True)
+backend = LocalShellBackend(
+    root_dir=work_dir, virtual_mode=True,
+    env={"PATH": f"{Path(sys.executable).parent}:/usr/bin:/bin"},
+    inherit_env=False,
+)
 
 `````)
 
@@ -200,9 +227,14 @@ agent = create_deep_agent(
     model=model,
     tools=[get_csv_path, run_pandas],
     system_prompt=DATA_ANALYSIS_PROMPT,
-    backend=LocalShellBackend(root_dir=tmp_dir, virtual_mode=True),
+    backend=LocalShellBackend(
+        root_dir=tmp_dir, virtual_mode=True,
+        env={"PATH": f"{Path(sys.executable).parent}:/usr/bin:/bin"},
+        inherit_env=False,
+    ),
     skills=["/skills/"],
     checkpointer=InMemorySaver(),
+    interrupt_on={"execute": True},
     middleware=[
         SummarizationMiddleware(model=model, trigger=("messages", 10)),
         ModelCallLimitMiddleware(run_limit=20),
@@ -223,10 +255,41 @@ Agent execution flow:
 `````)
 
 
+#code-block(`````python
+thread = {"configurable": {"thread_id": "analysis-1"}}
+query = "Use get_csv_path to confirm the CSV path, then use run_pandas to compute total sales by region and by product."
+
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": query}]},
+    config={**thread, **lf_config},
+)
+print(response["messages"][-1].content)
+
+`````)
+
 == Step 6: Ask a Follow-Up Question in the Same Thread
 
 If you reuse the same `thread_id`, the agent keeps the conversation context and can continue the analysis from the earlier steps.
 
+
+#code-block(`````python
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "Use run_pandas to find the region and product combination with the highest sales."}]},
+    config={**thread, **lf_config},
+)
+print(response["messages"][-1].content)
+
+`````)
+
+#code-block(`````python
+# Another follow-up question — statistical analysis
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "Use run_pandas to calculate the monthly sales trend and present it as a table."}]},
+    config={**thread, **lf_config},
+)
+print(response["messages"][-1].content)
+
+`````)
 
 == Built-In Tools Summary
 
@@ -276,36 +339,6 @@ If you reuse the same `thread_id`, the agent keeps the conversation context and 
 5. [Delivery]    summarize findings and report results
 `````)
 
-== `@tool` + pandas vs. CodeInterpreterMiddleware
-
-There are two main ways a data analysis agent can run code. The `run_pandas` tool in this chapter is the _`@tool` + pandas_ pattern; it can be swapped for the built-in `execute` of `LocalShellBackend` or for `CodeInterpreterMiddleware`.
-
-#table(
-  columns: 4,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Pattern],
-  text(weight: "bold")[Isolation],
-  text(weight: "bold")[State],
-  text(weight: "bold")[Use Case],
-  [`@tool` + inline Python],
-  [None (same process)],
-  [New namespace per call],
-  [Notebooks, demos, small analyses],
-  [`LocalShellBackend` `execute`],
-  [None (host shell)],
-  [Filesystem only],
-  [Letting the agent shell out],
-  [`CodeInterpreterMiddleware` (QuickJS)],
-  [Inside the interpreter],
-  [Auto-restored between turns via snapshots],
-  [Safer code execution on Deep Agents 0.6+],
-)
-
-#tip-box[Put your analysis checklist and code-execution rules in `skills/data-analysis/SKILL.md`. The agent loads them progressively when needed instead of cramming everything into the system prompt — that's the Skills pattern.]
-
 
 == Summary
 
@@ -318,7 +351,9 @@ There are two main ways a data analysis agent can run code. The `run_pandas` too
   text(weight: "bold")[Item],
   text(weight: "bold")[Key Point],
   [_Backend_],
-  [`LocalShellBackend(virtual_mode=True)` — supports code execution],
+  [LocalShell is a development host shell; production uses a sandbox],
+  [_Exposure reduction_],
+  [Temporary root + minimal env + no inherited env + execute HITL],
   [_Built-in tools_],
   [`execute` (code execution) + `write_todos` (planning)],
   [_Streaming_],
@@ -334,4 +369,3 @@ _References:_
 - `docs/deepagents/06-backends.md`
 
 _Next Step:_ → #link("./04_ml_agent.ipynb")[04_ml_agent.ipynb]: Build a machine learning agent.
-

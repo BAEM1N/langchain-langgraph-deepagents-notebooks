@@ -37,6 +37,33 @@ print("환경 준비 완료.")
 환경 준비 완료.
 `````)
 
+#code-block(`````python
+# Observability 설정 (선택) - LangSmith 또는 Langfuse
+# .env에 키를 설정하거나, 아래 주석을 해제하여 직접 입력하세요.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: LANGSMITH_TRACING=true 시 자동 활성화 (코드 수정 불필요)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    print(f"LangSmith tracing ON \u2014 project: {project}")
+
+# Langfuse: invoke/stream 호출 시 config={"callbacks": [langfuse_handler]} 전달
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON \u2014 {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+`````)
+#output-block(`````
+Langfuse tracing ON — https://lf.ddok.ai
+`````)
+
 == 13.2 가드레일 개념
 
 _가드레일(Guardrails)_은 에이전트 실행 과정에서 콘텐츠를 검증하고 필터링하는 안전 메커니즘입니다.
@@ -202,7 +229,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, send_email_tool, delete_db_tool],
     middleware=[
         HumanInTheLoopMiddleware(
@@ -540,7 +567,7 @@ from langchain.agents.middleware import (
 )
 
 agent = create_agent(
-    model="gpt-4.1",
+    model="gpt-5.4",
     tools=[search_tool, send_email_tool],
     middleware=[
         # Layer 1: 결정론적 입력 필터

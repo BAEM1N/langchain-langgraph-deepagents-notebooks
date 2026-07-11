@@ -28,10 +28,58 @@ print("✓ Model ready")
 
 `````)
 
+#code-block(`````python
+# Optional observability setup: LangSmith or Langfuse
+# Set the keys in .env, or uncomment the lines below to enter them manually.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: automatically enabled when LANGSMITH_TRACING=true
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: pass config={"callbacks": [langfuse_handler]} to invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
 == 3.2 The Limit of an Agent Without Memory
 
 A basic agent _does not store state_. Each call is treated like a new conversation.
 
+
+#code-block(`````python
+from langchain.agents import create_agent
+from langchain.tools import tool
+
+@tool
+def add(a: int, b: int) -> int:
+    """Add two numbers."""
+    return a + b
+
+# Agent without memory
+agent_no_mem = create_agent(model=model, tools=[add])
+
+r1 = agent_no_mem.invoke({"messages": [{"role": "user", "content": "What is 3 + 4?"}]}, config=lf_config)
+print("Turn 1:", r1["messages"][-1].content)
+
+# The agent cannot remember the previous result
+r2 = agent_no_mem.invoke({"messages": [{"role": "user", "content": "Add 10 to the previous result."}]}, config=lf_config)
+print("Turn 2:", r2["messages"][-1].content)
+
+`````)
 
 == 3.3 Adding Memory with InMemorySaver
 
@@ -62,12 +110,45 @@ print("✓ Memory-enabled agent created")
 
 `````)
 
+#code-block(`````python
+# First question
+r1 = agent.invoke(
+    {"messages": [{"role": "user", "content": "What is 7 + 8?"}]},
+    config={**config, **lf_config},
+)
+print("Turn 1:", r1["messages"][-1].content)
+
+# Second question that depends on the previous context
+r2 = agent.invoke(
+    {"messages": [{"role": "user", "content": "Now multiply that result by 2."}]},
+    config={**config, **lf_config},
+)
+print("Turn 2:", r2["messages"][-1].content)
+
+`````)
+
 == 3.4 Watching the Steps with Streaming
 
 Use `agent.stream()` to observe each step of the agent in real time.
 
 Agent streaming is useful when an agent runs for a while and you want to inspect intermediate steps as they happen. With `stream_mode="updates"`, you receive updates from each node individually, such as model calls and tool execution results. This lets you see what the agent is doing step by step.
 
+
+#code-block(`````python
+config2 = {"configurable": {"thread_id": "session-2"}}
+
+for chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "Add 100 and 200, then add 50 to the result."}]},
+    config={**config2, **lf_config},
+    stream_mode="updates",
+):
+    for node_name, update in chunk.items():
+        if "messages" in update:
+            last = update["messages"][-1]
+            if hasattr(last, "content") and last.content:
+                print(f"[{node_name}] {last.content[:200]}")
+
+`````)
 
 == Summary
 
@@ -90,5 +171,4 @@ Agent streaming is useful when an agent runs for a while and you want to inspect
 )
 
 === Next Steps
-→ _#link("./04_langgraph_basics_en.ipynb")[04_langgraph_basics_en.ipynb]_: Build a workflow with LangGraph.
-
+→ _#link("./04_langgraph_basics.ipynb")[04_langgraph_basics.ipynb]_: Build a workflow with LangGraph.

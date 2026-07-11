@@ -23,6 +23,33 @@ print("환경 설정 완료")
 `````)
 
 #code-block(`````python
+# Observability 설정 (선택) - LangSmith 또는 Langfuse
+# .env에 키를 설정하거나, 아래 주석을 해제하여 직접 입력하세요.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: LANGSMITH_TRACING=true 시 자동 활성화 (코드 수정 불필요)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    print(f"LangSmith tracing ON — project: {project}")
+
+# Langfuse: invoke/stream 호출 시 config={"callbacks": [langfuse_handler]} 전달
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+#output-block(`````
+Langfuse tracing ON — https://lf.ddok.ai
+`````)
+
+#code-block(`````python
 # OpenAI gpt-5.4 모델 설정 (Deep Agents 기본은 anthropic:claude-sonnet-4-6)
 from langchain_openai import ChatOpenAI
 
@@ -31,7 +58,7 @@ model = ChatOpenAI(model="gpt-5.4")
 print(f"모델 설정 완료: {model.model_name}")
 `````)
 #output-block(`````
-모델 설정 완료: gpt-4.1
+모델 설정 완료: gpt-5.4
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -207,6 +234,49 @@ print("메인 에이전트 생성 완료 (서브에이전트: researcher)")
 메인 에이전트 생성 완료 (서브에이전트: researcher)
 `````)
 
+#code-block(`````python
+# 서브에이전트를 활용하는 질문
+result = main_agent.invoke(
+    {"messages": [{"role": "user", "content": "2024년 AI 에이전트 프레임워크 트렌드를 조사해 주세요."}]},
+    config=lf_config,
+)
+
+print(result["messages"][-1].content)
+`````)
+#output-block(`````
+Failed to export span batch due to timeout, max retries or shutdown.
+
+Failed to export span batch due to timeout, max retries or shutdown.
+
+2024년 AI 에이전트 프레임워크 트렌드 핵심 정리
+
+■ 대표 프레임워크 및 특징
+- LangChain, LangGraph, Crew AI: 오픈소스, 모듈식, 멀티에이전트 지원, Tool 연동 활발
+- AutoGen, Semantic Kernel(마이크로소프트): 워크플로우 자동화, 기업·Azure 연계
+- PromptFlow, Phidata, Multi-agent Orchestrator(아마존): 시각적 구축, 빠른 배포, 클라우드 지원
+- OpenAI Swarm, ChatDev: 실험적 멀티에이전트, 코드 자동화 등 혁신 기능
+
+■ 주요 트렌드 및 변화
+- 생성형 AI(LLM)와의 결합이 기본, 실제 실행 기반 솔루션 주목
+- 멀티모달 에이전트: 텍스트·음성·이미지 등 다양한 입력 지원, 실무 분야로 빠르게 확산
+- RAG(검색결합생성): 외부 정보 연동해 신뢰도·정확도 강화
+- 도메인·엔터프라이즈 특화 증가(금융·의료 등), 자체 구축 및 맞춤형 개발 확산
+- 멀티에이전트 시스템(MAS) 기반, 역할 분업 및 복잡 업무 자동화 강화
+
+■ 도입 및 커뮤니티 동향
+- 글로벌 대기업(Uber, Klarna 등) 직접 구축/운영
+- 오픈소스 프레임워크 기반 개발자 커뮤니티 및 협업 확대
+- 중소기업/개인 대상 No-code·Low-code 솔루션 부상
+
+■ 발전 방향
+- 도메인 특화·미세조정 쉬운 Framework 발전
+- 자율/반자율 Agent 지향: 목표 설정~실행까지 자동화
+- Human-in-the-loop, 신뢰성·윤리·보안 등 실무·규제 요구 반영
+- 비용 및 진입장벽 하락, 다양한 산업에서 활용 가시화
+
+... (truncated)
+`````)
+
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 3. CompiledSubAgent — 커스텀 LangGraph 그래프 연결
 
@@ -282,6 +352,37 @@ general-purpose 서브에이전트를 오버라이드한 에이전트 생성 완
 런타임 컨텍스트는 자동으로 모든 서브에이전트에 전파됩니다.
 `context_schema`로 구조를 정의하고, `config`의 `context` 키로 값을 전달합니다.
 
+#code-block(`````python
+from langchain_core.messages import HumanMessage
+from langgraph.checkpoint.memory import MemorySaver
+
+# 컨텍스트 스키마를 가진 에이전트
+context_agent = create_deep_agent(
+    model=model,
+    system_prompt="사용자 맞춤 어시스턴트입니다. 한국어로 응답하세요.",
+    subagents=[research_subagent],
+    context_schema={"user_id": str, "language": str},
+    checkpointer=MemorySaver(),
+)
+
+# 컨텍스트와 함께 실행
+result = context_agent.invoke(
+    {"messages": [HumanMessage(content="내 최근 관심사에 맞는 뉴스를 찾아주세요.")]},
+    config={**{
+        "configurable": {"thread_id": "ctx-test"},
+        "context": {
+            "user_id": "user-123",
+            "language": "ko",
+        },
+    }, **lf_config},
+)
+
+print(result["messages"][-1].content)
+`````)
+#output-block(`````
+최근 관심사에 대해 알려주시면, 그에 맞는 뉴스를 찾아드릴 수 있습니다. 어떤 주제, 분야, 키워드에 관심이 있으신가요? 관심 분야(예: 경제, IT, 스포츠 등)나 구체적인 키워드, 혹은 최근에 흥미롭게 본 기사 스타일을 알려주시면 더 맞춤 추천이 가능합니다.
+`````)
+
 === 네임스페이스 키로 서브에이전트별 컨텍스트 전달
 
 `"서브에이전트이름:키"` 형식을 쓰면, 특정 서브에이전트에만 전달되는 설정을 추가할 수 있습니다.
@@ -345,6 +446,49 @@ print("멀티 서브에이전트 파이프라인 에이전트 생성 완료")
 `````)
 #output-block(`````
 멀티 서브에이전트 파이프라인 에이전트 생성 완료
+`````)
+
+#code-block(`````python
+# 파이프라인 실행
+result = pipeline_agent.invoke(
+    {"messages": [{"role": "user", "content": "2025년 생성형 AI 시장 동향에 대한 간단한 보고서를 작성해 주세요."}]},
+    config=lf_config,
+)
+
+print(result["messages"][-1].content)
+`````)
+#output-block(`````
+Failed to export span batch due to timeout, max retries or shutdown.
+
+Failed to export span batch due to timeout, max retries or shutdown.
+
+Failed to export span batch due to timeout, max retries or shutdown.
+
+Failed to export span batch due to timeout, max retries or shutdown.
+
+Failed to export span batch due to timeout, max retries or shutdown.
+
+2025년 생성형 AI 시장 동향에 대한 간단 보고서
+
+---
+
+**1. 시장 규모 및 성장 동향**
+- 2025년 글로벌 생성형 AI 시장은 약 670억 달러(한화 약 90조 원) 규모로 성장, 연평균 50%가 넘는 고속 성장세 예상
+- 국내 시장도 2조 원 이상, 연 60% 가까운 성장률 전망
+- 미국, 중국, 한국 등 주요국 Big Tech 기업과 혁신 스타트업 중심의 경쟁 심화
+
+**2. 주요 트렌드**
+- 초거대 AI(LLM)와 멀티모달 AI(텍스트·음성·이미지 복합) 기술의 실용화
+- 오픈소스 및 맞춤형(경량) 생성형 AI 모델 확산
+- 자동화, 창작, 고객상담, R&D, 제조 등 폭넓은 산업에서 도입 확대
+- AI 윤리·보안 및 데이터 품질 관리 중요성 부상
+
+**3. 산업별 응용 사례**
+| 산업     | 활용 예시                       |
+|----------|-------------------------------|
+| 금융     | 자동 보고서·신용평가·챗봇      |
+| 제조     | R&D 문서생성·설계자동화        |
+... (truncated)
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))

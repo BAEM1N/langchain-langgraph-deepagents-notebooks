@@ -26,7 +26,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from typing import TypedDict, Annotated, Literal
 import operator
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 
 @tool
 def search(query: str) -> str:

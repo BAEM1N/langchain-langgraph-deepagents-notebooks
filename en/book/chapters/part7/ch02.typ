@@ -30,7 +30,7 @@
   [_Agent pattern_],
   [AGENTS.md safety rules + skills-based workflow],
   [_HITL_],
-  [`interrupt_on={"sql_db_query": {"allowed_decisions":[...]}}` + `Command(resume={"decisions":[...]})`],
+  [`interrupt_on` + `Command(resume={...})`],
   [_Database_],
   [Chinook (SQLite)],
   [_Skill_],
@@ -48,9 +48,28 @@ assert os.environ.get("OPENAI_API_KEY"), "Set OPENAI_API_KEY in .env"
 `````)
 
 #code-block(`````python
+# Optional observability setup
+import os
+
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
+#code-block(`````python
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-5.4")
+model = ChatOpenAI(model="gpt-4.1")
 
 `````)
 
@@ -155,9 +174,29 @@ agent = create_deep_agent(
 
 `````)
 
+#code-block(`````python
+# Simple query
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "How many artists are there in total?"}]},
+    config=lf_config,
+)
+print(response["messages"][-1].content)
+
+`````)
+
+#code-block(`````python
+# A more complex query (using write_todos internally)
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "Show the number of tracks and average price by genre. Sort by the largest track count."}]},
+    config=lf_config,
+)
+print(response["messages"][-1].content)
+
+`````)
+
 == Step 6: A HITL Agent (`interrupt_on`)
 
-Use the `interrupt_on` parameter of `create_deep_agent` to define approval policies for specific tools. Execution stops before `sql_db_query` runs, and then resumes with `Command(resume={"decisions": [...]})`. In v1 you can spell out the allowed decision types per tool with `allowed_decisions`.
+Use `interrupt_on` to define tool-specific policies. The SQL tool allows approve, edit, and reject; an `ask_user` tool allows respond because the human intentionally supplies its successful result. Resume with the same `thread_id` and `version="v2"`.
 
 #table(
   columns: 2,
@@ -167,8 +206,10 @@ Use the `interrupt_on` parameter of `create_deep_agent` to define approval polic
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[Parameter],
   text(weight: "bold")[Role],
-  [`interrupt_on={"sql_db_query": {"allowed_decisions": [...]}}`],
-  [Pause before `sql_db_query` runs and declare which decision types are valid],
+  [`sql_db_query: approve/edit/reject`],
+  [Review or deny SQL execution without treating denial as success],
+  [`ask_user: respond`],
+  [Return the human answer as a synthetic ToolMessage],
   [`ModelCallLimitMiddleware`],
   [Prevent infinite loops by limiting the run to 15 model calls],
   [`InMemorySaver`],
@@ -179,18 +220,23 @@ Use the `interrupt_on` parameter of `create_deep_agent` to define approval polic
 #code-block(`````python
 from langgraph.checkpoint.memory import InMemorySaver
 from langchain.agents.middleware import ModelCallLimitMiddleware
+from langchain.tools import tool
+
+@tool
+def ask_user(question: str) -> str:
+    """Ask the user for information needed to continue."""
+    return "No response provided"
 
 hitl_agent = create_deep_agent(
     model=model,
-    tools=sql_tools,
-    system_prompt=SQL_AGENT_PROMPT,
+    tools=[*sql_tools, ask_user],
+    system_prompt=SQL_AGENT_PROMPT + " Ask the user when required information is missing.",
     backend=FilesystemBackend(root_dir=".", virtual_mode=True),
     skills=["/skills/"],
     checkpointer=InMemorySaver(),
     interrupt_on={
-        "sql_db_query": {
-            "allowed_decisions": ["approve", "edit", "reject", "respond"],
-        },
+        "sql_db_query": {"allowed_decisions": ["approve", "edit", "reject"]},
+        "ask_user": {"allowed_decisions": ["respond"]},
     },
     middleware=[
         ModelCallLimitMiddleware(run_limit=15),
@@ -199,9 +245,21 @@ hitl_agent = create_deep_agent(
 
 `````)
 
-== Step 7: Resume After Approval — Four Decision Types
+#code-block(`````python
+thread = {"configurable": {"thread_id": "hitl-demo"}}
+response = hitl_agent.invoke(
+    {"messages": [{"role": "user", "content": "Show the top 5 customers by total purchase amount."}]},
+    config={**thread, **lf_config},
+    version="v2",
+)
+print("Execution paused:", bool(response.interrupts))
+print(response.interrupts[0].value["action_requests"][0])
 
-Use `Command(resume={"decisions": [...]})` to continue a paused run. The v1 `HITLResponse` supports four decision types.
+`````)
+
+== Step 7: Resume After Approval
+
+Use `Command(resume={"decisions": [{"type": "approve"}]})` to continue a paused v2 run. Decision order must match the action request order.
 
 #table(
   columns: 2,
@@ -213,13 +271,12 @@ Use `Command(resume={"decisions": [...]})` to continue a paused run. The v1 `HIT
   text(weight: "bold")[Description],
   [`{"type": "approve"}`],
   [Approve the tool call and run it unchanged],
-  [`{"type": "edit", "edited_action": {"name": "...", "args": {...}}}`],
-  [Modify the tool call before running it (e.g. add a `LIMIT`, tighten a `WHERE` clause)],
+  [`{"type": "edit", "edited_action": {...}}`],
+  [Modify the tool call before running it],
   [`{"type": "reject", "message": "..."}`],
   [Reject the tool call and return feedback to the agent],
-  [`{"type": "respond", "message": "..."}`],
-  [Skip tool execution and feed the human's reply back as the tool result — the "ask user" pattern],
 )
+
 
 #code-block(`````python
 from langgraph.types import Command
@@ -229,8 +286,9 @@ response = hitl_agent.invoke(
     config={**thread, **lf_config},
     version="v2",
 )
-`````)
+print(response.value["messages"][-1].content)
 
+`````)
 
 == Summary
 
@@ -249,15 +307,14 @@ response = hitl_agent.invoke(
   [_Skills_],
   [Workflow guides for query writing and schema exploration],
   [_HITL_],
-  [`interrupt_on={"sql_db_query": {"allowed_decisions":[...]}}` → 4-decision (`approve` / `edit` / `reject` / `respond`)],
+  [SQL uses approve/edit/reject; ask_user uses respond; resume with v2 decisions],
 )
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 
 _References:_
 - `docs/deepagents/examples/03-text-to-sql-agent.md`
-- #link("https://python.langchain.com/docs/tutorials/sql_qa/")[LangChain SQL Agent Tutorial]
+- #link("https://docs.langchain.com/oss/python/langchain/sql-agent")[LangChain SQL Agent Tutorial]
 - `docs/deepagents/06-backends.md`
 
 _Next Step:_ → #link("./03_data_analysis_agent.ipynb")[03_data_analysis_agent.ipynb]: Build a data analysis agent.
-

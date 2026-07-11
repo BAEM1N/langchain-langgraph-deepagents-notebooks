@@ -17,11 +17,41 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 print("\u2713 모델 준비 완료")
 `````)
 #output-block(`````
 ✓ 모델 준비 완료
+`````)
+
+#code-block(`````python
+# Observability 설정 (선택) - LangSmith 또는 Langfuse
+# .env에 키를 설정하거나, 아래 주석을 해제하여 직접 입력하세요.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: LANGSMITH_TRACING=true 시 자동 활성화 (코드 수정 불필요)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON \u2014 project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: invoke/stream 호출 시 config={"callbacks": [langfuse_handler]} 전달
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON \u2014 {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+#output-block(`````
+Langfuse tracing ON — https://lf.ddok.ai
 `````)
 
 == 4.2 첫 번째 그래프
@@ -44,6 +74,32 @@ LangGraph는 에이전트 워크플로를 _그래프_로 모델링하며, 세 �
 
 아래 예제는 텍스트의 단어 수를 세는 간단한 1노드 그래프입니다.
 
+#code-block(`````python
+from langgraph.graph import StateGraph, START, END
+from typing import TypedDict
+
+class State(TypedDict):
+    text: str
+    word_count: int
+
+def count_words(state: State) -> dict:
+    return {"word_count": len(state["text"].split())}
+
+builder = StateGraph(State)
+builder.add_node("counter", count_words)
+builder.add_edge(START, "counter")
+builder.add_edge("counter", END)
+
+graph = builder.compile()
+result = graph.invoke({"text": "LangGraph는 강력한 프레임워크입니다"}, config=lf_config)
+print(f"텍스트: {result['text']}")
+print(f"단어 수: {result['word_count']}")
+`````)
+#output-block(`````
+텍스트: LangGraph는 강력한 프레임워크입니다
+단어 수: 3
+`````)
+
 == 4.3 2노드 그래프
 
 두 개의 노드를 순서대로 연결합니다.
@@ -51,6 +107,34 @@ LangGraph는 에이전트 워크플로를 _그래프_로 모델링하며, 세 �
 
 #code-block(`````python
 START → uppercase → counter → END
+`````)
+
+#code-block(`````python
+class State2(TypedDict):
+    text: str
+    word_count: int
+
+def to_upper(state: State2) -> dict:
+    return {"text": state["text"].upper()}
+
+def count(state: State2) -> dict:
+    return {"word_count": len(state["text"].split())}
+
+builder = StateGraph(State2)
+builder.add_node("uppercase", to_upper)
+builder.add_node("counter", count)
+builder.add_edge(START, "uppercase")
+builder.add_edge("uppercase", "counter")
+builder.add_edge("counter", END)
+
+graph = builder.compile()
+result = graph.invoke({"text": "안녕하세요 langgraph 세계"}, config=lf_config)
+print(f"변환된 텍스트: {result['text']}")
+print(f"단어 수: {result['word_count']}")
+`````)
+#output-block(`````
+변환된 텍스트: 안녕하세요 LANGGRAPH 세계
+단어 수: 3
 `````)
 
 == 4.4 LLM을 노드로 사용하기
@@ -71,6 +155,26 @@ class MessagesState(TypedDict):
 _노드의 구조:_
 
 노드는 현재 상태(`state`)를 받아 상태 업데이트를 돌려주는 일반 Python 함수(동기/비동기)입니다. LangGraph는 노드를 자동으로 `RunnableLambda` 객체로 변환하여 배치 처리, 비동기 지원, 네이티브 트레이싱 기능을 더합니다.
+
+#code-block(`````python
+from langgraph.graph import MessagesState
+from langchain.messages import HumanMessage
+
+def chatbot(state: MessagesState) -> dict:
+    return {"messages": [model.invoke(state["messages"], config=lf_config)]}
+
+builder = StateGraph(MessagesState)
+builder.add_node("chatbot", chatbot)
+builder.add_edge(START, "chatbot")
+builder.add_edge("chatbot", END)
+
+graph = builder.compile()
+result = graph.invoke({"messages": [HumanMessage(content="2+2는 얼마인가요?")]}, config=lf_config)
+print("응답:", result["messages"][-1].content)
+`````)
+#output-block(`````
+응답: 2 + 2는 4입니다.
+`````)
 
 #chapter-summary-header()
 

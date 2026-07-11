@@ -129,17 +129,27 @@ graph.invoke(
 
 ### Input Validation
 
-루프 안에서 interrupt를 반복 호출해, 유효한 값이 들어올 때까지 다시 묻는다.
+노드는 호출될 때마다 `interrupt()`를 한 번만 실행한다. 잘못된 답이면 재질문 문구를 상태에 저장하고, 조건부 엣지가 같은 노드로 되돌린다. 노드는 resume 때 처음부터 다시 실행되므로 `while True` 안에서 여러 번 interrupt하면 이전 반복까지 누적 재실행된다.
 
 ```python
-def get_age_node(state: State):
-    prompt = "What is your age?"
-    while True:
-        answer = interrupt(prompt)
-        if isinstance(answer, int) and answer > 0:
-            break
-        prompt = f"'{answer}' is not valid. Please enter a positive number."
-    return {"age": answer}
+class FormState(TypedDict):
+    age: int | None
+    pending_question: str | None
+
+def collect_age(state: FormState) -> dict:
+    question = state.get("pending_question") or "What is your age?"
+    answer = interrupt(question)
+    if isinstance(answer, int) and answer > 0:
+        return {"age": answer, "pending_question": None}
+    return {"pending_question": f"'{answer}' is not valid. Enter a positive integer."}
+
+def route_age(state: FormState) -> str:
+    return END if state.get("age") is not None else "collect_age"
+
+builder = StateGraph(FormState)
+builder.add_node("collect_age", collect_age)
+builder.add_edge(START, "collect_age")
+builder.add_conditional_edges("collect_age", route_age)
 ```
 
 ### Multiple Interrupts

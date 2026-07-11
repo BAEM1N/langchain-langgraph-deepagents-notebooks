@@ -13,7 +13,7 @@ Learn how to connect external tools and context to an agent through MCP (Model C
 This notebook covers:
 - Understanding the MCP concept and architecture (server / client / host)
 - Connecting to MCP servers with the `langchain-mcp-adapters` package
-- Integrating MCP tools with an agent through `create_agent(model=..., tools=await client.get_tools())`
+- Integrating MCP tools with an agent through `ChatOpenAI.bind_tools(mcp_tools)`
 - Understanding the difference between stdio and SSE transports
 - Connecting to multiple MCP servers at once
 
@@ -33,6 +33,33 @@ model = ChatOpenAI(
 )
 
 print("Environment ready.")
+`````)
+
+#code-block(`````python
+# Optional observability setup: LangSmith or Langfuse
+# Set the keys in .env, or uncomment the lines below to enter them manually.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: automatically enabled when LANGSMITH_TRACING=true
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: pass config={"callbacks": [langfuse_handler]} to invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
 `````)
 
 == 11.2 MCP Concepts
@@ -86,9 +113,10 @@ print("MCP adapter installation:")
 print("  uv add langchain-mcp-adapters mcp")
 print()
 print("Key components:")
-print("  - MultiServerMCPClient: Client that manages multiple MCP servers")
-print("  - load_mcp_tools(session): MCP Converts an MCP session into LangChain tools")
-print("  - FastMCP: Utility for quickly building MCP servers")
+print("  - MultiServerMCPClient: client that manages multiple MCP servers")
+print("  - load_mcp_tools(session): convert an MCP session into LangChain tools")
+print("  - FastMCP: utility for quickly building MCP servers")
+
 `````)
 
 == 11.4 Stdio Transport
@@ -99,10 +127,19 @@ _Stdio (Standard I/O)_ transport communicates with an MCP server through a local
 #code-block(`````python
 from pathlib import Path; import json, tempfile, sys
 server_path = Path(tempfile.gettempdir()) / "lc_mcp_math_server.py"
-server_path.write_text('from mcp.server.fastmcp import FastMCP\nmcp = FastMCP("math")\n@mcp.tool()\ndef add(a: int, b: int) -> int:\n    return a + b\nif __name__ == "__main__":\n    mcp.run(transport="stdio")')
+server_path.write_text("""from mcp.server.fastmcp import FastMCP
+mcp = FastMCP("math")
+@mcp.tool()
+def add(a: int, b: int) -> int:
+    return a + b
+if __name__ == "__main__":
+    mcp.run(transport="stdio")
+""")
 stdio_config = {"math": {"transport": "stdio", "command": sys.executable, "args": [str(server_path)]}}
-print("Stdio Transport configuration:"); print(json.dumps(stdio_config, indent=2))
+print("Stdio transport configuration:")
+print(json.dumps(stdio_config, indent=2))
 print(f"\nServer file: {server_path}")
+
 `````)
 
 == 11.5 SSE / HTTP Transport
@@ -115,56 +152,34 @@ _HTTP (streamable-http)_ transport uses web-based communication and is a good fi
 http_config = {
     "weather_server": {"transport": "streamable_http", "url": "https://weather-mcp.example.com/mcp", "headers": {"Authorization": "Bearer YOUR_API_KEY"}}
 }
-import json; print("HTTP Transport configuration:"); print(json.dumps(http_config, indent=2))
+import json
+print("HTTP transport configuration:")
+print(json.dumps(http_config, indent=2))
 print("\nUsage pattern: client = MultiServerMCPClient(http_config) -> await client.get_tools()")
+
 `````)
 
 == 11.6 Loading MCP Tools and Integrating Them with an Agent
 
-This is the common pattern for binding tools fetched from an MCP server into a LangChain agent. The core entry point is `client.get_tools()`. It discovers the tools exposed by the MCP server and converts each tool's name, description, and parameter schema into LangChain `Tool` objects. The converted tools can be passed directly to `create_agent(tools=mcp_tools)`.
+This is the common pattern for binding tools fetched from an MCP server into a LangChain agent.
 
-=== Key function signatures
-
-#table(
-  columns: 2,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Function],
-  text(weight: "bold")[Description],
-  [`client.get_tools()`],
-  [Return LangChain `Tool` objects from every registered server],
-  [`client.get_resources(server_name)`],
-  [Return LangChain `Blob` resources from a specific server],
-  [`client.get_prompt(server_name, prompt_name, arguments={...})`],
-  [Fetch a prompt template registered on the server],
-  [`load_mcp_tools(session)`],
-  [Convert tools from an open session into LangChain `Tool` objects (stateful pattern)],
-  [`load_mcp_resources(session, uris=[...])`],
-  [Load specific URIs as resources from an open session],
-)
 
 #code-block(`````python
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain.agents import create_agent
+from langchain_mcp_adapters.client import MultiServerMCPClient
 
-async with MultiServerMCPClient(mcp_config) as client:
-    mcp_tools = await client.get_tools()
-    agent = create_agent(model="gpt-5.4", tools=mcp_tools)
+async def run_math_agent():
+    client = MultiServerMCPClient(stdio_config)
+    agent = create_agent(model=model, tools=await client.get_tools(), system_prompt="You can use MCP math tools.")
+    return await agent.ainvoke(
+        {"messages": [{"role": "user", "content": "Use the add tool to add 2 and 3."}]},
+        config=lf_config,
+    )
+
+result = await run_math_agent()
+print(result["messages"][-1].content)
+
 `````)
-
-=== Stateful sessions
-
-The default `client.get_tools()` flow is _stateless_ — a new session opens and closes for every tool call. To share a session across multiple calls, open one explicitly.
-
-#code-block(`````python
-async with client.session("math_server") as session:
-    tools = await load_mcp_tools(session)
-    result1 = await tools[0].ainvoke({"a": 1, "b": 2})
-    result2 = await tools[1].ainvoke({"a": 3, "b": 4})
-`````)
-
 
 == 11.7 Connecting to Multiple MCP Servers
 
@@ -174,100 +189,19 @@ As the name suggests, `MultiServerMCPClient` can manage several MCP servers at t
 #code-block(`````python
 # Example multi-MCP-server configuration
 import json, sys
-multi_server_config = {"math_server": {"transport": "stdio", "command": sys.executable, "args": [str(server_path)]}, "weather_server": {"transport": "streamable_http", "url": "https://weather-mcp.example.com/mcp"}, "database_server": {"transport": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-postgres"], "env": {"DATABASE_URL": "postgresql://..."}}}
-print("Multi-MCP server configuration:"); print(json.dumps(multi_server_config, indent=2, ensure_ascii=False))
+multi_server_config = {
+    "math_server": {"transport": "stdio", "command": sys.executable, "args": [str(server_path)]},
+    "weather_server": {"transport": "streamable_http", "url": "https://weather-mcp.example.com/mcp"},
+    "database_server": {"transport": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-postgres"], "env": {"DATABASE_URL": "postgresql://..."}},
+}
+print("Multi-MCP server configuration:")
+print(json.dumps(multi_server_config, indent=2, ensure_ascii=False))
 print("\nUsage pattern: client = MultiServerMCPClient(multi_server_config) -> await client.get_tools()")
-print("Note: it is stateless by default — each tool call creates and then cleans up a new session")
+print("Note: the client is stateless by default — each tool call creates and cleans up a new session")
+
 `````)
 
-== 11.8 MCP Authentication
-
-Remote MCP servers use one of two authentication tracks.
-
-=== Track A — Static headers
-
-The simplest approach: pass the token through a header. Good for CI/CD with pre-issued keys.
-
-#code-block(`````python
-http_config = {
-    "weather_server": {
-        "transport": "streamable_http",
-        "url": "https://weather-mcp.example.com/mcp",
-        "headers": {"Authorization": "Bearer YOUR_API_KEY"},
-    }
-}
-`````)
-
-=== Track B — `httpx.Auth` interface
-
-For dynamic auth such as token refresh or request signing, pass an `httpx.Auth` implementation.
-
-#code-block(`````python
-import httpx
-
-class BearerAuth(httpx.Auth):
-    def __init__(self, token: str):
-        self.token = token
-
-    def auth_flow(self, request):
-        request.headers["Authorization"] = f"Bearer {self.token}"
-        yield request
-
-http_config = {
-    "weather_server": {
-        "transport": "streamable_http",
-        "url": "https://weather-mcp.example.com/mcp",
-        "auth": BearerAuth(token="..."),
-    }
-}
-`````)
-
-=== Track C — MCP SDK OAuth2
-
-The MCP Python SDK ships an `mcp.client.auth.oauth2` module for the standard OAuth2 flow (authorization code, refresh tokens).
-
-#code-block(`````python
-from mcp.client.auth.oauth2 import OAuth2ClientCredentials
-
-auth = OAuth2ClientCredentials(
-    token_url="https://auth.example.com/token",
-    client_id="my-client",
-    client_secret="...",
-    scope="mcp.tools",
-)
-
-http_config = {
-    "secure_server": {
-        "transport": "streamable_http",
-        "url": "https://secure-mcp.example.com/mcp",
-        "auth": auth,
-    }
-}
-`````)
-
-== 11.9 Elicitation — Server-requested user input
-
-Elicitation lets an MCP server request _additional input_ from the client (host) during a tool call. The host shows the user a form and returns the response as an `ElicitResult`.
-
-#code-block(`````python
-from mcp import ElicitResult, Callbacks
-
-async def on_elicitation(request):
-    user_input = await show_form(request.schema)
-    return ElicitResult(
-        action="accept",   # "accept" | "decline" | "cancel"
-        content={"city": user_input["city"], "unit": "celsius"},
-    )
-
-callbacks = Callbacks(on_elicitation=on_elicitation)
-
-async with MultiServerMCPClient(config, callbacks=callbacks) as client:
-    tools = await client.get_tools()
-`````)
-
-#tip-box[Use `"accept"` when the user provides values, `"decline"` when the user refuses, and `"cancel"` to signal that the entire tool call should be aborted.]
-
-== 11.10 Tool Interceptors
+== 11.8 Tool Interceptors
 
 A _Tool Interceptor_ is middleware that intercepts MCP tool calls. It can access runtime context, modify requests and responses, and implement retry logic.
 
@@ -293,31 +227,72 @@ A _Tool Interceptor_ is middleware that intercepts MCP tool calls. It can access
   [Trace tool calls],
 )
 
-=== Returning a `Command` from an interceptor
-
-An interceptor can do more than rewrite a request — it can return a LangGraph `Command` to update state and choose the next node.
 
 #code-block(`````python
-from langgraph.types import Command
+from langchain.agents import create_agent
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.interceptors import ToolCallInterceptor
 
-async def logging_interceptor(request, context):
-    """Log the tool call while appending to a state trace."""
-    print(f"[interceptor] tool={request.tool_name}")
-    return Command(
-        update={"tool_calls_log": [request.tool_name]},
-        goto="tools",
+class LoggingInterceptor(ToolCallInterceptor):
+    async def __call__(self, request, handler):
+        print(f"Tool call: {request.name} @ {request.server_name}")
+        return await handler(request)
+
+async def run_with_interceptor():
+    client = MultiServerMCPClient(stdio_config, tool_interceptors=[LoggingInterceptor()])
+    agent = create_agent(model=model, tools=await client.get_tools(), system_prompt="Use the math tools.")
+    return await agent.ainvoke(
+        {"messages": [{"role": "user", "content": "Use the add tool to add 7 and 8."}]},
+        config=lf_config,
     )
+
+result = await run_with_interceptor()
+print(result["messages"][-1].content)
+
 `````)
 
-This pattern is useful when an interceptor enforces a guardrail and routes risky calls to a `human_review` node instead of executing them.
-
-
-== 11.11 Writing a Custom MCP Server
+== 11.9 Writing a Custom MCP Server
 
 With the _FastMCP_ library, you can build an MCP server quickly using decorators.
 
 
-== 11.12 Summary
+#code-block(`````python
+from pathlib import Path
+import tempfile
+import sys
+from langchain.agents import create_agent
+from langchain_mcp_adapters.client import MultiServerMCPClient
+
+fastmcp_path = Path(tempfile.gettempdir()) / "lc_fastmcp_server.py"
+fastmcp_path.write_text("""from mcp.server.fastmcp import FastMCP
+mcp = FastMCP("my-tools")
+@mcp.tool()
+def add(a: int, b: int) -> int:
+    return a + b
+@mcp.tool()
+def multiply(a: int, b: int) -> int:
+    return a * b
+@mcp.resource("config://app")
+def get_config() -> str:
+    return '{"version": "1.0", "debug": false}'
+if __name__ == "__main__":
+    mcp.run(transport="stdio")
+""")
+
+async def run_custom_server():
+    client = MultiServerMCPClient({"my_tools": {"transport": "stdio", "command": sys.executable, "args": [str(fastmcp_path)]}})
+    agent = create_agent(model=model, tools=await client.get_tools(), system_prompt="Use the multiplication tool.")
+    return await agent.ainvoke(
+        {"messages": [{"role": "user", "content": "Use the multiply tool to multiply 6 and 7."}]},
+        config=lf_config,
+    )
+
+result = await run_custom_server()
+print(result["messages"][-1].content)
+
+`````)
+
+== 11.10 Summary
 
 This notebook covered:
 
@@ -351,5 +326,4 @@ This notebook covered:
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 _References:_
-- #link("../docs/langchain/16-mcp.md")[MCP (Model Context Protocol)]
-
+- #link("../../docs/langchain/16-mcp.md")[MCP (Model Context Protocol)]

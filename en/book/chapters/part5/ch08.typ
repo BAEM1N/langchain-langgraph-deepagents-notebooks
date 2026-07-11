@@ -66,6 +66,32 @@ load_dotenv()
 model = ChatOpenAI(model="gpt-5.4")
 `````)
 
+#code-block(`````python
+# Observability settings (optional) - LangSmith or Langfuse
+# Set the key in .env, or uncomment it below and enter it yourself.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: Automatically enabled when LANGSMITH_TRACING=true (no code modification required)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: Pass config={"callbacks": [langfuse_handler]} when calling invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
 == 8.2 Voice Agent Architecture Overview
 
 The voice agent consists of a 3-layer pipeline:
@@ -85,7 +111,7 @@ Audio In -> [STT: AssemblyAI] -> Text -> [Agent: LangChain] -> Text -> [TTS: Car
   text(weight: "bold")[Role],
   [_STT_],
   [AssemblyAI],
-  [User Converts speech into text],
+  [Converts user speech into text],
   [_Agent_],
   [LangChain],
   [Processes the text query and generates a response],
@@ -94,10 +120,10 @@ Audio In -> [STT: AssemblyAI] -> Text -> [Agent: LangChain] -> Text -> [TTS: Car
   [Converts the agent's text response into speech],
 )
 
-Each layer is connected through _streaming_, so partial results can be forwarded immediately without waiting for the previous step to finish completely:
+Each layer is connected through _streaming_, so partial results can be passed forward immediately without waiting for the full output of the previous stage:
 
-+ _STT_ — streams partial transcriptions (emits a final transcript when the utterance is complete)
-+ _Agent_ — streams responses token by token (`astream()`)
++ _STT_ — streams partial transcriptions and emits a final transcript when the utterance is complete
++ _Agent_ — streams responses token by token with `astream()`
 + _TTS_ — Start speech synthesis before the entire response is complete (WebSocket-based)
 
 === Why Streaming Matters
@@ -202,7 +228,7 @@ transcriber.connect()
 
 === Capturing Microphone Audio
 
-PCM 16-bit, 16kHz Capture mono audio and send it to the transcriber in real time:
+Capture 16-bit PCM, 16kHz mono audio and send it to the transcriber in real time:
 
 #code-block(`````python
 import pyaudio
@@ -290,31 +316,6 @@ async def stream_agent_response(user_text: str):
                 if hasattr(msg, "content") and msg.content:
                     yield msg.content
 `````)
-
-=== Multimodal content blocks and `output_version="v1"`
-
-A voice agent's input is not always pure text — a user may attach a photo, or a tool may return a chart image. LangChain v1 messages accept a _content blocks_ array, so a single message can mix text, image, and audio. Creating the model with `output_version="v1"` also normalizes responses into the `AIMessage.content_blocks` schema, which is safe to serialize between STT, Agent, and TTS processes.
-
-#code-block(`````python
-from langchain.chat_models import init_chat_model
-
-llm_v1 = init_chat_model("gpt-5.4", output_version="v1")
-
-response = llm_v1.invoke([
-    {"role": "user", "content": [
-        {"type": "text", "text": "Explain any anomalies in this chart by voice."},
-        {"type": "image", "source_type": "base64",
-         "mime_type": "image/png", "data": "..."},
-    ]},
-])
-
-# v1 schema — content_blocks survives JSON round-trips between services
-for block in response.content_blocks:
-    if block["type"] == "text":
-        tts_input_queue.put_nowait(block["text"])
-`````)
-
-#tip-box[`output_version="v1"` normalizes responses into the `content_blocks` schema. When messages cross process boundaries via WebSocket (a TTS server, for example), this prevents JSON (de)serialization from corrupting the payload — practically mandatory for boundary-heavy systems like voice pipelines.]
 
 == 8.6 TTS Steps -- Cartesia Streaming Speech Synthesis
 
@@ -531,7 +532,7 @@ def weather_tool(city: str) -> str:
 
 def reminder_tool(time: str, message: str) -> str:
     """Set reminders at specified times."""
-    return f"{time}Reminder scheduled for {message}"
+    return f"Reminder scheduled for {time}: {message}"
 `````)
 
 #code-block(`````python
@@ -544,6 +545,16 @@ voice_agent = create_agent(
         "Please keep your response concise and conversational in 1-2 sentences."
     ),
 )
+`````)
+
+#code-block(`````python
+# Agent standalone test (check operation with text input)
+response = voice_agent.invoke(
+    {"messages": [{"role": "user",
+      "content": "How is the weather in Seoul?"}]},
+    config=lf_config,
+)
+print(response["messages"][-1].content)
 `````)
 
 == Summary

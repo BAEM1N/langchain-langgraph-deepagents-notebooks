@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "pages": [
+    {
+      "id": "langgraph-interrupt-validation",
+      "url": "https://docs.langchain.com/oss/python/langgraph/interrupts",
+      "required_anchor_groups": [
+        ["interrupt() exactly once", "add_conditional_edges"],
+        ["Avoid while True", "exponential re-execution"]
+      ]
+    },
+    {
+      "id": "langchain-hitl-decisions",
+      "url": "https://docs.langchain.com/oss/python/langchain/human-in-the-loop",
+      "required_anchor_groups": [
+        ["reject", "respond", "ask_user"],
+        ["synthetic tool result", "side-effecting tools"]
+      ]
+    },
+    {
+      "id": "deepagents-backends",
+      "url": "https://docs.langchain.com/oss/python/deepagents/backends",
+      "required_anchor_groups": [
+        ["delete", "DeleteResult", "automatically hidden"],
+        ["LocalShellBackend", "no sandboxing", "shell=True"]
+      ]
+    },
+    {
+      "id": "langchain-agent-factory",
+      "url": "https://docs.langchain.com/oss/python/langchain/agents",
+      "required_anchor_groups": [
+        ["create_agent", "checkpointer"]
+      ]
+    }
+  ]
+}

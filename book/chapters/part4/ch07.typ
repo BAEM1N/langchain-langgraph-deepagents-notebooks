@@ -22,6 +22,33 @@ print("환경 설정 완료")
 `````)
 
 #code-block(`````python
+# Observability 설정 (선택) - LangSmith 또는 Langfuse
+# .env에 키를 설정하거나, 아래 주석을 해제하여 직접 입력하세요.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: LANGSMITH_TRACING=true 시 자동 활성화 (코드 수정 불필요)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    print(f"LangSmith tracing ON — project: {project}")
+
+# Langfuse: invoke/stream 호출 시 config={"callbacks": [langfuse_handler]} 전달
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+#output-block(`````
+Langfuse tracing ON — https://lf.ddok.ai
+`````)
+
+#code-block(`````python
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(model="gpt-5.4")
@@ -29,7 +56,7 @@ model = ChatOpenAI(model="gpt-5.4")
 print(f"모델 설정 완료: {model.model_name}")
 `````)
 #output-block(`````
-모델 설정 완료: gpt-4.1
+모델 설정 완료: gpt-5.4
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -56,10 +83,12 @@ print(f"모델 설정 완료: {model.model_name}")
   [`edit`],
   [`edited_action.name/args`로 인자를 수정한 뒤 실행],
   [`reject`],
-  [호출 자체를 건너뜀],
+  [부작용 도구 실행을 거부하고 피드백을 반환],
   [`respond`],
-  [도구 실행 없이 `message`를 도구 결과로 반환],
+  [`ask_user`처럼 사람이 도구 역할을 할 때 성공 결과를 반환],
 )
+
+부작용을 거부할 때는 `reject`를 사용합니다. `respond`는 성공한 ToolMessage로 처리되므로 거부 용도로 쓰지 않습니다.
 
 === 필수 요구사항
 - _Checkpointer_: 중단/재개 사이의 에이전트 상태를 유지하기 위해 반드시 필요 (`MemorySaver` 등)
@@ -70,7 +99,8 @@ print(f"모델 설정 완료: {model.model_name}")
 
 #code-block(`````python
 interrupt_on = {
-    "tool_name": True,                                       # 4가지 결정 모두 허용
+    "write_file": {"allowed_decisions": ["approve", "edit", "reject"]},
+    "ask_user": {"allowed_decisions": ["respond"]},
     "tool_name": False,                                      # 인터럽트 없음
     "tool_name": {"allowed_decisions": ["approve", "reject"]},  # 부분 집합
 }
@@ -79,25 +109,82 @@ interrupt_on = {
 
 #code-block(`````python
 from deepagents import create_deep_agent
+from langchain.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
 
-# interrupt_on으로 승인이 필요한 도구 지정
+@tool
+def ask_user(question: str) -> str:
+    """계속 진행하는 데 필요한 정보를 사용자에게 묻습니다."""
+    return "응답 없음"
+
 hitl_agent = create_deep_agent(
     model=model,
+    tools=[ask_user],
     system_prompt="당신은 파일 관리 어시스턴트입니다. 한국어로 응답하세요.",
     checkpointer=MemorySaver(),  # 필수!
     interrupt_on={
-        "write_file": True,   # 파일 쓰기 전 승인 필요
-        "edit_file": True,    # 파일 편집 전 승인 필요
+        "write_file": {"allowed_decisions": ["approve", "edit", "reject"]},
+        "edit_file": {"allowed_decisions": ["approve", "edit", "reject"]},
+        "ask_user": {"allowed_decisions": ["respond"]},
     },
 )
 
 print("Human-in-the-Loop 에이전트 생성 완료")
 print("write_file, edit_file 호출 시 승인을 요구합니다.")
 `````)
-#output-block(`````
-Human-in-the-Loop 에이전트 생성 완료
-write_file, edit_file 호출 시 승인을 요구합니다.
+
+#code-block(`````python
+# 에이전트 실행 — write_file 호출 시 중단됨
+config = {"configurable": {"thread_id": "hitl-demo"}}
+
+result = hitl_agent.invoke(
+    {"messages": [{"role": "user", "content": "config.yaml 파일을 만들어서 'debug: true'라고 적어 주세요."}]},
+    config={**config, **lf_config},
+    version="v2",
+)
+
+# v2 GraphOutput의 interrupts와 value를 사용합니다.
+interrupts = result.interrupts
+if interrupts:
+    print(f"에이전트가 중단되었습니다! 대기 중인 인터럽트: {len(interrupts)}개")
+    for itr in interrupts:
+        value = itr.value if hasattr(itr, "value") else itr
+        action_requests = value.get("action_requests", []) if isinstance(value, dict) else []
+        for req in action_requests:
+            print(f"  - 도구: {req.get('name')}")
+            print(f"    인자: {req.get('args')}")
+else:
+    print("중단 없이 실행 완료:")
+    print(result.value["messages"][-1].content)
+
+`````)
+
+#code-block(`````python
+from langgraph.types import Command
+
+# 결정 타입별 resume 포맷 (docs/deepagents/08-human-in-the-loop.md)
+approve_decision = {"type": "approve"}
+edit_decision = {
+    "type": "edit",
+    "edited_action": {
+        "name": "write_file",
+        "args": {"file_path": "config.yaml", "content": "debug: false"},
+    },
+}
+reject_decision = {"type": "reject"}
+respond_decision = {"type": "respond", "message": "파란색입니다."}  # ask_user 전용
+
+# 승인하여 재개 — 인터럽트 개수와 동일한 순서의 decisions 배열 필요
+if interrupts:
+    resumed = hitl_agent.invoke(
+        Command(resume={"decisions": [approve_decision]}),
+        config={**config, **lf_config},  # 같은 thread_id 사용
+        version="v2",
+    )
+
+    print("승인 후 재개 결과:")
+    print(resumed.value["messages"][-1].content)
+
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -202,6 +289,124 @@ print("스트리밍 데모 에이전트 생성 완료")
 `````)
 #output-block(`````
 스트리밍 데모 에이전트 생성 완료
+`````)
+
+#code-block(`````python
+# v2 통합 포맷으로 서브에이전트 스트리밍 (subgraphs=True + version="v2")
+print("=== 서브에이전트 이벤트 스트리밍 (v2) ===")
+print()
+
+for chunk in stream_agent.stream(
+    {"messages": [{"role": "user", "content": "LangGraph의 최신 기능을 조사해 주세요."}]},
+    stream_mode="updates",
+    subgraphs=True,
+    version="v2",
+    config=lf_config,
+):
+    if chunk["type"] != "updates":
+        continue
+    is_subagent = any(seg.startswith("tools:") for seg in chunk["ns"])
+    source = f"[서브에이전트 {chunk['ns']}]" if is_subagent else "[메인]"
+
+    for node_name, node_data in chunk["data"].items():
+        if not node_data:
+            continue
+        msgs = node_data.get("messages", [])
+        if hasattr(msgs, "value"):
+            msgs = msgs.value
+        if msgs:
+            last_msg = msgs[-1]
+            if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+                for tc in last_msg.tool_calls:
+                    print(f"{source} 도구 호출: {tc['name']}")
+            elif hasattr(last_msg, "content") and last_msg.content:
+                content = last_msg.content if isinstance(last_msg.content, str) else str(last_msg.content)
+                if content.strip() and not hasattr(last_msg, "tool_call_id"):
+                    preview = content[:100].replace("\n", " ")
+                    print(f"{source} 메시지: {preview}...")
+
+`````)
+#output-block(`````
+=== 서브에이전트 이벤트 스트리밍 ===
+
+[메인] 💬 LangGraph의 최신 기능을 조사해 주세요....
+
+[메인] 🔧 도구 호출: task
+[서브에이전트: ('tools:8a8fe697-521c-93e0-af95-93070aeb4e8a',)] 💬 LangGraph의 최신 기능에 대해 2024년 6월 기준으로 인터넷을 통해 조사하고, 구체적인 업데이트나 발표, 새로 추가된 기능들 및 그 활용 예시가 있으면 상세히 요약해 주세...
+
+[서브에이전트: ('tools:8a8fe697-521c-93e0-af95-93070aeb4e8a',)] 🔧 도구 호출: internet_search
+
+[서브에이전트: ('tools:8a8fe697-521c-93e0-af95-93070aeb4e8a',)] 🔧 도구 호출: internet_search
+[서브에이전트: ('tools:8a8fe697-521c-93e0-af95-93070aeb4e8a',)] 🔧 도구 호출: internet_search
+
+[서브에이전트: ('tools:8a8fe697-521c-93e0-af95-93070aeb4e8a',)] 💬 2024년 6월 기준 LangGraph의 최신 기능과 동향을 공식 GitHub, 변경로그(Changelog), 커뮤니티 발표자료 등을 바탕으로 다음과 같이 요약합니다.  ---  ...
+
+[메인] 💬 2024년 6월 기준 LangGraph의 최신 기능과 동향은 다음과 같습니다.  ---  ### 1. 고도화된 상태 관리 및 재시도 기능 강화 - 에이전트의 상태를 상세하게 추적하...
+`````)
+
+#code-block(`````python
+# 다중 stream_mode 동시 구독 — v2 통합 포맷
+print("=== 다중 stream_mode (updates + messages) ===")
+print()
+
+for chunk in stream_agent.stream(
+    {"messages": [{"role": "user", "content": "Python 3.13의 새로운 기능을 한 줄로 설명해 주세요."}]},
+    stream_mode=["updates", "messages"],
+    subgraphs=True,
+    version="v2",
+    config=lf_config,
+):
+    t = chunk["type"]
+    if t == "updates":
+        for node_name in chunk["data"]:
+            print(f"  [updates] 노드 '{node_name}' 완료")
+    elif t == "messages":
+        token, metadata = chunk["data"]
+        # 요약(summarization) 토큰은 UI에서 분리 처리
+        if metadata.get("lc_source") == "summarization":
+            continue
+        if hasattr(token, "tool_call_chunks") and token.tool_call_chunks:
+            for tc in token.tool_call_chunks:
+                if tc.get("name"):
+                    print(f"  [messages] tool_call: {tc['name']}")
+        elif hasattr(token, "content") and token.content:
+            print(token.content, end="", flush=True)
+
+print()
+
+`````)
+#output-block(`````
+=== 복수 스트림 모드 ===
+
+  [updates] 노드 'PatchToolCallsMiddleware.before_agent' 완료
+
+Python
+
+3
+.
+13
+에서는
+ 일부
+ 오래
+된
+ 문
+법
+과
+ 표
+준
+ 라이
+브
+러
+리
+ 기능
+이
+ 제거
+되고
+,
+ 성
+능
+ 개선
+... (truncated)
 `````)
 
 === 커스텀 진행률 이벤트 (`get_stream_writer` + `stream_mode="custom"`)
@@ -443,7 +648,7 @@ print(interpreter_example)
 
 공식 Programmatic Subagents 패턴은 QuickJS interpreter 안의 top-level `task(...)` 함수를 사용합니다. 이 저장소의 기본 venv는 `deepagents==0.6.10`이지만 `langchain_quickjs` extra가 설치되어 있지 않으므로, 기본 실행 경로에서는 _기능 감지 → 일반 `SubAgent` fan-out/fan-in fallback_ 순서로 설명합니다.
 
-이렇게 두면 학습자는 공식 패턴의 위치를 이해하면서도, 기본 gpt-4.1 실행 harness는 추가 QuickJS 의존성 없이 통과합니다.
+이렇게 두면 학습자는 공식 패턴의 위치를 이해하면서도, 기본 gpt-5.4 실행 harness는 추가 QuickJS 의존성 없이 통과합니다.
 
 #code-block(`````python
 from importlib.metadata import PackageNotFoundError, version

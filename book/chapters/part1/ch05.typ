@@ -17,11 +17,41 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 from langchain_openai import ChatOpenAI
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="gpt-5.4")
 print("\u2713 모델 준비 완료")
 `````)
 #output-block(`````
 ✓ 모델 준비 완료
+`````)
+
+#code-block(`````python
+# Observability 설정 (선택) - LangSmith 또는 Langfuse
+# .env에 키를 설정하거나, 아래 주석을 해제하여 직접 입력하세요.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: LANGSMITH_TRACING=true 시 자동 활성화 (코드 수정 불필요)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON \u2014 project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: invoke/stream 호출 시 config={"callbacks": [langfuse_handler]} 전달
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON \u2014 {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+#output-block(`````
+Langfuse tracing ON — https://lf.ddok.ai
 `````)
 
 == 5.2 에이전트 생성
@@ -69,6 +99,32 @@ print(f"\u2713 에이전트 생성 완료 (타입: {type(agent).__name__})")
 ✓ 에이전트 생성 완료 (타입: CompiledStateGraph)
 `````)
 
+#code-block(`````python
+result = agent.invoke(
+    {
+        "messages": [
+            {
+                "role": "user",
+                "content": "안녕하세요! 어떤 도구를 사용할 수 있나요? 목록만 간단히 알려주세요."
+            }
+        ]
+    },
+    config=lf_config,
+)
+
+print(result["messages"][-1].content)
+`````)
+#output-block(`````
+사용 가능한 도구 목록입니다:
+
+1. 파일시스템 도구: ls, read_file, write_file, edit_file, glob, grep
+2. 할 일 관리: write_todos
+3. 태스크(서브에이전트) 실행: task
+4. 병렬 도구 실행: multi_tool_use.parallel
+
+필요한 도구의 기능 등, 더 자세한 설명이 필요하시면 말씀해 주세요!
+`````)
+
 == 5.3 커스텀 도구 추가
 
 Python 함수에 _docstring_과 _타입 힌트_를 작성하면 그대로 도구가 됩니다.
@@ -81,6 +137,27 @@ _커스텀 도구의 동작 원리:_
 - _타입 힌트_ → 파라미터 스키마 (에이전트가 올바른 인자를 넘기는 데 사용)
 
 `create_deep_agent()`의 `tools` 파라미터에 함수 리스트를 전달하면, 빌트인 도구(파일 읽기/쓰기, todo 등)와 함께 에이전트 도구 목록에 추가됩니다. `system_prompt` 파라미터로 에이전트의 행동 방식을 지정할 수도 있습니다.
+
+#code-block(`````python
+def greet(name: str) -> str:
+    """이름으로 인사합니다."""
+    return f"안녕하세요, {name}님! Deep Agents에 오신 것을 환영합니다."
+
+custom_agent = create_deep_agent(
+    model=model,
+    tools=[greet],
+    system_prompt="당신은 친절한 어시스턴트입니다. 누군가 자기소개를 하면 greet 도구를 사용하세요.",
+)
+
+result = custom_agent.invoke(
+    {"messages": [{"role": "user", "content": "제 이름은 앨리스입니다."}]},
+    config=lf_config,
+)
+print(result["messages"][-1].content)
+`````)
+#output-block(`````
+안녕하세요, 앨리스님! Deep Agents에 오신 것을 환영합니다. 무엇을 도와드릴까요?
+`````)
 
 #chapter-summary-header()
 

@@ -44,6 +44,24 @@ assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY를 .env에 설정하세
 `````)
 
 #code-block(`````python
+# Observability 설정 (선택)
+import os
+
+# LangSmith — LANGSMITH_* 가 표준. LANGCHAIN_* 는 하위 호환 shim
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    print(f"LangSmith tracing ON — project: {os.environ['LANGSMITH_PROJECT']}")
+
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
+#code-block(`````python
 from langchain_openai import ChatOpenAI
 
 model = ChatOpenAI(model="gpt-5.4")
@@ -82,13 +100,21 @@ Deep Agents는 다양한 백엔드를 지원합니다. 데이터 분석에는 �
   [프로덕션],
 )
 
-#tip-box[⚠️ `LocalShellBackend`는 호스트 시스템에서 명령을 실행합니다. 반드시 `virtual_mode=True`를 사용하세요.]
+#tip-box[⚠️ `LocalShellBackend`는 호스트 셸을 격리하지 않습니다. `virtual_mode=True`는 파일 도구 경로만 제한합니다. 아래 설정은 개발용이며 운영에서는 샌드박스 백엔드를 사용합니다.]
 
 
 #code-block(`````python
 from deepagents.backends import LocalShellBackend
+from pathlib import Path
+import sys
 
-backend = LocalShellBackend(root_dir=".", virtual_mode=True)
+work_dir = Path(".agent-work").resolve()
+work_dir.mkdir(exist_ok=True)
+backend = LocalShellBackend(
+    root_dir=work_dir, virtual_mode=True,
+    env={"PATH": f"{Path(sys.executable).parent}:/usr/bin:/bin"},
+    inherit_env=False,
+)
 `````)
 
 == 2단계: 분석용 CSV 파일 생성
@@ -195,9 +221,14 @@ agent = create_deep_agent(
     model=model,
     tools=[get_csv_path, run_pandas],
     system_prompt=DATA_ANALYSIS_PROMPT,
-    backend=LocalShellBackend(root_dir=tmp_dir, virtual_mode=True),
+    backend=LocalShellBackend(
+        root_dir=tmp_dir, virtual_mode=True,
+        env={"PATH": f"{Path(sys.executable).parent}:/usr/bin:/bin"},
+        inherit_env=False,
+    ),
     skills=["/skills/"],
     checkpointer=InMemorySaver(),
+    interrupt_on={"execute": True},
     middleware=[
         SummarizationMiddleware(model=model, trigger=("messages", 10)),
         ModelCallLimitMiddleware(run_limit=20),
@@ -227,10 +258,64 @@ Prompt 'deep-research-agent-label:production' not found during refresh, evicting
 3. 결과 해석 및 답변 생성
 `````)
 
+#code-block(`````python
+thread = {"configurable": {"thread_id": "analysis-1"}}
+query = "get_csv_path 도구로 CSV 파일 경로를 확인하고, run_pandas로 pandas 코드를 실행하여 지역별·제품별 매출 합계를 구해주세요."
+
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": query}]},
+    config={**thread, **lf_config},
+)
+print(response["messages"][-1].content)
+`````)
+#output-block(`````
+아래는 지역별·제품별 매출 합계입니다.
+
+| 지역   | Widget A | Widget B | Widget C |
+|--------|-----------|-----------|-----------|
+| 대구   | 112,000   | 0         | 62,000    |
+| 부산   | 98,000    | 89,000    | 0         |
+| 서울   | 325,000   | 134,000   | 71,000    |
+`````)
+
 == 6단계: 멀티턴 후속 질문
 
 같은 `thread_id`를 쓰면 이전 대화의 맥락을 유지한 채 후속 질문을 할 수 있습니다. 에이전트는 이전 분석 결과를 기억합니다.
 
+
+#code-block(`````python
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "run_pandas로 가장 매출이 높은 지역과 제품 조합을 알려주세요."}]},
+    config={**thread, **lf_config},
+)
+print(response["messages"][-1].content)
+`````)
+#output-block(`````
+가장 매출이 높은 지역과 제품 조합은 다음과 같습니다.
+
+| 지역   | 제품      | 매출      |
+|--------|-----------|-----------|
+| 서울   | Widget A  | 175,000   |
+`````)
+
+#code-block(`````python
+# 추가 후속 질문 — 통계 분석
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "run_pandas로 월별 매출 추이를 계산하고 표로 정리해주세요."}]},
+    config={**thread, **lf_config},
+)
+print(response["messages"][-1].content)
+`````)
+#output-block(`````
+월별 매출 추이는 다음과 같습니다.
+
+| 월        | 매출       |
+|-----------|-----------|
+| 2024-01   | 239,000   |
+| 2024-02   | 237,000   |
+| 2024-03   | 303,000   |
+| 2024-04   | 112,000   |
+`````)
 
 == 빌트인 도구 정리
 
@@ -349,9 +434,9 @@ const result  = await tools.runPandas(
   [_커스텀 도구_],
   [`\@tool` + pandas — `get_csv_path`, `run_pandas`],
   [_백엔드_],
-  [`LocalShellBackend(virtual_mode=True)` — 코드 실행 가능],
-  [_빌트인 도구_],
-  [`execute`, `write_todos`, `ls`, `read_file` 등],
+  [`LocalShellBackend`는 개발용 호스트 셸, 운영은 샌드박스],
+  [_피해 범위 축소_],
+  [임시 `root_dir` + 최소 `env` + `inherit_env=False` + `execute` HITL],
   [_스트리밍_],
   [`stream(subgraphs=True)` — 실행 과정 실시간 관찰],
   [_멀티턴_],

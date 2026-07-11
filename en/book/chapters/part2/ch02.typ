@@ -5,7 +5,7 @@
 
 #chapter(2, "Your First Agent")
 
-*Getting Started with `create_agent()`*
+_Getting Started with `create_agent()`_
 
 
 == Learning Objectives
@@ -23,18 +23,6 @@ By the end of this notebook, you will be able to:
 
 == 2.1 Environment Setup
 
-Install LangChain v1 and Deep Agents before running any examples. Pick the command that matches your environment:
-
-#code-block(`````bash
-# With uv
-uv add langchain deepagents
-
-# With pip
-pip install -U langchain deepagents
-`````)
-
-#tip-box[Installing `langchain` also pulls in `langchain-core`, `langgraph`, and `langchain-openai` (OpenAI integration). For other providers add `langchain-anthropic`, `langchain-google-genai`, and so on as needed.]
-
 Set up the model through OpenAI. `ChatOpenAI` supports OpenAI-compatible APIs, so you can also switch providers by changing `base_url` when needed.
 
 
@@ -50,6 +38,33 @@ model = ChatOpenAI(
     model="gpt-5.4",
 )
 print("✓ Model configured:", model.model_name)
+
+`````)
+
+#code-block(`````python
+# Optional observability setup: LangSmith or Langfuse
+# Set the keys in .env, or uncomment the lines below to enter them manually.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: automatically enabled when LANGSMITH_TRACING=true
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: pass config={"callbacks": [langfuse_handler]} to invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
 
 `````)
 
@@ -90,10 +105,6 @@ The created agent is internally implemented as a LangGraph graph, so it provides
 
 #tip-box[In LangChain v1, use `create_agent()` instead of `create_react_agent()`.]
 
-#tip-box[Give the agent a _snake_case_ name like `name="research_assistant"`. It shows up in LangSmith traces, sub-agent routing, and logs, which makes the agent easier to identify. Avoid spaces, hyphens, and uppercase characters.]
-
-#tip-box[When you define a custom `state_schema`, it must be a *TypedDict* subclass of `langgraph.graph.MessagesState` or `langchain.agents.AgentState`. Plain `dataclass` or Pydantic `BaseModel` classes are not accepted.]
-
 
 #code-block(`````python
 from langchain.agents import create_agent
@@ -119,6 +130,18 @@ When you send messages to the agent, it runs an internal ReAct loop:
 
 
 #code-block(`````python
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "What is 15 + 27?"}]},
+    config=lf_config,
+)
+
+# Print the final response
+print("Agent response:")
+print(result["messages"][-1].content)
+
+`````)
+
+#code-block(`````python
 # Inspect the full message flow
 print("Full message flow:")
 print("=" * 50)
@@ -137,6 +160,25 @@ Receive a real-time response with `stream()`.
 With streaming, you can inspect each stage of the agent in real time, including model reasoning, tool calls, and the final answer. If you use `stream_mode="updates"`, you receive node updates one by one.
 
 
+#code-block(`````python
+print("Streaming execution:")
+print("=" * 50)
+
+for chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "Calculate 12 * 8, then add 5 to the result."}]},
+    stream_mode="updates",
+    config=lf_config,
+):
+    for node_name, update in chunk.items():
+        print(f"\n--- {node_name} ---")
+        if "messages" in update:
+            for msg in update["messages"]:
+                content = msg.content if hasattr(msg, 'content') else str(msg)
+                if content:
+                    print(f"  {content[:300]}")
+
+`````)
+
 == 2.6 Multi-Turn Conversation
 
 Keep conversation state with `InMemorySaver`.
@@ -145,6 +187,36 @@ Keep conversation state with `InMemorySaver`.
 
 #tip-box[In LangChain v1, conversation history is managed through LangGraph checkpointers.]
 
+
+#code-block(`````python
+from langgraph.checkpoint.memory import InMemorySaver
+
+checkpointer = InMemorySaver()
+
+agent_with_memory = create_agent(
+    model=model,
+    tools=[add, multiply],
+    system_prompt="You are a math assistant.",
+    checkpointer=checkpointer,
+)
+
+config = {"configurable": {"thread_id": "math-session-1"}}
+
+# First question
+result1 = agent_with_memory.invoke(
+    {"messages": [{"role": "user", "content": "What is 7 * 6?"}]},
+    config={**config, **lf_config},
+)
+print("First response:", result1["messages"][-1].content)
+
+# Second question that remembers the previous conversation
+result2 = agent_with_memory.invoke(
+    {"messages": [{"role": "user", "content": "Now add 10 to the previous result."}]},
+    config={**config, **lf_config},
+)
+print("Second response:", result2["messages"][-1].content)
+
+`````)
 
 == 2.7 Adding the Tavily Search Tool (Optional)
 
@@ -155,36 +227,31 @@ Tavily is a search API designed for AI agents.
 This cell only runs if `TAVILY_API_KEY` is configured.
 
 
-== 2.8 Runtime Context (`context_schema`)
-
-While `thread_id` separates _conversation sessions_, `context` is the channel that injects _per-request metadata_ (user ID, permissions, tenant) into tools and middleware. Register `context_schema=` on `create_agent()` and pass `context=` to `invoke()`; tools can then read it through `ToolRuntime.context`.
-
 #code-block(`````python
-from dataclasses import dataclass
-from langchain.agents import create_agent
+# Run only if the Tavily API key is available
+if os.environ.get("TAVILY_API_KEY"):
+    from langchain_tavily import TavilySearch
 
-@dataclass
-class Context:
-    user_id: str
-    tenant: str = "default"
+    search_tool = TavilySearch(max_results=3)
 
-agent = create_agent(
-    model=model,
-    tools=[add, multiply],
-    system_prompt="...",
-    context_schema=Context,
-)
+    search_agent = create_agent(
+        model=model,
+        tools=[search_tool],
+        system_prompt="You are a research assistant. Answer questions by searching the web.",
+    )
 
-result = agent.invoke(
-    {"messages": [{"role": "user", "content": "..."}]},
-    context=Context(user_id="u-1234", tenant="acme"),
-)
+    result = search_agent.invoke(
+        {"messages": [{"role": "user", "content": "What is the latest version of LangChain?"}]},
+        config=lf_config,
+    )
+    print("Search agent response:")
+    print(result["messages"][-1].content)
+else:
+    print("⚠ TAVILY_API_KEY is not configured. Skipping this cell.")
+
 `````)
 
-#tip-box[`context_schema` pairs with `ToolRuntime` in Chapter 4 and with HITL in Chapter 7. For now, just remember that the injection channel exists; the detailed usage comes later.]
-
-
-== 2.9 Summary
+== 2.8 Summary
 
 Here is a recap of what you covered in this notebook:
 
@@ -223,4 +290,3 @@ In the next notebook, you will explore more advanced agent patterns:
 - Designing custom system prompts
 - Combining multiple tools in a single agent
 - Error handling and fallback strategies
-

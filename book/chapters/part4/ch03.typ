@@ -27,7 +27,34 @@ print(f"기본 모델: {model.model_name}")
 #output-block(`````
 환경 설정 완료
 
-기본 모델: gpt-4.1
+기본 모델: gpt-5.4
+`````)
+
+#code-block(`````python
+# Observability 설정 (선택) - LangSmith 또는 Langfuse
+# .env에 키를 설정하거나, 아래 주석을 해제하여 직접 입력하세요.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: LANGSMITH_TRACING=true 시 자동 활성화 (코드 수정 불필요)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    print(f"LangSmith tracing ON — project: {project}")
+
+# Langfuse: invoke/stream 호출 시 config={"callbacks": [langfuse_handler]} 전달
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+#output-block(`````
+Langfuse tracing ON — https://lf.ddok.ai
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -98,6 +125,75 @@ print(f"에이전트 생성 완료: {type(agent_oai).__name__}")
 
 시스템 프롬프트는 에이전트의 _역할, 행동 규칙, 출력 형식_을 정의합니다.
 기본 프롬프트 위에 추가되므로, 도메인 특화 지침을 작성하면 됩니다.
+
+#code-block(`````python
+# 코드 리뷰 전문 에이전트
+code_review_agent = create_deep_agent(
+    model=model,
+    system_prompt="""당신은 시니어 Python 코드 리뷰어입니다.
+
+코드를 리뷰할 때 아래 기준으로 피드백을 제공합니다:
+1. **보안**: 인젝션, XSS 등 보안 취약점
+2. **성능**: 불필요한 연산, 메모리 누수
+3. **가독성**: 네이밍, 구조, 주석
+4. **모범 사례**: PEP 8, 타입 힌트, 에러 처리
+
+피드백 형식:
+- 🔴 심각: 반드시 수정 필요
+- 🟡 권장: 개선하면 좋음
+- 🟢 좋음: 잘 작성된 부분""",
+)
+
+# 코드 리뷰 실행
+result = code_review_agent.invoke(
+    {"messages": [{"role": "user", "content": """
+다음 Python 코드를 리뷰해 주세요:
+
+```python
+def get_user(id):
+    query = f"SELECT * FROM users WHERE id = {id}"
+    result = db.execute(query)
+    return result
+```
+"""}]},
+    config=lf_config,
+)
+
+print(result["messages"][-1].content)
+`````)
+#output-block(`````
+🔴 **심각: 반드시 수정 필요**
+
+1. **보안**
+   - SQL 인젝션 취약점:
+     ```python
+     query = f"SELECT * FROM users WHERE id = {id}"
+     ```
+     사용자 입력(​id​)이 직접 쿼리에 삽입됨.
+     → 파라미터 바인딩으로 수정해야 안전합니다:
+     ```python
+     query = "SELECT * FROM users WHERE id = %s"
+     result = db.execute(query, (id,))
+     ```
+
+2. **성능**
+   - 불필요한 전체 컬럼 조회: ​SELECT *​ 대신 필요한 컬럼만 명시하는 것이 좋음.
+   - ​db.execute()​의 결과 자료형이 불분명. 적절히 처리해야 함(예: fetchone, fetchall).
+
+3. **가독성**
+   - 함수명과 변수명은 명확하나, ​id​ 보다는 ​user_id​가 더 명확할 수 있음.
+   - 함수에 타입 힌트, 주석 없음.
+   - ​db​의 정의가 안 보임(컨텍스트 내 사용을 가정).
+
+4. **모범 사례**
+   - PEP 8: 함수명은 괜찮으나 변수명 상세화 권장(예시: ​user_id​).
+   - 타입 힌트 추가, docstring 권장.
+   - 예외 처리 없음(쿼리 실패 시 에러 발생 가능).
+
+---
+
+... (truncated)
+`````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 3. 커스텀 도구 만들기
@@ -180,6 +276,19 @@ print("계산 에이전트가 생성되었습니다!")
 계산 에이전트가 생성되었습니다!
 `````)
 
+#code-block(`````python
+# 커스텀 도구 사용 테스트
+result = calculator_agent.invoke(
+    {"messages": [{"role": "user", "content": "1000만원을 연 5% 복리로 10년간 투자하면 얼마가 되나요?"}]},
+    config=lf_config,
+)
+
+print(result["messages"][-1].content)
+`````)
+#output-block(`````
+1000만원을 연 5% 복리로 10년간 투자하면 최종 금액은 약 16,470,095원이 됩니다. 이자 수익은 6,470,095원이며, 총 수익률은 약 64.7%입니다.
+`````)
+
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 4. 구조화된 출력 — `response_format`
 
@@ -218,6 +327,46 @@ print("도서 추천 에이전트 생성 완료")
 `````)
 #output-block(`````
 도서 추천 에이전트 생성 완료
+`````)
+
+#code-block(`````python
+# 구조화된 출력 테스트
+result = book_agent.invoke(
+    {"messages": [{"role": "user", "content": "Python 비동기 프로그래밍을 배우고 싶습니다. 책 3권만 추천해 주세요."}]},
+    config=lf_config,
+)
+
+# structured_response 키에서 Pydantic 객체를 가져옴
+if "structured_response" in result:
+    recommendations = result["structured_response"]
+    print(f"주제: {recommendations.topic}\n")
+    for i, book in enumerate(recommendations.books, 1):
+        print(f"{i}. 📖 {book.title}")
+        print(f"   저자: {book.author}")
+        print(f"   난이도: {book.difficulty}")
+        print(f"   추천 이유: {book.reason}")
+        print()
+else:
+    # structured_response가 없으면 일반 메시지 출력
+    print(result["messages"][-1].content)
+`````)
+#output-block(`````
+주제: Python 비동기 프로그래밍
+
+1. 📖 Fluent Python, 2nd Edition
+   저자: Luciano Ramalho
+   난이도: 중급
+   추천 이유: 비동기 프로그래밍을 포함한 Python의 고급 기능을 폭넓게 다룹니다. asyncio, async/await 패턴에 대한 깊이 있는 설명이 있어서 실무 입문에 적합합니다.
+
+2. 📖 Asynchronous Python Programming with Asyncio
+   저자: Matthew Fowler
+   난이도: 중급
+   추천 이유: asyncio를 핵심적으로 다루며, 실용적인 예제와 함께 Python 비동기식 프로그래밍의 구조와 개념을 체계적으로 설명합니다.
+
+3. 📖 Python Concurrency with asyncio
+   저자: Matthew Fowler
+   난이도: 중급
+   추천 이유: asyncio에 포커스를 맞춰 파이썬에서 비동기 및 동시성 프로그래밍을 실전적으로 다룹니다. 다양한 사례와 핵심 패턴이 잘 정리되어 있습니다.
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))

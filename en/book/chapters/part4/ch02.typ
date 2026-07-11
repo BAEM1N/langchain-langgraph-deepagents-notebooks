@@ -14,46 +14,12 @@
 
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
-== 1. Project Bootstrap and API Keys
+== 1. API Key Setup
 
-=== Bootstrap with `uv`
+Add the following keys to your `.env` file:
 
-The recommended workflow uses `uv` for reproducible dependency management.
-
-#code-block(`````bash
-# 1) Init the project
-uv init my-deepagent
-cd my-deepagent
-
-# 2) Add deepagents plus the provider package
-uv add deepagents langchain-anthropic   # recommended default
-# uv add deepagents langchain-openai
-# uv add deepagents langchain-google-genai
-uv add tavily-python python-dotenv
-
-# 3) Sync the lockfile
-uv sync
-`````)
-
-=== API keys by provider
-
-The recommended default model is _Anthropic Claude Sonnet 4.6_ (`anthropic:claude-sonnet-4-6`). Set only the keys for the providers you actually use.
-
-#code-block(`````bash
-# Anthropic (recommended default)
-ANTHROPIC_API_KEY=your-key-here
-
-# OpenAI
+#code-block(`````python
 OPENAI_API_KEY=your-key-here
-
-# Google Gemini
-GOOGLE_API_KEY=your-key-here
-
-# OpenRouter (OpenAI-compatible)
-OPENAI_API_KEY=your-openrouter-key
-OPENAI_BASE_URL=https://openrouter.ai/api/v1
-
-# Shared — used in the research example
 TAVILY_API_KEY=your-key-here
 `````)
 
@@ -67,10 +33,35 @@ import os
 
 load_dotenv()
 
-# Recommended default — Anthropic
-assert os.environ.get("ANTHROPIC_API_KEY"), "ANTHROPIC_API_KEY is not set!"
+assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY is not set!"
 assert os.environ.get("TAVILY_API_KEY"), "TAVILY_API_KEY is not set!"
 print("API keys loaded successfully.")
+
+`````)
+
+#code-block(`````python
+# Optional observability setup: LangSmith or Langfuse
+# Set the keys in .env, or uncomment the lines below to enter them manually.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: automatically enabled when LANGSMITH_TRACING=true
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: pass config={"callbacks": [langfuse_handler]} to invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
 
 `````)
 
@@ -83,20 +74,13 @@ If you call it with no additional configuration, it automatically assembles a de
 
 #code-block(`````python
 from deepagents import create_deep_agent
+from langchain_openai import ChatOpenAI
 
-# Recommended default — Anthropic Claude Sonnet 4.6 (provider:model string)
-agent = create_deep_agent(model="anthropic:claude-sonnet-4-6")
+# Configure the OpenAI gpt-5.4 model
+model = ChatOpenAI(model="gpt-5.4")
 
-# (Alt 1) OpenAI gpt-5.4
-# agent = create_deep_agent(model="openai:gpt-5.4")
-
-# (Alt 2) Google Gemini 3.5 Flash
-# agent = create_deep_agent(model="google_genai:gemini-3.5-flash")
-
-# (Alt 3) Pass a ChatModel object for fine control
-# from langchain_anthropic import ChatAnthropic
-# model = ChatAnthropic(model="claude-sonnet-4-6", temperature=0)
-# agent = create_deep_agent(model=model)
+# Create the basic agent
+agent = create_deep_agent(model=model)
 
 print(f"Agent type: {type(agent).__name__}")
 print("The agent was created successfully!")
@@ -113,6 +97,18 @@ That means you can use all of the normal LangGraph execution methods such as `in
 Run the agent by sending it a message.
 The input format is a dictionary like `{"messages": [{"role": "user", "content": "..."}]}`.
 
+
+#code-block(`````python
+# Ask the agent a simple question
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "Hello! What tools can you use? Please give me a short list."}]},
+    config=lf_config,
+)
+
+# Print the last message (the AI response)
+print(result["messages"][-1].content)
+
+`````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 4. Connecting Tavily Search — A Research Agent
@@ -161,12 +157,23 @@ print(f"Tool description: {internet_search.__doc__.strip().splitlines()[0]}")
 #code-block(`````python
 # Create a research agent — search tool + custom system prompt
 research_agent = create_deep_agent(
-    model="anthropic:claude-sonnet-4-6",
+    model=model,
     tools=[internet_search],
     system_prompt="You are an expert researcher. Search the internet, organize the results, and write the final answer in English.",
 )
 
 print("Research agent created!")
+
+`````)
+
+#code-block(`````python
+# Run the research agent
+result = research_agent.invoke(
+    {"messages": [{"role": "user", "content": "Search for what LangGraph is and summarize it briefly."}]},
+    config=lf_config,
+)
+
+print(result["messages"][-1].content)
 
 `````)
 
@@ -215,6 +222,57 @@ You can choose different levels of detail through `stream_mode`:
 - `"custom"` — custom events emitted from tools or nodes
 
 
+#code-block(`````python
+# Stream in updates mode — watch progress step by step
+print("=== Streaming execution (updates mode) ===")
+print()
+
+for chunk in research_agent.stream(
+    {"messages": [{"role": "user", "content": "Search for the major changes in Python 3.13 and summarize them in three lines."}]},
+    stream_mode="updates",
+    config=lf_config,
+):
+    # Print each node's result
+    for node_name, node_data in chunk.items():
+        if not node_data:
+            continue
+        msgs = node_data.get("messages", [])
+        # LangGraph may wrap state updates in Overwrite objects
+        if hasattr(msgs, "value"):
+            msgs = msgs.value
+        if not msgs:
+            continue
+        last_msg = msgs[-1]
+        # Show tool calls
+        if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+            for tc in last_msg.tool_calls:
+                print(f"[Tool call] {tc['name']}({tc['args'].get('query', '')[:50]}...)")
+        # Show final AI message content
+        elif hasattr(last_msg, "content") and last_msg.content and not hasattr(last_msg, "tool_call_id"):
+            content = last_msg.content if isinstance(last_msg.content, str) else str(last_msg.content)
+            if content.strip():
+                print(f"\n[Final response]\n{content[:500]}")
+
+`````)
+
+#code-block(`````python
+# Stream in messages mode — token-level output
+print("=== Streaming execution (messages mode) ===")
+print()
+
+for msg, metadata in research_agent.stream(
+    {"messages": [{"role": "user", "content": "Write Python code that prints 'Hello World'."}]},
+    stream_mode="messages",
+    config=lf_config,
+):
+    # Print only text chunks from the model node
+    if hasattr(msg, "content") and msg.content and metadata and metadata.get("langgraph_node") == "model":
+        print(msg.content, end="", flush=True)
+
+print()
+
+`````)
+
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == Summary
 
@@ -235,9 +293,8 @@ You can choose different levels of detail through `stream_mode`:
   [Custom tools],
   [Python function + docstring + type hints],
   [Model format],
-  [Provider prefix preferred — `"anthropic:claude-sonnet-4-6"`, `"openai:gpt-5.4"`, `"google_genai:gemini-3.5-flash"`. ChatModel objects also accepted],
+  [`ChatOpenAI(model="gpt-5.4")` or `"provider:model-name"`],
 )
 
 == Next Steps
 → _#link("./03_customization.ipynb")[03_customization.ipynb]_: learn how to customize the agent in more detail.
-

@@ -19,68 +19,50 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
-assert os.environ.get("ANTHROPIC_API_KEY"), "ANTHROPIC_API_KEY is not set!"
+assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY is not set!"
 print("Environment setup complete")
 
-# Recommended default — Anthropic Claude Sonnet 4.6 (provider:model string)
+# Initialize the OpenAI gpt-5.4 model
 from deepagents import create_deep_agent
+from langchain_openai import ChatOpenAI
 
-model = "anthropic:claude-sonnet-4-6"
-print(f"Default model: {model}")
+model = ChatOpenAI(model="gpt-5.4")
+print(f"Default model: {model.model_name}")
 
 `````)
-
-#line(length: 100%, stroke: 0.5pt + luma(200))
-== 0. Full `create_deep_agent()` Signature (17 parameters)
-
-Before diving into individual customization axes, here is the full _17-parameter_ signature. All parameters are _optional_; only `model` is enough to get a working agent.
 
 #code-block(`````python
-def create_deep_agent(
-    model=None,             # 1. LLM (ChatModel object or "provider:model")
-    tools=None,             # 2. custom tools
-    system_prompt=None,     # 3. user-provided prompt (USER segment)
-    middleware=(),          # 4. extra user middleware
-    subagents=None,         # 5. SubAgent dicts / CompiledSubAgent
-    skills=None,            # 6. SKILL.md directories (progressive disclosure)
-    memory=None,            # 7. AGENTS.md path (always injected)
-    response_format=None,   # 8. Pydantic schema for structured output
-    context_schema=None,    # 9. runtime context TypedDict (propagated to subagents)
-    checkpointer=None,      # 10. LangGraph checkpointer (persistence)
-    store=None,             # 11. LangGraph BaseStore (for StoreBackend)
-    cache=None,             # 12. prompt cache config (e.g. Anthropic)
-    backend=None,           # 13. BackendProtocol or `lambda runtime: ...`
-    permissions=None,       # 14. allow_read/allow_write/deny_* ACL
-    interrupt_on=None,      # 15. {"tool_name": True} HITL gates
-    debug=False,            # 16. debug logging
-    name=None,              # 17. graph name
-):
-    ...
+# Optional observability setup: LangSmith or Langfuse
+# Set the keys in .env, or uncomment the lines below to enter them manually.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: automatically enabled when LANGSMITH_TRACING=true
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: pass config={"callbacks": [langfuse_handler]} to invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
 `````)
-
-#tip-box[`permissions`, `context_schema`, and `cache` are recent additions (`deepagents>=0.5.0`). Older versions require adding middleware directly.]
-
-=== Prompt assembly order
-
-The string you pass to `system_prompt` is _not_ used verbatim. Deep Agents' prompt builder assembles three segments in a fixed order:
-
-#code-block(`````
-[USER]    system_prompt (string from the caller)
-   ↓
-[BASE]    harness BASE prompt (TodoList/Filesystem/SubAgent usage)
-   + CUSTOM  per-middleware injections (Memory, Skills, Permissions, ...)
-   ↓
-[SUFFIX]  harness SUFFIX (safety guidance, output contract)
-`````)
-
-The order is _USER → BASE/CUSTOM → SUFFIX_. You only fill in the USER segment; BASE and SUFFIX are managed by middleware. Nothing is overwritten, so there is no need to repeat built-in tool usage in your own prompt.
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 1. Choosing a Model
 
-Deep Agents supports a wide range of LLMs through either a *LangChain chat model object* or the *`provider:model`* format.
+Deep Agents supports a wide range of LLMs through either a _LangChain ChatModel object_ or the _`provider:model`_ format.
 
-This notebook uses _Anthropic Claude Sonnet 4.6_ (`anthropic:claude-sonnet-4-6`) as the recommended default. OpenAI examples use `gpt-5.4`.
+This notebook uses _OpenAI gpt-5.4_ as the default model.
 
 #table(
   columns: 4,
@@ -89,46 +71,46 @@ This notebook uses _Anthropic Claude Sonnet 4.6_ (`anthropic:claude-sonnet-4-6`)
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[Provider],
-  text(weight: "bold")[Example model (provider:model)],
+  text(weight: "bold")[Example model],
   text(weight: "bold")[Environment variable],
   text(weight: "bold")[Notes],
-  [_Anthropic_],
+  [_OpenAI_],
+  [`gpt-5.4`],
+  [`OPENAI_API_KEY`],
+  [_Default in this notebook_],
+  [Anthropic],
   [`anthropic:claude-sonnet-4-6`],
   [`ANTHROPIC_API_KEY`],
-  [_Recommended default_ — best for prompt caching and HITL],
-  [OpenAI],
-  [`openai:gpt-5.4`],
-  [`OPENAI_API_KEY`],
-  [Strong tool-calling accuracy],
+  [Direct connection],
   [Google],
-  [`google_genai:gemini-3.5-flash`],
+  [`google_genai:gemini-2.5-flash`],
   [`GOOGLE_API_KEY`],
-  [Cost-effective],
+  [],
   [Azure],
-  [`azure_openai:gpt-5.4`],
+  [`azure_openai:gpt-4o`],
   [`AZURE_OPENAI_*`],
-  [Enterprise deployments],
+  [],
   [AWS Bedrock],
   [`bedrock:anthropic.claude-sonnet-4-6`],
   [AWS credentials],
-  [VPC isolation],
+  [],
 )
 
-The recommended default is `anthropic:claude-sonnet-4-6`, with built-in retry (6 attempts) and timeout. The `model` parameter accepts either a `BaseChatModel` object or a `"provider:model-name"` string.
+The default model is `gpt-5.4`, and it includes built-in retry and timeout behavior.
 
 
 #code-block(`````python
-# Recommended default — Anthropic Claude Sonnet 4.6 via provider:model string
-agent_default = create_deep_agent(
-    model="anthropic:claude-sonnet-4-6",
+# Use the OpenAI gpt-5.4 model (the model object initialized above)
+agent_claude = create_deep_agent(
+    model=model,
 )
 
-print(f"Agent created: {type(agent_default).__name__}")
+print(f"Agent created: {type(agent_claude).__name__}")
 
 # Reference examples for other providers:
-# agent_openai = create_deep_agent(model="openai:gpt-5.4")
-# agent_gemini = create_deep_agent(model="google_genai:gemini-3.5-flash")
-# agent_bedrock = create_deep_agent(model="bedrock:anthropic.claude-sonnet-4-6")
+# agent_openai = create_deep_agent(model="openai:gpt-4o")
+# agent_gemini = create_deep_agent(model="google_genai:gemini-2.5-flash")
+# agent_anthropic = create_deep_agent(model="anthropic:claude-sonnet-4-6")
 
 `````)
 
@@ -138,6 +120,43 @@ print(f"Agent created: {type(agent_default).__name__}")
 The system prompt defines the agent's _role_, _behavioral rules_, and _output style_.
 It is added on top of the default prompt, so you can provide domain-specific instructions without rebuilding everything from scratch.
 
+
+#code-block(`````python
+# A specialized code review agent
+code_review_agent = create_deep_agent(
+    model=model,
+    system_prompt="""You are a senior Python code reviewer.
+
+Use the following criteria when reviewing code:
+1. **Security**: injection, XSS, and similar vulnerabilities
+2. **Performance**: unnecessary work, memory issues
+3. **Readability**: naming, structure, comments
+4. **Best practices**: PEP 8, type hints, error handling
+
+Feedback format:
+- 🔴 Critical: must be fixed
+- 🟡 Recommended: should be improved
+- 🟢 Good: well-written parts""",
+)
+
+# Run the review
+result = code_review_agent.invoke(
+    {"messages": [{"role": "user", "content": """
+Please review the following Python code:
+
+```python
+def get_user(id):
+    query = f"SELECT * FROM users WHERE id = {id}"
+    result = db.execute(query)
+    return result
+```
+"""}]},
+    config=lf_config,
+)
+
+print(result["messages"][-1].content)
+
+`````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 3. Building Custom Tools
@@ -216,6 +235,17 @@ print("Calculator agent created!")
 
 `````)
 
+#code-block(`````python
+# Test the custom tools
+result = calculator_agent.invoke(
+    {"messages": [{"role": "user", "content": "If I invest 10,000,000 KRW at 5% compound interest for 10 years, what will the final amount be?"}]},
+    config=lf_config,
+)
+
+print(result["messages"][-1].content)
+
+`````)
+
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 4. Structured Output — `response_format`
 
@@ -251,6 +281,27 @@ print("Book recommendation agent created")
 
 `````)
 
+#code-block(`````python
+# Test structured output
+result = book_agent.invoke(
+    {"messages": [{"role": "user", "content": "I want to learn Python asynchronous programming. Recommend only 3 books."}]},
+    config=lf_config,
+)
+
+if "structured_response" in result:
+    recommendations = result["structured_response"]
+    print(f"Topic: {recommendations.topic}\n")
+    for i, book in enumerate(recommendations.books, 1):
+        print(f"{i}. 📖 {book.title}")
+        print(f"   Author: {book.author}")
+        print(f"   Difficulty: {book.difficulty}")
+        print(f"   Why: {book.reason}")
+        print()
+else:
+    print(result["messages"][-1].content)
+
+`````)
+
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 5. Middleware Architecture
 
@@ -260,19 +311,17 @@ Middleware is the plugin layer that extends and controls the agent's behavior.
 === Default middleware stack (execution order)
 
 #code-block(`````python
-1.  TodoListMiddleware                  — task management (write_todos)
-2.  MemoryMiddleware                    — load AGENTS.md when `memory` is used
-3.  SkillsMiddleware                    — load SKILL.md when `skills` is used
-4.  FilesystemMiddleware                — file tools (ls, read, write, edit, glob, grep)
-5.  SubAgentMiddleware  [required, not removable]  — subagent support (task tool)
-6.  SummarizationMiddleware             — context compression (~85% auto-summary)
-7.  AnthropicPromptCachingMiddleware    — prompt caching (auto-applied for Anthropic)
-8.  PatchToolCallsMiddleware            — repair malformed/missing tool calls
-9.  [User custom middleware]            — `middleware` parameter
-10. HumanInTheLoopMiddleware            — approval workflow (`interrupt_on`)
+1. TodoListMiddleware        — task management (`write_todos`)
+2. MemoryMiddleware          — load `AGENTS.md` when `memory` is used
+3. SkillsMiddleware          — load `SKILL.md` when `skills` is used
+4. FilesystemMiddleware      — file tools (`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`)
+5. SubAgentMiddleware        — subagent support (`task` tool)
+6. SummarizationMiddleware   — context compression
+7. AnthropicCachingMiddleware — prompt caching for Anthropic models
+8. PatchToolCallsMiddleware  — fix malformed tool calls
+9. [User custom middleware]  — `middleware` parameter
+10. HumanInTheLoopMiddleware — approval workflow (`interrupt_on`)
 `````)
-
-#warning-box[`SubAgentMiddleware` cannot be removed via `excluded_middleware`. The `task` tool is the core delegation mechanism, so it stays enabled even when you do not declare any subagents — a built-in `general-purpose` subagent fills the slot.]
 
 === What each middleware does
 
@@ -326,37 +375,6 @@ for mw in [FilesystemMiddleware, MemoryMiddleware, SubAgentMiddleware, SkillsMid
 
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
-== 6. Sandbox Options
-
-Beyond `tools`, Deep Agents ships _sandbox options_ that isolate untrusted code execution. Use them for coding agents or data-analysis agents that run arbitrary scripts.
-
-#table(
-  columns: 3,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Sandbox],
-  text(weight: "bold")[Execution environment],
-  text(weight: "bold")[Best fit],
-  [Modal],
-  [Remote container (GPU available)],
-  [Long-running code, GPU inference],
-  [Daytona],
-  [Remote development container],
-  [Git workspace integration, multi-language],
-  [Deno],
-  [Local TypeScript/JavaScript isolation],
-  [Lightweight JS/TS execution],
-  [Local VFS],
-  [In-process virtual filesystem],
-  [Unit tests with no network or disk access],
-)
-
-#tip-box[Sandboxes can be exposed either as _tools_ (for example an `execute_python` tool) or as _backends_ (for example a `SandboxBackend` for file isolation). The two layers can be combined to get both code and file isolation.]
-
-
-#line(length: 100%, stroke: 0.5pt + luma(200))
 == Summary
 
 #table(
@@ -368,21 +386,16 @@ Beyond `tools`, Deep Agents ships _sandbox options_ that isolate untrusted code 
   text(weight: "bold")[Item],
   text(weight: "bold")[Method],
   [Model selection],
-  [`model="anthropic:claude-sonnet-4-6"` or any provider prefix],
+  [`model="provider:model-name"`],
   [System prompt],
-  [Assembled USER → BASE/CUSTOM → SUFFIX],
+  [`system_prompt="define the role and rules"`],
   [Custom tools],
   [function + docstring + type hints → `tools=[func]`],
   [Structured output],
   [`response_format=PydanticModel` → `result["structured_response"]`],
   [Middleware],
-  [`SubAgentMiddleware` is required; the rest are wired automatically],
-  [Full parameter list],
-  [17 — includes `permissions`, `context_schema`, `checkpointer`, `store`, `cache`, `interrupt_on`],
-  [Sandboxes],
-  [Modal, Daytona, Deno, local VFS — exposed as tools or backends],
+  [Automatically configured (TodoList, Filesystem, SubAgent, Summarization, etc.)],
 )
 
 == Next Steps
 → _#link("./04_backends.ipynb")[04_backends.ipynb]_: learn how storage backends define the agent filesystem.
-

@@ -26,6 +26,34 @@ model = ChatOpenAI(
 print("모델 준비 완료:", model.model_name)
 `````)
 
+#code-block(`````python
+# Observability 설정 (선택) - LangSmith 또는 Langfuse
+# .env에 키를 설정하거나, 아래 주석을 해제하여 직접 입력하세요.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: LANGSMITH_TRACING=true 시 자동 활성화 (코드 수정 불필요)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    print(f"LangSmith tracing ON \u2014 project: {project}")
+
+# Langfuse: invoke/stream 호출 시 config={"callbacks": [langfuse_handler]} 전달
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON \u2014 {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+#output-block(`````
+Langfuse tracing ON — https://lf.ddok.ai
+`````)
+
 == 6.2 미들웨어 개념
 
 미들웨어는 에이전트 실행 파이프라인의 _각 단계에 훅(hook)을 추가_하여 동작을 제어하는 메커니즘입니다.
@@ -95,7 +123,7 @@ SummarizationMiddleware 에이전트 생성 완료
 
 === 빌트인 미들웨어 카탈로그
 
-`SummarizationMiddleware` 외에도 v1 은 자주 쓰는 패턴을 빌트인으로 제공합니다.
+미들웨어는 코어와 공급자 통합 패키지로 나뉩니다. 공급자 전용 기능은 해당 통합 패키지에서 가져옵니다.
 
 #table(
   columns: 3,
@@ -104,56 +132,42 @@ SummarizationMiddleware 에이전트 생성 완료
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[미들웨어],
+  text(weight: "bold")[import 위치],
   text(weight: "bold")[용도],
-  text(weight: "bold")[비고],
   [`SummarizationMiddleware`],
+  [`langchain.agents.middleware`],
   [대화 요약],
-  [`trigger=("messages", N)` 또는 `("tokens", N)`],
   [`AnthropicPromptCachingMiddleware`],
-  [Anthropic 프롬프트 캐싱],
-  [시스템 메시지·도구 정의 캐시 → 비용 절감],
+  [`langchain_anthropic.middleware`],
+  [Claude 프롬프트 캐싱],
   [`BedrockPromptCachingMiddleware`],
-  [AWS Bedrock 프롬프트 캐싱],
-  [Anthropic 모델을 Bedrock 으로 호출할 때],
+  [`langchain_aws.middleware.prompt_caching`],
+  [Bedrock 호스팅 Claude 캐싱(선택 의존성)],
   [`ModelFallbackMiddleware`],
+  [`langchain.agents.middleware`],
   [모델 폴백],
-  [첫 모델 실패 시 다음 모델로 자동 전환],
   [`ContextEditingMiddleware`],
-  [컨텍스트 동적 편집],
-  [오래된 tool_use 메시지 제거 등],
+  [`langchain.agents.middleware`],
+  [오래된 도구 출력 정리],
   [`PatchToolCallsMiddleware`],
-  [도구 호출 후처리],
-  [Deep Agents 의 핵심 컴포넌트 — tool call 결과를 상태에 반영],
+  [`deepagents.middleware`],
+  [잘못된 도구 호출 보정],
 )
 
-`ContextSize` 트리거 튜플은 어디서나 동일한 형식입니다:
-- `("tokens", 100_000)` — 토큰 수 임계값
-- `("messages", 20)` — 메시지 개수 임계값
-- `("fraction", 0.8)` — 모델 `.profile["max_input_tokens"]` 대비 비율
+`ContextSize` 트리거는 `("tokens", N)`·`("messages", N)`·`("fraction", 0~1)` 형식을 사용합니다.
 
 #code-block(`````python
-# Anthropic / Bedrock 프롬프트 캐싱 — 시스템 프롬프트가 크거나 도구가 많을 때 효과적
-from langchain.agents.middleware import (
-    AnthropicPromptCachingMiddleware,
-    BedrockPromptCachingMiddleware,
+# 공급자 전용 미들웨어는 통합 패키지에서 가져옵니다.
+from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
+
+anthropic_cache = AnthropicPromptCachingMiddleware(
+    ttl="5m",
+    min_messages_to_cache=0,
 )
 
-# Anthropic 직접 호출 (claude-sonnet-4-6 등)
-anthropic_cache = AnthropicPromptCachingMiddleware()
-# Bedrock 경유 호출
-bedrock_cache = BedrockPromptCachingMiddleware()
-
-# 예: Anthropic 모델 + 프롬프트 캐싱
-# from langchain_anthropic import ChatAnthropic
-# anthropic_model = ChatAnthropic(model="claude-sonnet-4-6")
-# agent_cached = create_agent(
-#     model=anthropic_model,
-#     tools=[search],
-#     system_prompt="...",
-#     middleware=[anthropic_cache],
-# )
-
-print("Anthropic/Bedrock 프롬프트 캐싱 미들웨어 생성 완료")
+# Bedrock은 선택 의존성 langchain-aws가 설치된 환경에서 사용합니다.
+# from langchain_aws.middleware.prompt_caching import BedrockPromptCachingMiddleware
+print("Anthropic 프롬프트 캐싱 미들웨어 생성 완료")
 `````)
 
 #code-block(`````python
@@ -209,6 +223,45 @@ print("  → 100K 토큰 초과 시 최근 3개 외 오래된 tool_use 메시지
 - 입력 검증 (가드레일)
 - 컨텍스트 추가
 
+#code-block(`````python
+from langchain.agents.middleware import before_model
+
+@before_model
+def log_model_input(state, runtime):
+    """모델에 전송하기 전에 메시지를 로깅합니다."""
+    msg_count = len(state["messages"])
+    print(f"  모델 입력: {msg_count}개 메시지")
+
+agent_logged = create_agent(
+    model=model,
+    tools=[search],
+    system_prompt="당신은 유용한 어시스턴트입니다.",
+    middleware=[log_model_input],
+)
+
+print("모델 호출 로깅 테스트:")
+result = agent_logged.invoke(
+    {"messages": [{"role": "user", "content": "Python 튜토리얼을 검색해 주세요"}]},
+    config=lf_config,
+)
+print("응답:", result["messages"][-1].content[:200])
+`````)
+#output-block(`````
+모델 호출 로깅 테스트:
+  모델 입력: 1개 메시지
+
+  모델 입력: 3개 메시지
+
+응답: Python 튜토리얼을 찾고 계시는군요! 다음은 추천드릴 수 있는 주요 Python 튜토리얼들입니다:
+
+1. Python 공식 문서 튜토리얼
+- 링크: https://docs.python.org/ko/3/tutorial/index.html
+- Python을 처음 접하는 분들을 위한 공식 입문 튜토리얼입니다.
+
+2. 점프 투 파이썬
+- 링크: https://
+`````)
+
 == 6.5 커스텀 미들웨어: \@after_model
 
 `@after_model` 데코레이터는 _모델 응답이 생성된 후_에 실행됩니다.
@@ -218,6 +271,44 @@ print("  → 100K 토큰 초과 시 최근 3개 외 오래된 tool_use 메시지
 - 응답 필터링 또는 수정
 - 도구 호출 감시
 - 출력 품질 검증
+
+#code-block(`````python
+from langchain.agents.middleware import after_model
+
+@after_model
+def log_model_output(state, runtime):
+    """모델 출력 생성 후 로깅합니다."""
+    msg = state["messages"][-1] if state["messages"] else None
+    if msg and hasattr(msg, 'content') and msg.content:
+        print(f"  모델 출력: {msg.content[:100]}...")
+    if msg and hasattr(msg, 'tool_calls') and msg.tool_calls:
+        print(f"  도구 호출: {[tc['name'] for tc in msg.tool_calls]}")
+
+agent_full_log = create_agent(
+    model=model,
+    tools=[search],
+    system_prompt="당신은 유용한 어시스턴트입니다.",
+    middleware=[log_model_input, log_model_output],
+)
+
+print("전체 로깅 테스트:")
+result = agent_full_log.invoke(
+    {"messages": [{"role": "user", "content": "LangChain v1 기능을 검색해 주세요"}]},
+    config=lf_config,
+)
+`````)
+#output-block(`````
+전체 로깅 테스트:
+  모델 입력: 1개 메시지
+
+  도구 호출: ['search']
+  모델 입력: 3개 메시지
+
+  모델 출력: LangChain v1의 주요 기능은 다음과 같습니다:
+
+1. 체인(chain): 여러 개의 프롬프트나 모델 콜을 논리적으로 연결해 복잡한 워크플로우를 구성할 수 있습니다.
+2. ...
+`````)
 
 == 6.6 \@wrap_model_call
 
@@ -306,6 +397,32 @@ print("request.override 패턴 미들웨어 등록 준비 완료")
 - 상태에 따른 행동 변경
 - A/B 테스트
 
+#code-block(`````python
+from langchain.agents.middleware import dynamic_prompt
+from datetime import datetime
+
+@dynamic_prompt
+def add_datetime_context(request):
+    """시스템 프롬프트에 현재 날짜와 시간을 추가합니다."""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return f"현재 날짜와 시간: {now}\n\n당신은 유용한 어시스턴트입니다."
+
+agent_dynamic = create_agent(
+    model=model,
+    tools=[search],
+    middleware=[add_datetime_context],
+)
+
+result = agent_dynamic.invoke(
+    {"messages": [{"role": "user", "content": "현재 날짜와 시간이 어떻게 되나요?"}]},
+    config=lf_config,
+)
+print("동적 프롬프트 응답:", result["messages"][-1].content)
+`````)
+#output-block(`````
+동적 프롬프트 응답: 현재 날짜와 시간은 2026년 3월 7일 00시 02분 36초입니다.
+`````)
+
 == 6.8 \@wrap_tool_call
 
 `@wrap_tool_call` 데코레이터는 _도구 호출 자체를 감싸서_ 실행 전후에 커스텀 로직을 추가할 수 있습니다.
@@ -318,11 +435,99 @@ print("request.override 패턴 미들웨어 등록 준비 완료")
 - _에러 핸들링:_ 도구 실패 시 폴백 처리
 - _접근 제어:_ 특정 도구 호출 차단 또는 제한
 
+#code-block(`````python
+from langchain.agents.middleware import wrap_tool_call
+import time
+
+@wrap_tool_call
+def tool_timing_logger(request, handler):
+    """실행 시간을 측정하고 도구 입출력을 로깅합니다."""
+    tool_name = request.tool_call["name"]
+    tool_args = request.tool_call["args"]
+    print(f"  [도구 시작] {tool_name} | 입력: {tool_args}")
+
+    start = time.perf_counter()
+    try:
+        result = handler(request)
+        elapsed = time.perf_counter() - start
+        print(f"  [도구 완료] {tool_name} | 소요 시간: {elapsed:.3f}s | 출력: {str(result)[:100]}")
+        return result
+    except Exception as e:
+        elapsed = time.perf_counter() - start
+        print(f"  [도구 실패] {tool_name} | 소요 시간: {elapsed:.3f}s | 에러: {e}")
+        raise
+
+agent_tool_logged = create_agent(
+    model=model,
+    tools=[search],
+    system_prompt="당신은 유용한 어시스턴트입니다. 검색 도구를 사용하여 정보를 찾으세요.",
+    middleware=[tool_timing_logger],
+)
+
+print("도구 호출 타이밍/로깅 미들웨어 테스트:")
+result = agent_tool_logged.invoke(
+    {"messages": [{"role": "user", "content": "LangChain 미들웨어 문서를 검색해 주세요"}]},
+    config=lf_config,
+)
+print("\n최종 응답:", result["messages"][-1].content[:200])
+`````)
+#output-block(`````
+도구 호출 타이밍/로깅 미들웨어 테스트:
+
+  [도구 시작] search | 입력: {'query': 'LangChain 미들웨어 문서'}
+  [도구 완료] search | 소요 시간: 0.001s | 출력: content="'LangChain 미들웨어 문서'에 대한 검색 결과" name='search' tool_call_id='call_8GvMze2oh0emcbMlxoayKHzX'
+
+
+최종 응답: LangChain의 공식 문서에는 '미들웨어'라는 용어가 자주 언급되지는 않습니다. 다만, LangChain은 주로 LLM(대형 언어 모델) 기반 애플리케이션을 구축할 때 파이프라인이나 체인(chain)을 만들어 입력과 출력을 다양한 모듈을 통해 처리할 수 있도록 지원합니다. 미들웨어 패턴과 유사하게, 이러한 체인에서 각 링크(모듈)는 입력을 가공하거나,
+`````)
+
 == 6.9 가드레일
 
 가드레일은 _안전하지 않은 입력이나 출력을 차단_하는 메커니즘입니다. 미들웨어로 구현하며, 금지된 키워드 감지, 프롬프트 인젝션 방어, 민감 정보 필터링 등에 씁니다.
 
 `@before_model` 훅에서 구현하는 것이 가장 효과적입니다. 모델에 전달되기 전에 위험한 입력을 차단할 수 있기 때문입니다.
+
+#code-block(`````python
+# 키워드 기반 가드레일
+@before_model
+def keyword_guardrail(state, runtime):
+    """금지된 키워드가 포함된 요청을 차단합니다."""
+    prohibited = ["hack", "exploit", "malware"]
+    last_msg = state["messages"][-1]
+    content = last_msg.content if hasattr(last_msg, 'content') else str(last_msg)
+
+    for keyword in prohibited:
+        if keyword.lower() in content.lower():
+            raise ValueError(f"요청이 안전 정책에 의해 차단되었습니다.")
+
+agent_guarded = create_agent(
+    model=model,
+    tools=[search],
+    system_prompt="당신은 유용한 어시스턴트입니다.",
+    middleware=[keyword_guardrail],
+)
+
+# 안전한 요청
+result = agent_guarded.invoke(
+    {"messages": [{"role": "user", "content": "Python 튜토리얼을 검색해 주세요"}]},
+    config=lf_config,
+)
+print("안전한 요청:", result["messages"][-1].content[:100])
+
+# 차단되는 요청
+try:
+    result = agent_guarded.invoke(
+        {"messages": [{"role": "user", "content": "웹사이트 해킹 방법"}]}
+    )
+except ValueError as e:
+    print(f"차단된 요청: {e}")
+`````)
+#output-block(`````
+안전한 요청: Python 튜토리얼 관련 정보를 찾아보았습니다! 아래는 대표적인 Python 튜토리얼 사이트와 자료들입니다:
+
+1. 점프 투 파이썬 (jump to python)
+   - 한국어
+`````)
 
 === \@hook_config(can_jump_to=...) — 조건부 그래프 점프
 
@@ -332,6 +537,45 @@ print("request.override 패턴 미들웨어 등록 준비 완료")
 - `"end"` — 즉시 종료
 - `"tools"` — 도구 노드로 점프
 - `"model"` — 모델 노드로 재진입
+
+#code-block(`````python
+# 위험한 키워드 감지 시 예외 대신 그래프를 "end" 로 안전하게 점프
+from langchain.agents.middleware import before_model, hook_config
+from langchain.messages import AIMessage
+
+
+@hook_config(can_jump_to=["end", "tools", "model"])
+@before_model
+def jumping_guardrail(state, runtime):
+    """금지된 키워드 감지 시 안전한 거절 메시지를 남기고 즉시 종료합니다."""
+    prohibited = ["hack", "exploit", "malware"]
+    last_msg = state["messages"][-1]
+    content = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+
+    for keyword in prohibited:
+        if keyword.lower() in content.lower():
+            # 메시지를 추가하면서 즉시 그래프를 종료합니다.
+            return {
+                "messages": [AIMessage(content="요청이 안전 정책에 의해 차단되었습니다.")],
+                "jump_to": "end",
+            }
+    # 정상 — 다음 단계로
+    return None
+
+
+agent_jumping = create_agent(
+    model=model,
+    tools=[search],
+    system_prompt="당신은 유용한 어시스턴트입니다.",
+    middleware=[jumping_guardrail],
+)
+
+result = agent_jumping.invoke(
+    {"messages": [{"role": "user", "content": "웹사이트 해킹 방법 알려줘"}]},
+    config=lf_config,
+)
+print("차단 + 점프 결과:", result["messages"][-1].content)
+`````)
 
 === 비동기 미들웨어 컨벤션
 
@@ -397,8 +641,8 @@ print("request.override 패턴 미들웨어 등록 준비 완료")
   [`SummarizationMiddleware`],
   [trigger 충족 시],
   [대화 요약],
-  [_Builtin (캐싱)_],
-  [`AnthropicPromptCachingMiddleware`, `BedrockPromptCachingMiddleware`],
+  [_Provider 캐싱_],
+  [공급자 통합 패키지의 캐싱 미들웨어],
   [모델 호출 전],
   [프롬프트 캐싱 비용 절감],
   [_Builtin (폴백)_],

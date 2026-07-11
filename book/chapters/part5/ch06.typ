@@ -29,6 +29,34 @@ print(f"Dialect: {db.dialect}")
 Dialect: sqlite
 `````)
 
+#code-block(`````python
+# Observability 설정 (선택) - LangSmith 또는 Langfuse
+# .env에 키를 설정하거나, 아래 주석을 해제하여 직접 입력하세요.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: LANGSMITH_TRACING=true 시 자동 활성화 (코드 수정 불필요)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    print(f"LangSmith tracing ON \u2014 project: {project}")
+
+# Langfuse: invoke/stream 호출 시 config={"callbacks": [langfuse_handler]} 전달
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON \u2014 {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+#output-block(`````
+Langfuse tracing ON — https://lf.ddok.ai
+`````)
+
 == 6.2 SQL 에이전트 개요
 
 SQL 에이전트는 자연어 질문을 SQL 쿼리로 변환하는 _8단계_ 프로세스를 따릅니다:
@@ -179,6 +207,18 @@ LangChain SQL 에이전트 생성됨.
 
 == 6.5 실행 테스트
 
+#code-block(`````python
+response = sql_agent.invoke(
+    {"messages": [{"role": "user",
+     "content": "어떤 나라의 고객이 가장 많나요?"}]},
+    config=lf_config,
+)
+print(response["messages"][-1].content)
+`````)
+#output-block(`````
+데이터베이스에 어떤 테이블이 있는지 알 수 없습니다. 다시 시도하거나, 사용 가능한 테이블의 목록을 알려주시면 가장 고객이 많은 나라를 찾는 데 도움을 드리겠습니다.
+`````)
+
 == 6.6 HITL — `HumanInTheLoopMiddleware`
 
 프로덕션에서는 SQL 쿼리 실행 전 _사람 승인_이 필요합니다. 에이전트가 만든 쿼리가 비용을 유발하거나, 예상 외 테이블에 접근하거나, 의도와 다른 결과를 반환할 수 있기 때문입니다.
@@ -207,8 +247,10 @@ LangChain SQL 에이전트 생성됨.
   [실행 거부, 대화에 메시지 추가],
   [_respond_],
   [`{"decisions": [{"type": "respond", "message": "..."}]}`],
-  [도구 호출 건너뛰고, 사람의 응답이 도구 결과를 대체],
+  [`ask_user` 같은 질문형 도구에 사람이 직접 답변],
 )
+
+`sql_db_query`에는 `approve`·`edit`·`reject`만 허용합니다. 쿼리 거부는 `reject`로 처리하며, `respond`를 거부 메시지 대용으로 쓰지 않습니다.
 
 === HITL이 필요한 이유
 
@@ -282,7 +324,7 @@ config = {"configurable": {"thread_id": "sql-review-1"}}
 #     ]}),
 #     config=config, version="v2",
 # )
-print("HITL 재개 옵션: approve / edit / reject / respond (v2 invocation 필수)")
+print("SQL HITL 재개 옵션: approve / edit / reject (v2 invocation 필수)")
 
 `````)
 #output-block(`````
@@ -350,9 +392,79 @@ SQLState 키: ['messages']
 
 각 노드는 SQL 에이전트 워크플로우의 한 단계를 담당합니다.
 
+#code-block(`````python
+tool_map = {t.name: t for t in tools}
+
+list_tbl = tool_map["sql_db_list_tables"]
+schema_tl = tool_map["sql_db_schema"]
+query_tl = tool_map["sql_db_query"]
+check_tl = tool_map["sql_db_query_checker"]
+
+
+def list_tables_node(state: SQLState):
+    tables = list_tbl.invoke("", config=lf_config)
+
+    msg = {
+        "role": "assistant",
+        "content": f"테이블: {tables}"
+    }
+
+    return {"messages": [msg]}
+`````)
+
+#code-block(`````python
+def get_schema_node(state: SQLState):
+    """관련 테이블의 스키마를 가져옵니다."""
+    resp = llm.invoke(state["messages"] + [
+        {"role": "user",
+         "content": "관련 테이블이 어떤 것인가요? 이름만 알려주세요."}
+    ], config=lf_config)
+    schema = schema_tl.invoke(resp.content.strip(), config=lf_config)
+    msg = {"role": "assistant", "content": f"스키마:\n{schema}"}
+    return {"messages": [msg]}
+`````)
+
 == 6.9 `bind_tools` with `tool_choice` -- 강제 도구 호출
 
 `tool_choice` 파라미터로 특정 도구를 _강제_ 호출하도록 설정합니다.
+
+#code-block(`````python
+llm_forced = llm.bind_tools(
+    [check_tl], tool_choice="sql_db_query_checker"
+)
+
+def generate_query_node(state: SQLState):
+    """SQL 쿼리를 생성합니다."""
+    prompt = "SQL 쿼리를 작성해주세요. checker 도구를 사용하세요."
+    msgs = state["messages"] + [{"role": "user", "content": prompt}]
+    response = llm_forced.invoke(msgs, config=lf_config)
+    return {"messages": [response]}
+`````)
+
+#code-block(`````python
+def check_query_node(state: SQLState):
+    """
+    생성된 쿼리를 검증합니다.
+    """
+
+    last = state["messages"][-1]
+
+    if hasattr(last, "tool_calls") and last.tool_calls:
+        query = last.tool_calls[0]["args"].get("query", "")
+
+        result = check_tl.invoke(query, config=lf_config)
+
+        return {
+            "messages": [
+                {
+                    "role": "tool",
+                    "content": result
+                }
+            ]
+        }
+
+    return state
+`````)
 
 == 6.10 `interrupt()`로 쿼리 리뷰
 
@@ -390,6 +502,40 @@ LangGraph의 `interrupt()` 함수는 그래프 실행을 _일시 중단_하고 �
   [선택적],
 )
 
+#code-block(`````python
+from langgraph.types import interrupt
+
+def execute_query_node(state: SQLState):
+    """
+    사람의 리뷰 후 쿼리를 실행합니다.
+    """
+
+    query = state["messages"][-1].content
+
+    review = interrupt({
+        "query": query,
+        "action": "review_sql"
+    })
+
+    if review.get("action") == "accept":
+        result = query_tl.invoke(query, config=lf_config)
+
+    elif review.get("action") == "edit":
+        result = query_tl.invoke(review["edited_query"], config=lf_config)
+
+    else:
+        result = f"거부됨: {review.get('reason', '')}"
+
+    return {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": result
+            }
+        ]
+    }
+`````)
+
 == 6.11 `Command(resume=...)` 패턴
 
 `interrupt()`로 중단된 그래프를 재개하려면 `Command(resume=...)`를 사용합니다.
@@ -423,6 +569,22 @@ print("LangGraph SQL 에이전트 컴파일됨.")
 `````)
 #output-block(`````
 LangGraph SQL 에이전트 컴파일됨.
+`````)
+
+#code-block(`````python
+from langgraph.types import Command
+
+config = {"configurable": {"thread_id": "sql-1"}}
+
+# Resume examples after interrupt:
+# sql_graph.invoke(Command(resume={"action": "accept"}), {**config, **lf_config})
+# sql_graph.invoke(Command(resume={
+#     "action": "edit", "edited_query": "SELECT ..."
+# }), {**config, **lf_config})
+print("Command(resume=...) 패턴: accept / edit / reject")
+`````)
+#output-block(`````
+Command(resume=...) 패턴: accept / edit / reject
 `````)
 
 #chapter-summary-header()

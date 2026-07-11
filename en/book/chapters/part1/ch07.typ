@@ -36,6 +36,33 @@ print("✓ Environment ready")
 
 `````)
 
+#code-block(`````python
+# Optional observability setup: LangSmith or Langfuse
+# Set the keys in .env, or uncomment the lines below to enter them manually.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: automatically enabled when LANGSMITH_TRACING=true
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: pass config={"callbacks": [langfuse_handler]} to invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
 == 7.2 Defining the Search Tool
 
 Wrap the Tavily client in a search function.
@@ -102,6 +129,23 @@ print("✓ Research agent created")
 
 `````)
 
+#code-block(`````python
+result = research_agent.invoke(
+    {
+        "messages": [
+            {
+                "role": "user",
+                "content": "Search for what LangGraph is and summarize it in three lines."
+            }
+        ]
+    },
+    config=lf_config,
+)
+
+print(result["messages"][-1].content)
+
+`````)
+
 == 7.4 Observing the Process with Streaming
 
 With `stream(mode="updates")`, you can watch the agent's steps in real time.
@@ -133,6 +177,47 @@ LangGraph provides a flexible streaming system that improves responsiveness by s
 You can access streaming with `stream()` (sync) or `astream()` (async), and you can combine multiple modes at once by passing a list. In the example below, we use `updates` so that each stage of the agent, such as tool calls and the final response, appears as it happens.
 
 
+#code-block(`````python
+for chunk in research_agent.stream(
+    {
+        "messages": [
+            {
+                "role": "user",
+                "content": "Search for the main changes in LangChain v1 and summarize them."
+            }
+        ]
+    },
+    stream_mode="updates",
+    config=lf_config,
+):
+    for node_name, node_data in chunk.items():
+        if not node_data:
+            continue
+
+        msgs = node_data.get("messages", [])
+
+        if hasattr(msgs, "value"):
+            msgs = msgs.value
+
+        if not msgs:
+            continue
+
+        last = msgs[-1]
+
+        if hasattr(last, "tool_calls") and last.tool_calls:
+            for tc in last.tool_calls:
+                print(
+                    f"[Tool Call] {tc['name']}({tc['args'].get('query', '')[:50]})"
+                )
+
+        elif hasattr(last, "content") and last.content and not hasattr(last, "tool_call_id"):
+            content = last.content if isinstance(last.content, str) else str(last.content)
+
+            if content.strip():
+                print(f"\n[Final Response]\n{content}")
+
+`````)
+
 == 7.5 Comparing It with a LangChain Agent
 
 Try the same search tool with a LangChain `create_agent()`.
@@ -146,6 +231,29 @@ LangChain's `create_agent()` builds a simple ReAct agent from a model and a list
 
 If you add the `@tool` decorator, you can convert a function into LangChain's tool interface. The general pattern of passing a system prompt and a list of tools into `create_agent()` is similar to Deep Agents.
 
+
+#code-block(`````python
+from langchain.agents import create_agent
+from langchain.tools import tool
+
+@tool
+def search_web(query: str) -> dict:
+    """Search the web for information."""
+    return tavily.search(query, max_results=3)
+
+lc_agent = create_agent(
+    model=model,
+    tools=[search_web],
+    system_prompt="You are a research assistant. Answer in English.",
+)
+
+result = lc_agent.invoke(
+    {"messages": [{"role": "user", "content": "Search for the main features of LangChain v1 and explain them."}]},
+    config=lf_config,
+)
+print(result["messages"][-1].content)
+
+`````)
 
 == Summary
 
@@ -174,5 +282,4 @@ Technologies used in this mini project:
 )
 
 === Next Steps
-→ Continue to the intermediate tracks. Use _#link("./06_comparison_en.ipynb")[06_comparison_en.ipynb]_ as your roadmap.
-
+→ Continue to the intermediate tracks. Use _#link("./06_comparison.ipynb")[06_comparison.ipynb]_ as your roadmap.

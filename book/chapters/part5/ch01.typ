@@ -21,6 +21,33 @@ load_dotenv()
 model = ChatOpenAI(model="gpt-5.4")
 `````)
 
+#code-block(`````python
+# Observability 설정 (선택) - LangSmith 또는 Langfuse
+# .env에 키를 설정하거나, 아래 주석을 해제하여 직접 입력하세요.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: LANGSMITH_TRACING=true 시 자동 활성화 (코드 수정 불필요)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    print(f"LangSmith tracing ON — project: {project}")
+
+# Langfuse: invoke/stream 호출 시 config={"callbacks": [langfuse_handler]} 전달
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+#output-block(`````
+Langfuse tracing ON — https://lf.ddok.ai
+`````)
+
 == 1.2 미들웨어 아키텍처 개요
 
 에이전트 루프는 _모델 호출 → 도구 선택 → 도구 실행 → 종료 판단_의 반복 사이클입니다. 미들웨어는 이 사이클의 6단계에 훅(hook)을 삽입해 세밀하게 제어합니다.
@@ -206,6 +233,14 @@ agent = create_agent(
     checkpointer=InMemorySaver(),
     middleware=[hitl],
 )
+`````)
+
+#code-block(`````python
+from langgraph.types import Command
+
+# result = agent.invoke(Command(resume="approve"), config=lf_config)
+# result = agent.invoke(Command(resume={"type": "edit", "args": {"to": "new@ex.com"}}), config=lf_config)
+# result = agent.invoke(Command(resume={"type": "reject", "reason": "필요 없음"}), config=lf_config)
 `````)
 
 == 1.5 ModelCallLimitMiddleware & ToolCallLimitMiddleware
@@ -450,15 +485,19 @@ cached_agent = create_agent(
 `````)
 
 #code-block(`````python
-# BedrockPromptCachingMiddleware — Bedrock 호스팅 Claude 동일 캐싱
-from langchain_aws import ChatBedrockConverse
-from langchain_aws.middleware.prompt_caching import BedrockPromptCachingMiddleware
-
-bedrock_agent = create_agent(
-    model=ChatBedrockConverse(model="us.anthropic.claude-sonnet-4-5-20250929-v1:0"),
-    system_prompt="<긴 시스템 프롬프트>",
-    middleware=[BedrockPromptCachingMiddleware(ttl="1h")],
-)
+# Bedrock 예제는 선택 의존성 langchain-aws가 있을 때만 구성합니다.
+try:
+    from langchain_aws import ChatBedrockConverse
+    from langchain_aws.middleware.prompt_caching import BedrockPromptCachingMiddleware
+except ImportError:
+    bedrock_agent = None
+    print("선택 예제 건너뜀: uv add langchain-aws가 필요합니다.")
+else:
+    bedrock_agent = create_agent(
+        model=ChatBedrockConverse(model="us.anthropic.claude-sonnet-4-5-20250929-v1:0"),
+        system_prompt="<긴 시스템 프롬프트>",
+        middleware=[BedrockPromptCachingMiddleware(ttl="1h")],
+    )
 `````)
 
 #code-block(`````python

@@ -25,6 +25,33 @@ model = ChatOpenAI(model="gpt-5.4")
 환경 설정 완료
 `````)
 
+#code-block(`````python
+# Observability 설정 (선택) - LangSmith 또는 Langfuse
+# .env에 키를 설정하거나, 아래 주석을 해제하여 직접 입력하세요.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: LANGSMITH_TRACING=true 시 자동 활성화 (코드 수정 불필요)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    print(f"LangSmith tracing ON — project: {project}")
+
+# Langfuse: invoke/stream 호출 시 config={"callbacks": [langfuse_handler]} 전달
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+#output-block(`````
+Langfuse tracing ON — https://lf.ddok.ai
+`````)
+
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 1. 백엔드란?
 
@@ -97,6 +124,7 @@ except ImportError:
 
 from deepagents.backends.protocol import BackendProtocol
 
+print("stable delete contract:", hasattr(BackendProtocol, "delete"))
 print("모든 백엔드 클래스를 성공적으로 임포트했습니다!")
 `````)
 #output-block(`````
@@ -115,6 +143,27 @@ _에페메럴(ephemeral)_: 대화 스레드 내에서만 파일이 유지됩니�
 - 스레드가 종료되면 파일 소멸
 - 외부 스토리지 없이 바로 사용 가능
 
+#code-block(`````python
+from deepagents import create_deep_agent
+
+# StateBackend는 기본값이므로 별도 설정 불필요
+agent = create_deep_agent(
+    model=model,
+    system_prompt="당신은 파일 관리를 도와주는 어시스턴트입니다. 한국어로 응답하세요.",
+)
+
+# 에이전트에게 파일 작성 요청
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "'안녕하세요.txt' 파일을 만들고 '안녕하세요!'라고 적어 주세요. 그런 다음 파일 목록을 확인해 주세요."}]},
+    config=lf_config,
+)
+
+print(result["messages"][-1].content)
+`````)
+#output-block(`````
+'안녕하세요.txt' 파일을 생성하고 "안녕하세요!"라고 작성했습니다. 그러나 현재 디렉터리(루트)에 파일이나 폴더 목록이 표시되지 않습니다. 파일 시스템에 접근이 제한되어 있을 수 있습니다. 원하는 추가 작업이 있으시면 말씀해 주세요.
+`````)
+
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 3. FilesystemBackend — 로컬 디스크 접근
 
@@ -127,6 +176,41 @@ _에페메럴(ephemeral)_: 대화 스레드 내에서만 파일이 유지됩니�
 
 === ⚠️ 보안 주의사항
 #tip-box[`FilesystemBackend`는 에이전트에게 실제 파일 시스템 접근 권한을 부여합니다. 에이전트가 `.env`, API 키, 자격 증명 같은 모든 접근 가능한 파일을 읽을 수 있고, 네트워크 도구와 결합되면 _SSRF 공격으로 시크릿이 유출될 수 있습니다_. 프로덕션 환경에서는 `virtual_mode=True`를 사용하거나 _샌드박스 백엔드_를 사용하세요.]
+
+#code-block(`````python
+import tempfile
+from pathlib import Path
+
+# 안전한 테스트를 위해 임시 디렉토리 사용
+with tempfile.TemporaryDirectory() as tmp_dir:
+    # 테스트 파일 생성
+    Path(tmp_dir, "sample.txt").write_text("이것은 샘플 파일입니다.", encoding="utf-8")
+    Path(tmp_dir, "data.csv").write_text("이름,나이\n홍길동,30\n김영희,25", encoding="utf-8")
+
+    # FilesystemBackend를 사용하는 에이전트
+    fs_agent = create_deep_agent(
+        model=model,
+        system_prompt="당신은 파일 분석 어시스턴트입니다. 한국어로 응답하세요.",
+        backend=FilesystemBackend(
+            root_dir=tmp_dir,
+            virtual_mode=True,  # 경로 제한 활성화
+        ),
+    )
+
+    # 에이전트에게 파일 목록과 내용 확인 요청
+    result = fs_agent.invoke(
+        {"messages": [{"role": "user", "content": "현재 디렉토리의 파일 목록을 보여주고, 각 파일의 내용을 읽어서 요약해 주세요."}]},
+        config=lf_config,
+)
+
+    print(result["messages"][-1].content)
+`````)
+#output-block(`````
+현재 디렉토리에는 두 개의 파일이 있습니다:
+1. data.csv: 이름과 나이 정보가 담긴 CSV 파일입니다.
+   - 예시 데이터: 홍길동(30), 김영희(25)
+2. sample.txt: "이것은 샘플 파일입니다."라는 문장만 들어있는 간단한 텍스트 파일입니다.
+`````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 4. StoreBackend — 크로스 스레드 영속 저장소
@@ -177,6 +261,41 @@ print("StoreBackend 에이전트가 생성되었습니다!")
 StoreBackend 에이전트가 생성되었습니다!
 `````)
 
+#code-block(`````python
+# 스레드 1에서 메모 저장
+config_thread1 = {"configurable": {"thread_id": "thread-1"}}
+
+result1 = store_agent.invoke(
+    {"messages": [{"role": "user", "content": "'memo.txt' 파일을 만들고, '중요: 회의는 매주 월요일 오전 10시'라고 적어 주세요."}]},
+    config={**config_thread1, **lf_config},
+)
+print("[스레드 1] 결과:")
+print(result1["messages"][-1].content)
+print()
+`````)
+#output-block(`````
+[스레드 1] 결과:
+'memo.txt' 파일이 생성되었고, "중요: 회의는 매주 월요일 오전 10시"라는 내용이 저장되었습니다.
+`````)
+
+#code-block(`````python
+# 스레드 2에서 같은 메모 읽기 — 크로스 스레드 접근 확인
+config_thread2 = {"configurable": {"thread_id": "thread-2"}}
+
+result2 = store_agent.invoke(
+    {"messages": [{"role": "user", "content": "'memo.txt' 파일이 있나요? 있으면 내용을 읽어 주세요."}]},
+    config={**config_thread2, **lf_config},
+)
+print("[스레드 2] 결과:")
+print(result2["messages"][-1].content)
+`````)
+#output-block(`````
+[스레드 2] 결과:
+네, 'memo.txt' 파일이 있습니다. 내용은 아래와 같습니다:
+
+중요: 회의는 매주 월요일 오전 10시
+`````)
+
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 5. CompositeBackend — 경로별 라우팅
 
@@ -214,6 +333,31 @@ print("CompositeBackend 에이전트가 생성되었습니다!")
 `````)
 #output-block(`````
 CompositeBackend 에이전트가 생성되었습니다!
+`````)
+
+#code-block(`````python
+# CompositeBackend 테스트 — 영속 vs 에페메럴
+config = {"configurable": {"thread_id": "composite-test"}}
+
+result = composite_agent.invoke(
+    {"messages": [{"role": "user", "content": """
+두 가지 파일을 만들어 주세요:
+1. /memories/preferences.txt — '선호 언어: Python, 에디터: VS Code'
+2. /scratch.txt — '임시 메모: 내일 할 일 정리'
+그리고 두 파일이 모두 잘 생성되었는지 확인해 주세요.
+"""}]},
+    config={**config, **lf_config},
+)
+
+print(result["messages"][-1].content)
+`````)
+#output-block(`````
+두 파일이 성공적으로 생성되었습니다.
+
+1. /memories/preferences.txt 내용: 선호 언어: Python, 에디터: VS Code
+2. /scratch.txt 내용: 임시 메모: 내일 할 일 정리
+
+확인 완료했습니다.
 `````)
 
 #note-box[_참고_: `CompositeBackend`는 라우트 프리픽스를 제거한 후 저장합니다. 예: `/memories/preferences.txt` → 내부적으로 `/preferences.txt`로 저장 하지만 에이전트는 항상 전체 경로(`/memories/preferences.txt`)로 접근합니다.]
@@ -276,17 +420,19 @@ agent = create_deep_agent(
   [`GrepResult`],
   [결과 매치. 오류 시 raise 대신 `GrepResult(error=...)` 반환],
   [`glob(pattern, path="/")`],
-  [`list[FileInfo]`],
-  [글로브 매치, 비어 있으면 `[]`],
+  [`GlobResult`],
+  [글로브 매치, 비어 있으면 `matches=[]`],
 )
 
 #warning-box[_버전 주의_: 이전 메서드명(`ls_info`, `grep_raw`, `glob_info`)은 deprecated. 0.5.2 이후로는 위 표의 이름으로 통일되었습니다.]
+
+#warning-box[_공식 문서 선행 주의_: 안정판 `deepagents==0.6.12`에는 `delete`가 없습니다. 공식 문서의 선택적 `delete(file_path) -> DeleteResult`는 `0.7.0a6` 프리릴리스에서 확인됩니다.]
 
 #code-block(`````python
 # 간단한 커스텀 백엔드 예시: 읽기 전용 딕셔너리 기반
 # deepagents>=0.5.2 BackendProtocol 메서드명 사용
 from deepagents.backends.protocol import (
-    FileInfo, LsResult, ReadResult, WriteResult, EditResult, GrepResult, GrepMatch,
+    FileInfo, LsResult, ReadResult, WriteResult, EditResult, GrepResult, GrepMatch, GlobResult,
 )
 
 
@@ -302,7 +448,7 @@ class ReadOnlyDictBackend:
             for p, c in self._files.items()
             if p.startswith(path)
         ]
-        return LsResult(entries=sorted(entries, key=lambda e: e.path))
+        return LsResult(entries=sorted(entries, key=lambda e: e["path"]))
 
     def read(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
         content = self._files.get(file_path)
@@ -311,7 +457,7 @@ class ReadOnlyDictBackend:
         lines = content.splitlines()
         selected = lines[offset:offset + limit]
         text = "\n".join(f"{i + offset + 1}\t{line}" for i, line in enumerate(selected))
-        return ReadResult(data=text)
+        return ReadResult(file_data={"content": text, "encoding": "utf-8"})
 
     def write(self, file_path: str, content: str) -> WriteResult:
         return WriteResult(error="읽기 전용 백엔드입니다.")
@@ -320,21 +466,21 @@ class ReadOnlyDictBackend:
         return EditResult(error="읽기 전용 백엔드입니다.")
 
     def grep(self, pattern: str, path: str | None = None, glob: str | None = None) -> GrepResult:
-        import re
         matches = []
         for fpath, content in self._files.items():
             for i, line in enumerate(content.splitlines(), 1):
-                if re.search(pattern, line):
+                if pattern in line:
                     matches.append(GrepMatch(path=fpath, line=i, text=line))
         return GrepResult(matches=matches)
 
-    def glob(self, pattern: str, path: str = "/") -> list[FileInfo]:
+    def glob(self, pattern: str, path: str = "/") -> GlobResult:
         import fnmatch
-        return [
+        matches = [
             FileInfo(path=p, is_dir=False, size=len(c), modified_at=None)
             for p, c in self._files.items()
             if fnmatch.fnmatch(p, pattern)
         ]
+        return GlobResult(matches=matches)
 
 
 # 사용 예시
@@ -412,7 +558,7 @@ print("검색 결과:", custom_backend.grep("설치"))
   text(weight: "bold")[`BackendProtocol` 메서드],
   text(weight: "bold")[반환 타입],
   [`ls`, `read`, `write`, `edit`, `grep`, `glob`],
-  [`LsResult`, `ReadResult`, `WriteResult`, `EditResult`, `GrepResult`, `list[FileInfo]`],
+  [`LsResult`, `ReadResult`, `WriteResult`, `EditResult`, `GrepResult`, `GlobResult`],
 )
 
-`deepagents>=0.5.2` 기준 사전 생성된 백엔드 인스턴스가 권장됩니다.
+안정판 `deepagents==0.6.12`에는 `delete`가 없고, 공식 문서의 선택적 삭제 계약은 0.7 프리릴리스 기능입니다.

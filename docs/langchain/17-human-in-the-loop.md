@@ -11,7 +11,9 @@ The middleware supports four response mechanisms:
 1. **Approve** - The action is approved as-is and executed without changes
 2. **Edit** - Tool calls execute with modifications made by the reviewer (`{"edited_action": {"name": "...", "args": {...}}}`)
 3. **Reject** - Actions are declined with explanatory feedback added to conversation (via `"message"`)
-4. **Respond** - Tool execution is skipped and the human's message becomes the tool result. Used for "ask user" style tools where the human reply is returned directly to the agent.
+4. **Respond** - Tool execution is skipped and the human's message becomes a successful synthetic tool result. Reserve this for "ask user" style tools where the human is acting as the tool.
+
+Use `reject` when the reviewer denies a side-effecting action such as sending email, writing a file, or executing SQL. Do not use `respond` for denial: the model receives its message as if the tool succeeded.
 
 ## Configuration
 
@@ -28,8 +30,9 @@ from langchain.agents.middleware import HumanInTheLoopMiddleware
 
 middleware = HumanInTheLoopMiddleware(
     interrupt_on={
-        "write_file": True,                                    # all decisions allowed
+        "write_file": {"allowed_decisions": ["approve", "edit", "reject"]},
         "execute_sql": {"allowed_decisions": ["approve", "reject"]},
+        "ask_user": {"allowed_decisions": ["respond"]},
         "read_data": False,                                    # auto-approve
     },
     description_prefix="Tool execution pending approval",
@@ -65,11 +68,13 @@ After an interruption occurs, resume using `Command(resume={"decisions": [...]})
 from langgraph.types import Command
 
 agent.invoke(
-    Command(resume={"decisions": [{"type": "approve"}]}),
+    Command(resume={"decisions": [{"type": "respond", "message": "Blue."}]}),
     config=config,
     version="v2",
 )
 ```
+
+This `respond` example applies to an `ask_user` action. A denied write or query must resume with `{"type": "reject", "message": "..."}` instead.
 
 ## Streaming Support
 

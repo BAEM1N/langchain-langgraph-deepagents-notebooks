@@ -31,6 +31,34 @@ model = ChatOpenAI(
 print("모델 준비 완료:", model.model_name)
 `````)
 
+#code-block(`````python
+# Observability 설정 (선택) - LangSmith 또는 Langfuse
+# .env에 키를 설정하거나, 아래 주석을 해제하여 직접 입력하세요.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: LANGSMITH_TRACING=true 시 자동 활성화 (코드 수정 불필요)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    print(f"LangSmith tracing ON \u2014 project: {project}")
+
+# Langfuse: invoke/stream 호출 시 config={"callbacks": [langfuse_handler]} 전달
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON \u2014 {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+#output-block(`````
+Langfuse tracing ON — https://lf.ddok.ai
+`````)
+
 == 7.2 Human-in-the-Loop 개념
 
 에이전트가 도구를 호출하기 전에 사람의 승인을 요청합니다.
@@ -87,56 +115,78 @@ def delete_file(path: str) -> str:
     """지정된 경로의 파일을 삭제합니다."""
     return f"파일 삭제 완료: {path}"
 
-# 도구별로 허용 가능한 decision 목록을 dict 형식으로 지정합니다.
-# - approve : 그대로 실행
-# - edit    : 인자를 수정해서 실행
-# - reject  : 도구 실행 거부 (사유 전달)
-# - respond : 도구를 실행하지 않고 사람이 직접 응답
+@tool
+def ask_user(question: str) -> str:
+    """계속 진행하는 데 필요한 정보를 사용자에게 묻습니다."""
+    return "응답 없음"
+
 hitl = HumanInTheLoopMiddleware(
     interrupt_on={
-        "send_email":  {"allowed_decisions": ["approve", "edit", "reject", "respond"]},
-        "delete_file": {"allowed_decisions": ["approve", "reject"]},  # 편집 없이 승인/거부만
+        "send_email": {"allowed_decisions": ["approve", "edit", "reject"]},
+        "delete_file": {"allowed_decisions": ["approve", "reject"]},
+        "ask_user": {"allowed_decisions": ["respond"]},
     },
 )
 
 agent = create_agent(
     model=model,
-    tools=[send_email, delete_file],
-    system_prompt="당신은 이메일을 보내고 파일을 관리할 수 있는 어시스턴트입니다.",
+    tools=[send_email, delete_file, ask_user],
+    system_prompt="이메일과 파일 작업은 승인받고, 정보가 부족하면 ask_user를 호출하세요.",
     middleware=[hitl],
     checkpointer=InMemorySaver(),
 )
 
 print("HITL 에이전트 생성 완료")
-print("  -> 도구 호출 시 사람의 승인을 위해 중단됩니다 (approve/edit/reject/respond)")
+print("  -> 부작용 거부는 reject, 사용자 답변 대행은 respond를 사용합니다.")
 `````)
 
 == 7.4 interrupt와 Command(resume=...) 패턴
 
-HITL 에이전트는 2단계로 동작합니다:
+HITL 에이전트는 도구 호출에서 중단되고, 같은 `thread_id`의 `Command(resume={"decisions": [...]})`로 재개합니다.
 
-+ _1단계 (invoke)_: 에이전트가 도구 호출을 제안하면 자동으로 _중단(interrupt)_됩니다.
-+ _2단계 (Command(resume=...))_: 사람이 결정을 내려 실행을 _재개_합니다.
-
-=== 4가지 decision 형식
-
-`Command(resume={"decisions": [...]})` 의 각 decision 은 dict 입니다:
+=== 결정의 의미
 
 #code-block(`````python
-# 1) 승인 — 도구를 그대로 실행
+# 승인 — 원래 인자로 실행
 Command(resume={"decisions": [{"type": "approve"}]})
 
-# 2) 편집 — 도구 인자를 수정해서 실행
+# 편집 — 수정한 인자로 실행
 Command(resume={"decisions": [{"type": "edit", "args": {"to": "alice@example.com"}}]})
 
-# 3) 거부 — 도구를 실행하지 않고 사유를 모델에 전달
+# 거부 — 이메일·파일·SQL 같은 부작용 실행을 막음
 Command(resume={"decisions": [{"type": "reject", "message": "수신자가 잘못되었습니다."}]})
 
-# 4) 응답 — 도구를 실행하지 않고 사람이 직접 답변을 작성 (모델에는 ToolMessage 로 전달)
-Command(resume={"decisions": [{"type": "respond", "message": "이미 어제 보냈으니 건너뛰세요."}]})
+# 응답 — ask_user 질문에 사람이 도구 역할로 답함
+Command(resume={"decisions": [{"type": "respond", "message": "파란색입니다."}]})
 `````)
 
-decision 리스트의 순서는 `result.interrupts[0].value["action_requests"]` 의 순서와 일치해야 합니다.
+`respond` 메시지는 성공한 ToolMessage로 처리됩니다. 부작용을 거부할 때 사용하면 안 됩니다. decision 순서는 `action_requests` 순서와 같아야 합니다.
+
+#code-block(`````python
+from langgraph.types import Command
+
+config = {"configurable": {"thread_id": "hitl-demo"}}
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "bob@example.com에게 제목 '인사', 본문 '안녕하세요 Bob!' 이메일을 보내주세요"}]},
+    config={**config, **lf_config},
+    version="v2",
+)
+print("interrupts:", result.interrupts)
+print("마지막 메시지:", result.value["messages"][-1])
+
+try:
+    result = agent.invoke(
+        Command(resume={"decisions": [{"type": "approve"}]}),
+        config={**config, **lf_config},
+        version="v2",
+    )
+    print("승인 후 결과:", result.value["messages"][-1].content)
+except Exception as e:
+    print(f"HITL 데모는 인터랙티브 환경에서 실행하세요. ({e})")
+
+# 부작용 거부: {"type": "reject", "message": "수신자가 잘못되었습니다."}
+# ask_user 답변: {"type": "respond", "message": "파란색입니다."}
+`````)
 
 == 7.5 ToolRuntime -- 도구에서 런타임 정보에 접근합니다
 
@@ -146,6 +196,46 @@ decision 리스트의 순서는 `result.interrupts[0].value["action_requests"]` 
 - 도구 함수에 `runtime: ToolRuntime[T]` 파라미터를 추가합니다.
 - `T`는 개발자가 정의하는 컨텍스트 데이터 클래스입니다.
 - 에이전트 생성 시 `context_schema=T`를 지정하고, 호출 시 `context=T(...)`로 값을 전달합니다.
+
+#code-block(`````python
+from langchain.tools import ToolRuntime
+from dataclasses import dataclass
+
+@dataclass
+class UserContext:
+    """사용자 정보가 포함된 런타임 컨텍스트."""
+    user_id: str
+    role: str
+
+@tool
+def get_user_profile(runtime: ToolRuntime[UserContext]) -> str:
+    """현재 사용자의 프로필 정보를 가져옵니다."""
+    ctx = runtime.context
+    return f"사용자 ID: {ctx.user_id}, 역할: {ctx.role}"
+
+@tool
+def check_permissions(action: str, runtime: ToolRuntime[UserContext]) -> str:
+    """현재 사용자가 작업에 대한 권한이 있는지 확인합니다."""
+    ctx = runtime.context
+    if ctx.role == "admin":
+        return f"사용자 {ctx.user_id}은(는) '{action}' 권한이 있습니다"
+    return f"사용자 {ctx.user_id}은(는) '{action}' 권한이 없습니다"
+
+agent_ctx = create_agent(
+    model=model,
+    tools=[get_user_profile, check_permissions],
+    system_prompt="사용자 프로필과 권한을 확인할 수 있습니다.",
+    context_schema=UserContext,
+)
+
+result = agent_ctx.invoke(
+    {"messages": [{"role": "user", "content": "제가 누구이고 파일을 삭제할 수 있나요?"}]},
+    context=UserContext(user_id="user-42", role="admin"),
+    config=lf_config,
+    version="v2",
+)
+print("결과:", result.value["messages"][-1].content)
+`````)
 
 === runtime.execution_info — 실행 메타데이터에 접근
 
@@ -169,6 +259,35 @@ decision 리스트의 순서는 `result.interrupts[0].value["action_requests"]` 
 
 도구나 미들웨어 안에서 분기·로깅에 쓰입니다.
 
+#code-block(`````python
+# runtime.execution_info — thread_id / run_id / attempt 활용
+@tool
+def whoami_exec(runtime: ToolRuntime[UserContext]) -> str:
+    """현재 실행의 thread/run/attempt 정보를 반환합니다."""
+    info = runtime.execution_info
+    return (
+        f"thread_id={info.thread_id} | "
+        f"run_id={info.run_id} | "
+        f"attempt={info.attempt}"
+    )
+
+agent_exec = create_agent(
+    model=model,
+    tools=[whoami_exec],
+    system_prompt="실행 정보를 조회할 수 있습니다.",
+    context_schema=UserContext,
+    checkpointer=InMemorySaver(),
+)
+
+result = agent_exec.invoke(
+    {"messages": [{"role": "user", "content": "현재 실행 메타데이터를 알려주세요."}]},
+    context=UserContext(user_id="user-42", role="admin"),
+    config={"configurable": {"thread_id": "exec-info-demo"}, **lf_config},
+    version="v2",
+)
+print(result.value["messages"][-1].content)
+`````)
+
 === runtime.server_info — 호스트 서버에서 주입되는 메타데이터
 
 LangGraph Platform / Server 환경에서 실행될 때 `runtime.server_info` 가 채워집니다.
@@ -191,6 +310,37 @@ LangGraph Platform / Server 환경에서 실행될 때 `runtime.server_info` 가
 
 로컬에서 실행하면 `None` 또는 빈 객체가 됩니다. 멀티 테넌트 배포에서 권한 분리·로깅에 활용합니다.
 
+#code-block(`````python
+# runtime.server_info — 배포 환경 메타데이터 (로컬에서는 빈/None 일 수 있음)
+@tool
+def whoami_server(runtime: ToolRuntime[UserContext]) -> str:
+    """호스트 서버 정보를 반환합니다 (LangGraph Platform 환경)."""
+    info = runtime.server_info
+    if info is None:
+        return "로컬 실행 — server_info 가 비어 있습니다."
+    return (
+        f"assistant_id={getattr(info, 'assistant_id', None)} | "
+        f"graph_id={getattr(info, 'graph_id', None)} | "
+        f"user={getattr(info, 'user', None)}"
+    )
+
+agent_server = create_agent(
+    model=model,
+    tools=[whoami_server],
+    system_prompt="배포 서버 정보를 조회할 수 있습니다.",
+    context_schema=UserContext,
+    checkpointer=InMemorySaver(),
+)
+
+result = agent_server.invoke(
+    {"messages": [{"role": "user", "content": "어느 서버에서 실행 중인가요?"}]},
+    context=UserContext(user_id="user-42", role="admin"),
+    config={"configurable": {"thread_id": "server-info-demo"}, **lf_config},
+    version="v2",
+)
+print(result.value["messages"][-1].content)
+`````)
+
 == 7.6 컨텍스트 엔지니어링 -- 동적으로 프롬프트와 도구를 제어합니다
 
 컨텍스트 엔지니어링은 에이전트에게 전달되는 _프롬프트_, _도구_, _메시지 히스토리_를 동적으로 조작하는 기법입니다.
@@ -201,6 +351,39 @@ LangGraph Platform / Server 환경에서 실행될 때 `runtime.server_info` 가
 - 긴 대화 히스토리 요약 및 정리
 
 `dynamic_prompt` 미들웨어를 쓰면 매 요청마다 프롬프트를 커스터마이즈할 수 있습니다.
+
+#code-block(`````python
+from langchain.agents.middleware import dynamic_prompt
+
+@tool
+def basic_search(query: str) -> str:
+    """기본 웹 검색을 수행합니다."""
+    return f"'{query}'에 대한 기본 검색 결과"
+
+@tool
+def advanced_analytics(query: str) -> str:
+    """고급 데이터 분석을 수행합니다."""
+    return f"'{query}'에 대한 분석 보고서"
+
+# 사용자 역할에 따라 다른 프롬프트와 도구 제공
+@dynamic_prompt
+def role_based_prompt(request):
+    """컨텍스트에 기반하여 프롬프트를 커스터마이즈합니다."""
+    return "당신은 전문 어시스턴트입니다. 사용자의 질문에 효율적으로 답변하세요."
+
+agent_ctx_eng = create_agent(
+    model=model,
+    tools=[basic_search, advanced_analytics],
+    middleware=[role_based_prompt],
+)
+
+result = agent_ctx_eng.invoke(
+    {"messages": [{"role": "user", "content": "머신러닝 트렌드를 검색해 주세요"}]},
+    config=lf_config,
+    version="v2",
+)
+print("컨텍스트 엔지니어링 결과:", result.value["messages"][-1].content[:200])
+`````)
 
 == 7.7 MCP (Model Context Protocol) 연동 개요
 
@@ -214,6 +397,17 @@ _MCP_는 도구 서버를 표준 프로토콜로 연결하는 방식입니다.
 === LangChain v1에서의 MCP 지원
 - `mcp.client.stdio.stdio_client()`와 `ClientSession`으로 로컬 MCP 서버에 연결할 수 있습니다.
 - `langchain-mcp-adapters`의 `load_mcp_tools(session)`로 MCP 세션의 도구를 LangChain Tool로 변환할 수 있습니다.
+
+#code-block(`````python
+from pathlib import Path; import asyncio, tempfile, sys
+from mcp import ClientSession, StdioServerParameters; from mcp.client.stdio import stdio_client; from langchain_mcp_adapters.tools import load_mcp_tools
+server_path = Path(tempfile.gettempdir()) / "lc_mcp_echo_server.py"
+server_path.write_text('from mcp.server.fastmcp import FastMCP\nmcp = FastMCP("echo")\n@mcp.tool()\ndef echo(text: str) -> str:\n    return f"Echo: {text}"\nif __name__ == "__main__":\n    mcp.run(transport="stdio")')
+async def run_mcp_agent():
+    params = StdioServerParameters(command=sys.executable, args=[str(server_path)])
+    async with stdio_client(params) as (read, write), ClientSession(read, write) as session: await session.initialize(); tools = await load_mcp_tools(session); agent = create_agent(model=model, tools=tools, system_prompt="MCP 도구를 사용할 수 있습니다."); return await agent.ainvoke({"messages": [{"role": "user", "content": "echo 도구로 '안녕하세요'를 반복해 주세요."}]}, config=lf_config, version="v2")
+result = asyncio.run(run_mcp_agent()); print(result.value["messages"][-1].content)
+`````)
 
 #chapter-summary-header()
 

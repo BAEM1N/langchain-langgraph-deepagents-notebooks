@@ -35,6 +35,33 @@ model = ChatOpenAI(
 print("Model ready:", model.model_name)
 `````)
 
+#code-block(`````python
+# Optional observability setup: LangSmith or Langfuse
+# Set the keys in .env, or uncomment the lines below to enter them manually.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: automatically enabled when LANGSMITH_TRACING=true
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", os.environ.get("LANGSMITH_API_KEY", ""))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGSMITH_PROJECT", "default"))
+    print(f"LangSmith tracing ON — project: {os.environ['LANGCHAIN_PROJECT']}")
+
+# Langfuse: pass config={"callbacks": [langfuse_handler]} to invoke/stream
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+
 == 8.2 Comparing Multi-Agent Patterns
 
 The table below compares five multi-agent patterns. Each one fits a different situation, so you should choose based on your project requirements.
@@ -77,66 +104,6 @@ The table below compares five multi-agent patterns. Each one fits a different si
 - _Skills_ let one agent switch roles
 - _Router_ classifies input and delegates it to the right specialist
 
-=== Pattern Selection Matrix (requirement → pattern)
-
-While the table above lists pattern _properties_, the matrix below starts from _requirements_ and points to the best-fit pattern.
-
-#table(
-  columns: 2,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Requirement],
-  text(weight: "bold")[Best-fit pattern],
-  [Single simple task (one-shot)],
-  [_Skills_ (or single agent)],
-  [Repeat the same task],
-  [_Subagents_],
-  [Parallel work across multiple domains],
-  [_Router_ (classify then fan-out)],
-  [Very large context (long docs/history)],
-  [_Subagents_ (token savings via isolation)],
-  [Team-based — agents collaborate],
-  [_Handoffs_ (shared state)],
-  [Direct conversation with a role],
-  [_Handoffs_ + supervisor],
-)
-
-=== Approximate cost per pattern
-
-Rough call count and cumulative tokens for the same task implemented in different patterns. The numbers vary by scenario and model, but they illustrate the _relative_ cost.
-
-#table(
-  columns: 4,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Scenario],
-  text(weight: "bold")[Pattern],
-  text(weight: "bold")[Calls],
-  text(weight: "bold")[Cumulative tokens],
-  [One-Shot (single domain)],
-  [_Subagents_],
-  [4–5 calls],
-  [~9K],
-  [Repeat (same task)],
-  [_Skills_],
-  [2–3 calls],
-  [~15K],
-  [Multi-Domain (collaboration)],
-  [_Handoffs_],
-  [3–7+ calls],
-  [~14K+],
-  [Multi-Domain (classify then fan-out)],
-  [_Router_],
-  [\~1 classify + N domains],
-  [~9K],
-)
-
-#tip-box[_Router vs Supervisor_ — the terms are often used interchangeably but they differ in implementation. A _Router_ is a _simple functional_ node that classifies input once and _fans out_ to the right agent (or `Send`). A _Supervisor_ is itself an agent that decides _conversation-aware_ which subagent to invoke on every turn, retaining message history. Use Router for one-shot classification; pick Supervisor for multi-turn collaboration.]
-
 
 == 8.3 The Subagent Pattern
 
@@ -148,86 +115,45 @@ In this pattern, the main agent (supervisor) calls specialized subagents _as too
 - The internal state of each subagent is isolated from the main agent
 - Parallel execution is possible, which can improve performance
 
-=== Subagent-local history (`checkpointer=True`)
 
-`create_agent(..., checkpointer=True)` lets a subagent keep its _own_ message history on a separate thread. The main agent still only sees the final result, but the subagent can run multi-turn reasoning internally and resume from the same `thread_id`.
+#code-block(`````python
+from langchain.agents import create_agent
+from langchain.tools import tool
 
-=== Exposing N subagents via a single dispatch tool
+# Define specialist tools
+@tool
+def math_expert(question: str) -> str:
+    """Solves math problems. Use it when mathematical calculation is needed."""
+    # Actual calculation logic would go here
+    return f"Math answer: '{question}'was calculated."
 
-With many subagents, registering each one as its own tool bloats the parent tool list. The alternative is a single `dispatch(agent_name, query)` tool combined with one of three discovery strategies.
+@tool
+def code_expert(question: str) -> str:
+    """Answers programming questions. Use it for coding-related tasks."""
+    return f"Code answer: '{question}'solution for the request"
 
-#table(
-  columns: 3,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[Strategy],
-  text(weight: "bold")[Recommended scale],
-  text(weight: "bold")[Notes],
-  [Enumerate in system prompt],
-  [< 10],
-  [LLM picks the name from text. Simple, flexible],
-  [`Literal["a", "b", ...]` type constraint],
-  [10–30],
-  [Schema-level validation, rejects unknown names],
-  [Tool-based discovery (`list_agents`)],
-  [> 30],
-  [Dynamic registration; separate tools to search/filter],
+@tool
+def general_search(query: str) -> str:
+    """Searches for general information."""
+    return f"'{query}'search result for"
+
+# Supervisor agent
+supervisor = create_agent(
+    model=model,
+    tools=[math_expert, code_expert, general_search],
+    system_prompt="""You are a supervisor agent that delegates tasks to specialists:
+- Use math_expert for math questions
+- Use code_expert for programming questions
+- Use general_search for everything else
+Always delegate to the most appropriate specialist.""",
 )
 
-=== Injecting parent state with `ToolRuntime[None, CustomState]`
-
-When a subagent tool needs to read part of the parent state, take a `ToolRuntime[None, CustomState]` argument.
-
-#code-block(`````python
-from langchain.tools import tool, ToolRuntime
-
-@tool
-def research_subagent(query: str, runtime: ToolRuntime[None, ResearchState]) -> str:
-    """Research subagent that reads user_id from the parent state."""
-    user_id = runtime.state["user_id"]
-    # ... call subagent ...
-    return result
+result = supervisor.invoke(
+    {"messages": [{"role": "user", "content": "What is the factorial of 10?"}]},
+    config=lf_config,
+)
+print("Subagent result:", result["messages"][-1].content)
 `````)
-
-=== Async work: start / status / get_result three-tool pattern
-
-Long-running subagents are safer when split into _three_ tools instead of a single blocking call.
-
-#code-block(`````python
-@tool
-def start_research_job(query: str) -> str:
-    """Start the research job and return a job_id."""
-    ...
-
-@tool
-def check_job_status(job_id: str) -> str:
-    """Return the job status: running / done / failed."""
-    ...
-
-@tool
-def get_job_result(job_id: str) -> str:
-    """Return the result of a completed job."""
-    ...
-`````)
-
-=== Updating parent state with `Command`
-
-A subagent tool can return `Command(update={...})` instead of a plain string to update the parent graph's state directly — useful when you need to update custom fields, not just messages.
-
-#code-block(`````python
-from langgraph.types import Command
-
-@tool
-def research_with_state_update(query: str) -> Command:
-    result = run_research(query)
-    return Command(update={
-        "research_results": result,
-        "messages": [{"role": "tool", "content": result}],
-    })
-`````)
-
 
 == 8.4 The Handoff Pattern
 
@@ -239,64 +165,66 @@ This pattern uses `Command(goto=...)` to _transfer state_ between agents.
 - A `StateGraph` defines the flow between agents
 - This fits multi-hop scenarios such as customer-service transfers
 
-=== Single agent + middleware handoff (preferred)
-
-The LangChain v1 docs recommend a _single agent + `@wrap_model_call` middleware_ over multiple subgraphs as the primary handoff pattern. The middleware overrides the system prompt and tool set dynamically based on routing state, so persona switches happen inside one agent node.
 
 #code-block(`````python
-from langchain.agents.middleware import wrap_model_call, ModelRequest
-from langchain.agents import create_agent
-
-@wrap_model_call
-def role_router(request: ModelRequest, handler):
-    state = request.state
-    role = state.get("active_role", "general")
-
-    if role == "billing":
-        return handler(request.override(
-            system_prompt="You are a billing specialist.",
-            tools=[refund_tool, charge_tool],
-        ))
-    elif role == "tech":
-        return handler(request.override(
-            system_prompt="You are a technical support agent.",
-            tools=[diagnose_tool, escalate_tool],
-        ))
-    return handler(request)
-
-agent = create_agent(model="gpt-5.4", tools=ALL_TOOLS, middleware=[role_router])
-`````)
-
-The multi-subgraph handoff still has its place when the flow between departments must be explicit, but the middleware approach is much lighter for plain persona switches.
-
-=== Handoff tool with `ToolRuntime` and `tool_call_id` echo-back
-
-A handoff tool should accept `ToolRuntime[None, SupportState]` so it can access parent state and the current `tool_call_id`. When switching with `Command(goto=..., update={"messages": [...]})`, you must include a `ToolMessage` that matches the originating tool call — otherwise OpenAI's tool-call contract breaks.
-
-#code-block(`````python
-from langchain.tools import tool, ToolRuntime
-from langchain_core.messages import ToolMessage
 from langgraph.types import Command
+from langgraph.graph import StateGraph, START, END, MessagesState
+
+# Tools for handoffs
+@tool
+def transfer_to_sales() -> Command:
+    """Transfers the conversation to the sales team."""
+    return Command(goto="sales_agent", graph=Command.PARENT)
 
 @tool
-def transfer_to_billing(reason: str, runtime: ToolRuntime[None, SupportState]) -> Command:
-    """Transfer the conversation to the billing team."""
-    return Command(
-        goto="billing_agent",
-        update={
-            "messages": [
-                ToolMessage(
-                    content=f"Transferred to billing: {reason}",
-                    tool_call_id=runtime.tool_call_id,
-                ),
-            ],
-            "active_role": "billing",
-        },
-    )
+def transfer_to_support() -> Command:
+    """Transfers the conversation to technical support."""
+    return Command(goto="support_agent", graph=Command.PARENT)
+
+@tool
+def resolve_query(answer: str) -> str:
+    """Provides the final answer to the user."""
+    return answer
+
+# Router agent
+router_agent = create_agent(
+    model=model,
+    tools=[transfer_to_sales, transfer_to_support],
+    system_prompt="You are a front desk agent. Route the customer to the appropriate team.",
+    name="router",
+)
+
+# Sales agent
+sales_agent = create_agent(
+    model=model,
+    tools=[resolve_query],
+    system_prompt="You are a sales agent. Help with pricing and product questions.",
+    name="sales_agent",
+)
+
+# Support agent
+support_agent = create_agent(
+    model=model,
+    tools=[resolve_query],
+    system_prompt="You are a technical support agent. Help with technical issues.",
+    name="support_agent",
+)
+
+# Build the handoff graph
+builder = StateGraph(MessagesState)
+builder.add_node(router_agent)
+builder.add_node(sales_agent)
+builder.add_node(support_agent)
+builder.add_edge(START, "router")
+
+graph = builder.compile()
+
+result = graph.invoke(
+    {"messages": [{"role": "user", "content": "I want to know the price of the enterprise plan."}]},
+    config=lf_config,
+)
+print("Handoff result:", result["messages"][-1].content)
 `````)
-
-#tip-box[_Exactly two messages should flow on a subgraph handoff_ — (1) the `AIMessage(tool_calls=[...])` that triggered the handoff and (2) its matching `ToolMessage`. Inserting anything else between them causes the OpenAI provider to reject the next call because the tool-call pair no longer matches.]
-
 
 == 8.5 The Skill Pattern
 
@@ -309,6 +237,35 @@ A single agent dynamically _loads a specialized prompt_ depending on the task.
 - One agent can handle many tasks without managing multiple separate agents
 
 
+#code-block(`````python
+# Skill definitions
+skills = {
+    "translator": "You are an expert translator. Translate text accurately between languages.",
+    "summarizer": "You are an expert summarizer. Summarize long text concisely.",
+    "coder": "You are an expert programmer. Write clean and efficient code.",
+}
+
+@tool
+def load_skill(skill_name: str) -> str:
+    """Loads a specialist skill. Available skills: translator, summarizer, coder."""
+    if skill_name in skills:
+        return f"Skill loaded: {skill_name}. Instructions: {skills[skill_name]}"
+    return f"Unknown skill: {skill_name}. Available: {list(skills.keys())}"
+
+skill_agent = create_agent(
+    model=model,
+    tools=[load_skill],
+    system_prompt="""You are a versatile assistant with access to specialist skills.
+Load the appropriate skill before handling the user request.""",
+)
+
+result = skill_agent.invoke(
+    {"messages": [{"role": "user", "content": "Please translate \"Hello World\" into Korean and Japanese."}]},
+    config=lf_config,
+)
+print("Skill pattern result:", result["messages"][-1].content)
+`````)
+
 == 8.6 The Router Pattern
 
 A classifier _routes_ input to the most appropriate agent.
@@ -319,24 +276,36 @@ A classifier _routes_ input to the most appropriate agent.
 - This is useful in multi-domain systems
 - Routing logic can be rule-based or model-based
 
-=== Multi-domain fan-out with `Send`
-
-When a query spans _several_ domains at once, use `Send` for parallel fan-out instead of routing to a single agent. If a routing function passed to `add_conditional_edges` returns a `list[Send]`, the LangGraph runtime executes those nodes _in parallel_.
 
 #code-block(`````python
-from langgraph.types import Command, Send
+from langgraph.types import Send
 
-def route_to_agents(state: RouterState) -> list[Send]:
-    """Fan out to every category produced by the classifier."""
-    return [
-        Send(c["agent"], {"query": c["query"]})
-        for c in state["classifications"]
-    ]
+@tool
+def classify_query(query: str) -> str:
+    """Classifies a query into math, code, or general."""
+    query_lower = query.lower()
+    if any(w in query_lower for w in ["calculate", "math", "sum", "multiply"]):
+        return "math"
+    elif any(w in query_lower for w in ["code", "program", "function", "python"]):
+        return "code"
+    return "general"
 
-graph.add_conditional_edges("classifier", route_to_agents,
-                             ["billing_agent", "tech_agent", "general_agent"])
+# Router: hand off to the specialist agent based on the classification
+router = create_agent(
+    model=model,
+    tools=[classify_query, math_expert, code_expert, general_search],
+    system_prompt="""You are a routing agent. First classify the query, then hand it to the appropriate specialist:
+- Math query -> use math_expert
+- Code query -> use code_expert
+- General query -> use general_search""",
+)
+
+result = router.invoke(
+    {"messages": [{"role": "user", "content": "Please write a Python function that sorts a list."}]},
+    config=lf_config,
+)
+print("Router result:", result["messages"][-1].content)
 `````)
-
 
 == 8.7 Choosing a Pattern
 
@@ -402,4 +371,3 @@ Which multi-agent pattern should you choose? Use the guide below.
 
 === Next Steps
 → _#link("./09_custom_workflow_and_rag.ipynb")[09_custom_workflow_and_rag.ipynb]_: Learn about custom workflows and RAG.
-
