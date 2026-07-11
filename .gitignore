@@ -39,6 +39,7 @@ en/book/out/
 
 # Local scratch workspace
 local/
+.worktrees/
 README.md.backup-*
 
 # Notebook runtime caches (downloaded PDFs, extracted images, vector demos)
