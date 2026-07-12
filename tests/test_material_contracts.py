@@ -27,8 +27,8 @@ def cell_source(relative: str, cell_id: str) -> str:
 
 
 class MaterialContractTests(unittest.TestCase):
-    def test_project_defaults_to_python_312(self) -> None:
-        self.assertEqual("3.12", (ROOT / ".python-version").read_text(encoding="utf-8").strip())
+    def test_project_defaults_to_python_314(self) -> None:
+        self.assertEqual("3.14", (ROOT / ".python-version").read_text(encoding="utf-8").strip())
 
     def test_typst_generation_removes_trailing_whitespace(self) -> None:
         notebook = {
@@ -104,6 +104,12 @@ class MaterialContractTests(unittest.TestCase):
             source = cell_source(relative, "cell-7")
             self.assertIn('"send_email": {"allowed_decisions": ["approve", "edit", "reject"]}', source)
             self.assertIn('"ask_user": {"allowed_decisions": ["respond"]}', source)
+
+    def test_directly_invoked_subagent_uses_concrete_checkpointer(self) -> None:
+        source = cell_source("02_langchain/08_multi_agent.ipynb", "cell-10")
+        self.assertIn("checkpointer=math_memory", source)
+        self.assertIn("math_memory = InMemorySaver()", source)
+        self.assertNotIn("checkpointer=True", source)
 
     def test_stable_backend_contract_is_documented_without_inventing_delete(self) -> None:
         self.assertFalse(hasattr(BackendProtocol, "delete"))

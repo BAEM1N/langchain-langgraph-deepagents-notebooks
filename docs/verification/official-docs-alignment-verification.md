@@ -28,23 +28,31 @@
 
 ## 실제 노트북 실행 상태
 
-- Python 3.12 전용 커널에서 `01`~`06` 한·영 150개 노트북을 Restart & Run All 방식으로 실제 실행했다. 원본은 수정하지 않고 gitignored 로컬 복사본만 사용했다.
+- 전체 의존성을 갱신한 Python 3.14.3 전용 커널에서 `01`~`06` 한·영 150개 노트북을 Restart & Run All 방식으로 다시 실행했다. 원본은 수정하지 않고 gitignored 로컬 복사본만 사용했다.
 - 저장소의 직접 OpenAI 키는 401이었지만, 내부 OpenAI 호환 LiteLLM 게이트웨이와 전용 키는 인증 및 채팅 호출에 성공했다. 게이트웨이에 `gpt-5.4`가 없어 실행 복사본에서만 채팅 모델을 `gpt-5.5`, 임베딩 모델을 `bge-m3`로 치환했다.
-- 1차 `gpt-5.5` 실행 결과는 150개 중 129개 통과, 21개 실패다. 실패는 Tavily 플랜 사용량 초과 6개, 구조화 출력 셀의 180초 타임아웃 2개, 장시간 연속 호출 뒤 `gpt-5.5` 게이트웨이 자격 증명 쿨다운(HTTP 429) 13개로 분류됐다.
-- 타임아웃 2개와 429 항목 13개는 같은 게이트웨이의 `qwen3.6-35b`로 개별 재실행해 모두 통과했다. 구조화 출력 한·영 노트북도 각각 144.7초, 52.0초에 완료되어 LangChain 코드 예외가 아니라 모델별 지연 차이로 판정했다.
-- 실제 Tavily 호출이 막힌 6개는 검색 반환값만 결정적 로컬 스텁으로 바꾼 실행 복사본에서 재검증했다. 에이전트 호출, 스트리밍, 서브에이전트, 후속 셀은 실제 게이트웨이 LLM을 사용했고 한·영 6개 모두 끝까지 통과했다.
+- 1차 `gpt-5.5` 실행 결과는 150개 중 141개 통과, 9개 실패다. 실패는 Tavily 플랜 사용량 초과 6개, 구조화 출력 셀의 360초 타임아웃 2개, `checkpointer=True`를 루트 그래프로 직접 호출한 교육 코드 1개다. 이전 실행과 달리 전수 실행 중 게이트웨이 쿨다운은 발생하지 않았다.
+- 루트 그래프 checkpointer 예제는 `InMemorySaver()`를 명시하도록 수정했다. 수정본 `02_langchain/08_multi_agent.ipynb`는 `gpt-5.5`로 71.9초에 전 셀 통과했다. `checkpointer=True`는 checkpointer가 있는 부모에 내장된 서브그래프의 continuations 모드로만 설명하도록 노트북·문서·핸드북 원본을 함께 갱신했다.
+- 구조화 출력 한·영 노트북은 같은 게이트웨이의 `qwen3.6-35b`로 재실행해 각각 26.1초, 144.1초에 통과했다. LangChain/Pydantic 스키마 오류가 아니라 현재 `gpt-5.5` 프록시 경로의 ToolStrategy 지연으로 판정했다.
+- 실제 Tavily 호출이 막힌 6개는 검색 반환값만 결정적 로컬 스텁으로 바꾼 실행 복사본에서 재검증했다. 에이전트 호출, 스트리밍, 서브에이전트, 후속 셀은 실제 게이트웨이 LLM을 사용했고 한·영 6개 모두 끝까지 통과했다. 마지막 영어 subagents 재실행은 `gpt-5.5` 쿨다운 후 `qwen3.6-35b`로 완료했다.
 - 종합하면 150개 노트북 경로 모두에서 셀 흐름을 끝까지 검증했다. 144개는 외부 LLM 호출까지 원형대로 통과했고, 6개는 Tavily 검색 호출만 스텁으로 격리했다. 현재까지 노트북 소스의 Python 예외로 판정된 실패는 없다.
 - 전체 실행 중 10개 셀은 실행 복사본에서 의도적으로 제외했다. 패키지 설치 매직 2개, 비-OpenAI 공급자 호출 6개, 로컬 서버 실행 2개다. 이 셀들은 정적 구문·import 감사는 통과했지만 외부 공급자 또는 상주 프로세스의 실제 동작까지 보증하지 않는다.
-- 실행 산출물과 오류 원문은 gitignored `local/notebook_execution_01_06_gpt54/`에 보관했다. 프록시 키와 기타 비밀값은 리포트와 산출물에 기록하지 않았다.
+- 실행 산출물과 오류 원문은 gitignored `local/notebook_execution_01_06_py314_latest/` 및 재실행 디렉터리에 보관했다. 프록시 키와 기타 비밀값은 리포트와 산출물에 기록하지 않았다.
+
+## 의존성 갱신
+
+- `uv lock --upgrade`로 lockfile의 전체 호환 버전을 다시 해석하고 Python 3.14 환경을 `uv sync --all-extras`로 동기화했다.
+- 직접 의존성 기준 주요 버전은 `langchain 1.3.13`, `langchain-core 1.4.9`, `langgraph 1.2.9`, `deepagents 0.6.12`, `langchain-openai 1.3.5`, `langsmith 0.10.2`, `langfuse 4.14.0`, `pydantic 2.13.4`다.
+- `langchain-community`는 비-semver 패키지이므로 `>=0.4.2,<0.5.0` 범위를 유지했다. 나머지 직접 의존성의 최소 버전도 이번 lockfile 검증 기준으로 올렸다.
 
 ## 환경 경고 판정
 
-- Python 3.14 경고는 `langchain-core 1.4.9`의 Pydantic 호환 유틸이 `pydantic.v1`을 import할 때 발생했다. Pydantic v1 호환 계층이 Python 3.14 이상을 지원하지 않는다는 의미이며, 노트북 코드 오류는 아니다. 프로젝트 기본 버전을 `.python-version`의 3.12로 고정했고, Python 3.12에서 10개 테스트가 해당 경고 없이 통과했다. 기존 3.14 가상환경은 Python 3.12로 다시 만들어야 고정값이 반영된다.
+- 기존 Python 3.14 경고는 `pydantic 2.12.5`에 포함된 v1 호환 namespace가 Python 3.14를 지원하지 않아 발생했다. `pydantic 2.13.4`와 `pydantic-core 2.46.4`로 올린 뒤 Python 3.14.3에서 `langchain-core`, FAISS, SQLDatabase import와 11개 회귀 테스트가 해당 경고 없이 통과했다. 프로젝트 기본 버전은 `.python-version`의 3.14로 복구했다.
 - `langchain-community 0.4.2` 경고는 패키지 최상위 `__init__.py`가 import될 때마다 직접 출력하는 sunset 안내다. 이번 감사에서는 FAISS와 SQLDatabase 심볼 검증이 해당 import를 유발했다. 실행 실패는 아니지만 패키지가 더 이상 적극 유지보수되지 않으므로 해당 구성요소의 독립 통합 패키지 또는 직접 구현 전환을 추적해야 한다.
+- `ipykernel 7.3.0`은 로컬 테스트 커널이 암호화되지 않은 TCP transport를 사용한다는 경고를 출력했다. 현재 커널은 loopback 개발 실행에만 사용하며, 원격/공유 호스트에서는 CurveZMQ 키 또는 IPC transport를 사용해야 한다.
 
 ## 산출물
 
-- 한국어 핸드북: `book/agent-handbook.pdf` (628쪽)
+- 한국어 핸드북: `book/agent-handbook.pdf` (629쪽)
 - 영어 핸드북: `en/book/agent-handbook-en.pdf` (614쪽)
 - 로컬 검사: `scripts/check_official_docs_alignment.py`
 - 셀 감사: `scripts/audit_notebook_cells.py`

@@ -236,17 +236,18 @@ print("서브에이전트 결과:", result["messages"][-1].content)
 서브에이전트 결과: 10의 팩토리얼 값은 3,628,800입니다.
 `````)
 
-=== 8.3.1 Subagent-local history — `checkpointer=True`
+=== 8.3.1 Subagent-local history — 명시적 checkpointer
 
-서브에이전트를 `create_agent`로 만들 때 `checkpointer=True`를 전달하면, 그 서브에이전트만의 _로컬 대화 히스토리_가 유지됩니다. 메인 에이전트는 서브에이전트의 내부 multi-turn 추론을 보지 않고 최종 결과만 받습니다.
+도구 함수 안에서 서브에이전트를 직접 `invoke()`하면서 호출 간 _로컬 대화 히스토리_를 유지하려면 `InMemorySaver()` 같은 실제 checkpointer를 전달합니다. `checkpointer=True`는 체크포인트가 설정된 부모 그래프에 내장된 서브그래프가 부모 saver를 상속하는 continuations 모드이며, 루트 그래프로 직접 호출하면 사용할 수 없습니다.
 
 - 메인 컨텍스트 보존 (서브의 reasoning step 미노출)
 - 서브 내부에서는 도구 호출-결과-재추론 multi-turn 유지
-- 부모와 자식이 별도 checkpointer를 가질 수 있음 (격리)
+- 직접 호출하는 부모와 자식이 별도 checkpointer를 가질 수 있음 (격리)
 
 #code-block(`````python
 from langchain.agents import create_agent
 from langchain.tools import tool
+from langgraph.checkpoint.memory import InMemorySaver
 
 # 서브에이전트의 도구 — 여러 번 호출되며 multi-turn 추론을 유발
 @tool
@@ -257,12 +258,13 @@ def calc_step(expr: str) -> str:
     except Exception as e:
         return f"err: {e}"
 
-# checkpointer=True → 서브에이전트만의 로컬 히스토리
+# 직접 invoke하는 서브에이전트에는 실제 saver를 전달
+math_memory = InMemorySaver()
 math_subagent = create_agent(
     model=model,
     tools=[calc_step],
     system_prompt="복잡한 계산은 calc_step을 여러 번 나눠서 호출하세요. 마지막에 최종 답만 한 줄로 반환합니다.",
-    checkpointer=True,  # subagent-local history
+    checkpointer=math_memory,  # subagent-local history
     name="math_subagent",
 )
 

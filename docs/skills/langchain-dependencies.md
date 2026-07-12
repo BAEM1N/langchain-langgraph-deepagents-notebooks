@@ -11,16 +11,17 @@
 
 | 패키지 | 용도 | 최소 버전 | 비고 |
 |--------|------|-----------|------|
-| `langchain` | 코어 프레임워크 | 1.3.9+ | event streaming v3, ~~0.3 레거시~~ |
-| `langchain-core` | 기본 추상화 | 1.4.7+ | 직접 명시 권장 |
-| `langgraph` | 워크플로/에이전트 런타임 | 1.2.5+ | fault tolerance, `stream_events(..., version="v3")` |
-| `deepagents` | 고수준 에이전트 하네스 | 0.6.10+ | async subagents, interpreters, rubrics, event streaming v3 |
-| `langsmith` | 관측성 | 0.8.16+ | tracing/eval |
-| `langchain-openai` | OpenAI 통합 | 최신 | 전용 패키지 권장 |
+| `langchain` | 코어 프레임워크 | 1.3.13+ | event streaming v3, ~~0.3 레거시~~ |
+| `langchain-core` | 기본 추상화 | 1.4.9+ | 직접 명시 권장 |
+| `langgraph` | 워크플로/에이전트 런타임 | 1.2.9+ | fault tolerance, `stream_events(..., version="v3")` |
+| `deepagents` | 고수준 에이전트 하네스 | 0.6.12+ | async subagents, interpreters, rubrics, event streaming v3 |
+| `langsmith` | 관측성 | 0.10.2+ | tracing/eval |
+| `langchain-openai` | OpenAI 통합 | 1.3.5+ | 전용 패키지 권장 |
 | `langchain-anthropic` | Anthropic 통합 | 최신 | 전용 패키지 권장 |
 | `langchain-google-genai` | Google 통합 | 4.0.0+ | Gemini + Vertex AI 단일 SDK |
 | `langchain-community` | 커뮤니티 통합 | 0.4.2,<0.5 | 보수적 minor 고정 |
-| `pymupdf4llm` | PDF Markdown 추출 | 1.27.2.3+ | 슬라이드/논문 PDF 이미지·표 추출 |
+| `pydantic` | 데이터 검증 | 2.13.4+,<3 | Python 3.14의 `pydantic.v1` 호환 지원 |
+| `pymupdf4llm` | PDF Markdown 추출 | 1.28.0+ | 슬라이드/논문 PDF 이미지·표 추출 |
 
 ### 선택적 샌드박스 (deepagents 0.4+)
 
@@ -50,12 +51,12 @@ uv add langchain-core langchain langgraph deepagents langchain-openai langchain-
 uv add pymupdf4llm
 
 # pip
-pip install "langchain-core>=1.4.7" "langchain>=1.3.9" "langgraph>=1.2.5" "deepagents>=0.6.10" "pymupdf4llm>=1.27.2.3"
+pip install "langchain-core>=1.4.9" "langchain>=1.3.13" "langgraph>=1.2.9" "deepagents>=0.6.12" "pydantic>=2.13.4,<3" "pymupdf4llm>=1.28.0"
 ```
 
 ## 버전 관리 원칙
 
-1. **LangChain 1.3.9+ / LangGraph 1.2.5+ / DeepAgents 0.6.10+ 사용** — 최신 스트리밍·fault tolerance·interpreter·rubric 예제 기준
+1. **LangChain 1.3.13+ / LangGraph 1.2.9+ / DeepAgents 0.6.12+ 사용** — 최신 스트리밍·fault tolerance·interpreter·rubric 예제 기준
 2. **전용 통합 패키지 우선** — `langchain-openai` > `langchain-community`의 OpenAI
 3. **langchain-community는 보수적 고정** — 빈번한 변경 가능성
 4. **langchain-core 직접 명시 권장** — monorepo/교육 환경에서 버전 경계를 명확히 함

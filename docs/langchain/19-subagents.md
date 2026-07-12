@@ -53,20 +53,23 @@ This keeps the supervisor responsive while subagents work independently.
 
 ## State Management
 
-Subagents support two checkpointing modes:
+Subagents support inherited persistence when embedded in a parent graph and explicit persistence when invoked directly:
 
 - **Inherited (default)**: Each invocation runs in a fresh state, sharing the parent's checkpointer transparently. Supports interrupts and is safe for parallel execution.
-- **Persistent (`checkpointer=True`)**: The subagent maintains its own conversation history across multiple calls. Use when a subagent needs to remember prior turns independently of the supervisor.
+- **Continuations (`checkpointer=True`)**: An embedded subgraph continues state across calls on the same parent thread. The parent graph must supply a checkpointer.
+- **Direct invocation (`InMemorySaver()` or a database saver)**: A subagent invoked as a root graph from inside a tool gets its own concrete saver and thread history.
 
 ```python
+from langgraph.checkpoint.memory import InMemorySaver
+
 subagent = create_agent(
     model="anthropic:claude-sonnet-4-6",
     tools=[...],
-    checkpointer=True,   # opt in to subagent-local history
+    checkpointer=InMemorySaver(),
 )
 ```
 
-Note: `get_state` on subgraphs will not return nested agent state due to static discovery; inspect state from node functions during interrupts instead.
+Do not invoke a graph configured with `checkpointer=True` as a root graph; that sentinel only inherits a parent saver. `get_state` on dynamically called subgraphs will not return nested agent state due to static discovery; inspect state from node functions during interrupts instead.
 
 ## Tool Patterns
 

@@ -79,16 +79,17 @@ lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
 
 | 패키지 | 버전 | 용도 |
 |--------|------|------|
-| `deepagents` | >=0.4.4 | Deep Agents SDK |
-| `langchain` | >=1.2 | LangChain 프레임워크 |
-| `langgraph` | >=1.0 | LangGraph 오케스트레이션 |
-| `langchain-openai` | latest | OpenAI 통합 |
-| `langchain-community` | latest | 커뮤니티 통합 |
-| `tavily-python` | latest | 웹 검색 도구 |
-| `langfuse` | >=2.0 | Observability (선택) |
-| `langsmith` | >=0.3 | Observability (선택) |
+| `deepagents` | >=0.6.12 | Deep Agents SDK |
+| `langchain` | >=1.3.13 | LangChain 프레임워크 |
+| `langgraph` | >=1.2.9 | LangGraph 오케스트레이션 |
+| `langchain-openai` | >=1.3.5 | OpenAI 통합 |
+| `langchain-community` | >=0.4.2,<0.5.0 | 커뮤니티 통합(보수적 고정) |
+| `tavily-python` | >=0.7.26 | 웹 검색 도구 |
+| `pydantic` | >=2.13.4,<3 | Python 3.14 호환 데이터 검증 |
+| `langfuse` | >=4.14.0 | Observability (선택) |
+| `langsmith` | >=0.10.2 | Observability (선택) |
 
-**Python**: >=3.12 | **패키지 관리**: uv
+**Python**: >=3.12 (기본 3.14) | **패키지 관리**: uv
 
 ## Skills 참조
 

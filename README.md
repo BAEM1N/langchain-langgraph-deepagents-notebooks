@@ -74,6 +74,8 @@ uv sync
 cp .env.example .env
 ```
 
+기본 개발 런타임은 `.python-version`의 Python 3.14입니다. 프로젝트 자체는 Python 3.12 이상을 지원하며, Python 3.14에서는 `pydantic>=2.13.4`를 사용해 `pydantic.v1` 호환 경고를 방지합니다.
+
 `.env`에 최소한 다음 값을 설정합니다.
 
 ```dotenv
@@ -256,7 +258,7 @@ UV_NO_SYNC=1 uv run python local/notebook_execution_01_07_gpt41/run_notebooks.py
 
 | 항목 | 기준 |
 |---|---|
-| Python | `>=3.12` |
+| Python | `>=3.12` (기본 개발 환경 `3.14`) |
 | Package manager | `uv` |
 | Core frameworks | LangChain v1, LangGraph v1, Deep Agents SDK |
 | Model integration | `langchain-openai` 중심, `08_integration`에서 provider 확장 |

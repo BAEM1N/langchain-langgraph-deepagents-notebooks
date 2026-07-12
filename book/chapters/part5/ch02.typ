@@ -6,7 +6,7 @@
 #chapter(2, "멀티에이전트: Subagents", subtitle: "감독자 패턴")
 
 == 학습 목표
-#learning-objectives([감독자 → 서브에이전트 → 도구의 3계층 아키텍처를 설계한다], [서브에이전트를 `@tool`로 래핑하거나 Deep Agents의 `SubAgentMiddleware`로 일괄 등록한다], [서브에이전트 상태 관리(상속 vs `checkpointer=True`), HITL, `ToolRuntime[None, CustomState]` 컨텍스트 주입을 익힌다], [디스패치 도구 노출 3가지(시스템 프롬프트 열거 / `Literal` 제약 / 도구 기반 발견)와 비동기 5-tool 패턴(start/check/update/cancel/list)을 구분해 적용한다])
+#learning-objectives([감독자 → 서브에이전트 → 도구의 3계층 아키텍처를 설계한다], [서브에이전트를 `@tool`로 래핑하거나 Deep Agents의 `SubAgentMiddleware`로 일괄 등록한다], [서브에이전트 상태 관리(상속 vs 명시적 saver/continuations), HITL, `ToolRuntime[None, CustomState]` 컨텍스트 주입을 익힌다], [디스패치 도구 노출 3가지(시스템 프롬프트 열거 / `Literal` 제약 / 도구 기반 발견)와 비동기 5-tool 패턴(start/check/update/cancel/list)을 구분해 적용한다])
 
 == 2.1 환경 설정
 
@@ -19,6 +19,33 @@ from langchain_openai import ChatOpenAI
 load_dotenv()
 
 model = ChatOpenAI(model="gpt-5.4")
+`````)
+
+#code-block(`````python
+# Observability 설정 (선택) - LangSmith 또는 Langfuse
+# .env에 키를 설정하거나, 아래 주석을 해제하여 직접 입력하세요.
+# os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+# os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+# os.environ["LANGFUSE_HOST"] = "https://lf.ddok.ai"
+import os
+
+# LangSmith: LANGSMITH_TRACING=true 시 자동 활성화 (코드 수정 불필요)
+if os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    print(f"LangSmith tracing ON — project: {project}")
+
+# Langfuse: invoke/stream 호출 시 config={"callbacks": [langfuse_handler]} 전달
+langfuse_handler = None
+if os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse.langchain import CallbackHandler
+    langfuse_handler = CallbackHandler()
+    print(f"Langfuse tracing ON — {os.environ.get('LANGFUSE_HOST', '')}")
+# Langfuse config: pass to invoke/stream/batch calls
+lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
+`````)
+#output-block(`````
+Langfuse tracing ON — https://lf.ddok.ai
 `````)
 
 == 2.2 Subagents 아키텍처 개요
@@ -117,7 +144,7 @@ def search_emails(query: str, limit: int = 10) -> str:
 
 === 상태 관리 모드
 
-서브에이전트는 두 가지 체크포인트 모드를 지원합니다.
+서브에이전트의 호출 방식에 따라 checkpointer를 선택합니다.
 
 #table(
   columns: 3,
@@ -130,23 +157,28 @@ def search_emails(query: str, limit: int = 10) -> str:
   text(weight: "bold")[동작],
   [_상속(Inherited)_ — 기본],
   [`checkpointer` 미지정],
-  [매 호출이 깨끗한 상태로 시작. 부모 체크포인터를 투명하게 공유. 인터럽트·병렬 실행에 안전],
-  [_영구(Persistent)_],
+  [내장 서브그래프가 부모 checkpointer를 공유. 호출별 격리, 인터럽트·병렬 실행에 안전],
+  [_Continuations_],
   [`checkpointer=True`],
-  [서브에이전트가 호출 간 자체 대화 히스토리를 유지. 이전 턴을 부모와 독립적으로 기억해야 할 때],
+  [checkpointer가 있는 부모에 내장된 서브그래프가 같은 thread에서 호출 간 상태를 이어감],
+  [_직접 호출 영구 상태_],
+  [`InMemorySaver()` 등 실제 saver],
+  [도구 함수 안에서 루트 그래프로 직접 `invoke()`할 때 독립 히스토리를 유지],
 )
 
 #code-block(`````python
+from langgraph.checkpoint.memory import InMemorySaver
+
 calendar_agent_persistent = create_agent(
     model="claude-sonnet-4-6",
     tools=[create_calendar_event, read_calendar_events],
     system_prompt="당신은 캘린더 어시스턴트입니다.",
     name="calendar_agent",
-    checkpointer=True,   # 호출 간 자체 히스토리 유지
+    checkpointer=InMemorySaver(),
 )
 `````)
 
-#tip-box[서브그래프의 `get_state`는 nested agent state 를 반환하지 않습니다(정적 발견 한계). 인터럽트 중에는 노드 함수에서 상태를 확인하세요.]
+#tip-box[`checkpointer=True`인 그래프를 루트로 직접 호출하면 안 됩니다. 서브그래프의 `get_state`는 도구 함수 같은 동적 호출 경로에서 nested state를 반환하지 않으므로, 인터럽트 중에는 노드 함수에서 상태를 확인하세요.]
 
 #code-block(`````python
 from langchain.agents import create_agent
@@ -179,6 +211,28 @@ email_agent = create_agent(
 
 _입출력 전략 선택_: 쿼리만 전달(간단)할 수도 있고, 전체 컨텍스트를 전달(정교)할 수도 있습니다. 결과 반환 시에도 최종 결과만 반환하거나 전체 히스토리를 반환하는 선택지가 있습니다.
 
+#code-block(`````python
+@tool("schedule_event", description="캘린더 이벤트 예약")
+def call_calendar(query: str) -> str:
+    """캘린더 작업을 캘린더 에이전트에 위임합니다."""
+    result = calendar_agent.invoke(
+        {"messages": [{"role": "user", "content": query}]},
+        config=lf_config,
+)
+    return result["messages"][-1].content
+`````)
+
+#code-block(`````python
+@tool("manage_email", description="이메일 전송, 읽기, 검색")
+def call_email(query: str) -> str:
+    """이메일 작업을 이메일 에이전트에 위임합니다."""
+    result = email_agent.invoke(
+        {"messages": [{"role": "user", "content": query}]},
+        config=lf_config,
+)
+    return result["messages"][-1].content
+`````)
+
 == 2.6 감독자 에이전트 조립
 
 감독자는 래핑된 서브에이전트 도구들을 `tools`에 전달받아 생성됩니다. 감독자의 시스템 프롬프트에는 작업 분해(task decomposition) 및 위임(delegation) 지침을 포함합니다.
@@ -206,6 +260,15 @@ User: "내일 2시 Sarah 미팅 잡고 초대 이메일 보내줘"
 Supervisor → call_calendar → create_calendar_event
 Supervisor → call_email → send_email
 Supervisor: "미팅과 초대 이메일 완료"
+`````)
+
+#code-block(`````python
+# response = supervisor.invoke({
+#     "messages": [{"role": "user",
+#         "content": "내일 2시에 Sarah와 미팅 잡고 "
+#                    "초대 이메일 보내줘."}]
+# }, config=lf_config)
+# print(response["messages"][-1].content)
 `````)
 
 == 2.8 HITL (Human-in-the-Loop) 통합
@@ -254,6 +317,13 @@ supervisor_hitl = create_agent(
     middleware=[hitl],
     system_prompt="당신은 개인 비서입니다.",
 )
+`````)
+
+#code-block(`````python
+from langgraph.types import Command
+
+# result = supervisor_hitl.invoke(Command(resume="approve"), config=lf_config)
+# result = supervisor_hitl.invoke(Command(resume={"type": "reject", "reason": "마음이 바뀌었습니다"}), config=lf_config)
 `````)
 
 == 2.9 컨텍스트 주입 — `ToolRuntime[None, CustomState]`
@@ -476,6 +546,19 @@ def list_async_tasks() -> str:
 수동으로 `@tool` 래핑하는 대신, Deep Agents 의 `SubAgentMiddleware` 가 `task` 디스패치 도구와 표준 시스템 프롬프트를 자동 주입합니다. 동기 서브에이전트가 하나라도 있으면 자동 부착되며 `excluded_middleware` 로 제거할 수 없습니다.
 
 #code-block(`````python
+from typing import Literal
+
+AGENT_REGISTRY = {"calendar": calendar_agent, "email": email_agent}
+
+@tool("delegate", description="전문 에이전트에 위임")
+def dispatch(agent_name: Literal["calendar", "email"], query: str) -> str:
+    """지정된 서브에이전트에 작업을 라우팅합니다."""
+    agent = AGENT_REGISTRY[agent_name]
+    result = agent.invoke({"messages": [{"role": "user", "content": query}]}, config=lf_config)
+    return result["messages"][-1].content
+`````)
+
+#code-block(`````python
 supervisor_dispatch = create_agent(
     model="gpt-5.4",
     tools=[dispatch],
@@ -534,7 +617,7 @@ supervisor_dag = create_agent(
   [_Deep Agents_],
   [`SubAgentMiddleware`(`subagents=[{...}]`) — `task` 디스패치 도구 자동 주입],
   [_체크포인트 모드_],
-  [상속(기본) vs `checkpointer=True`(서브에이전트 자체 히스토리)],
+  [상속(기본), 내장 continuations(`True`), 직접 호출용 실제 saver],
   [_격리_],
   [서브에이전트 = 깨끗한 컨텍스트, 감독자만 전체 기억],
   [_HITL_],

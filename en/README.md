@@ -28,6 +28,8 @@ cp .env.example .env      # set at least OPENAI_API_KEY
 uv run jupyter lab
 ```
 
+The default development runtime is Python 3.14 from `.python-version`; the project remains compatible with Python 3.12+. On Python 3.14, `pydantic>=2.13.4` supplies the supported `pydantic.v1` compatibility namespace.
+
 Keys:
 
 | Type | Environment variable | Purpose |
@@ -146,16 +148,17 @@ Recent verification evidence is in [`../docs/verification/2026-06-21-official-do
 
 | Package | Baseline | Purpose |
 |---|---|---|
-| `python` | `>=3.12` | Notebook runtime |
+| `python` | `>=3.12` (default `3.14`) | Notebook runtime |
 | `uv` | lockfile-based | Dependency management |
-| `langchain` | `>=1.3.9` | agents, tools, middleware, streaming |
-| `langchain-core` | `>=1.4.7` | message/tool/model core abstractions |
-| `langgraph` | `>=1.2.5` | state graphs, persistence, fault tolerance |
-| `deepagents` | `>=0.6.10` | Deep Agents SDK, backends, subagents, skills |
+| `langchain` | `>=1.3.13` | agents, tools, middleware, streaming |
+| `langchain-core` | `>=1.4.9` | message/tool/model core abstractions |
+| `langgraph` | `>=1.2.9` | state graphs, persistence, fault tolerance |
+| `deepagents` | `>=0.6.12` | Deep Agents SDK, backends, subagents, skills |
 | `agentevals` | `>=0.0.9` | trajectory matching and LLM-as-judge evals |
-| `langsmith` | lockfile | tracing, datasets, experiments, prompt hub |
-| `langchain-openai` | `>=1.3.2` | OpenAI model integration |
-| `pymupdf4llm` | `>=1.27.2.3` | multimodal PDF RAG preprocessing |
+| `langsmith` | `>=0.10.2` | tracing, datasets, experiments, prompt hub |
+| `langchain-openai` | `>=1.3.5` | OpenAI model integration |
+| `pydantic` | `>=2.13.4,<3` | Python 3.14-compatible validation and v1 namespace |
+| `pymupdf4llm` | `>=1.28.0` | multimodal PDF RAG preprocessing |
 
 Dependencies are managed through [`../pyproject.toml`](../pyproject.toml) and `uv.lock`.
 
