@@ -27,6 +27,9 @@ def cell_source(relative: str, cell_id: str) -> str:
 
 
 class MaterialContractTests(unittest.TestCase):
+    def test_project_defaults_to_python_312(self) -> None:
+        self.assertEqual("3.12", (ROOT / ".python-version").read_text(encoding="utf-8").strip())
+
     def test_typst_generation_removes_trailing_whitespace(self) -> None:
         notebook = {
             "cells": [

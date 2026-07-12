@@ -26,6 +26,18 @@
 - Deep Agents 버전: 안정 `0.6.12`에는 `BackendProtocol.delete` 없음, 격리 설치한 `0.7.0a6`에는 존재
 - 에이전트 생성: `create_agent()`가 배포 가능한 `CompiledStateGraph` 반환
 
+## 실제 노트북 실행 상태
+
+- Python 3.12 전용 커널과 `gpt-5.4` 실행 복사본으로 `01`~`06` 한·영 150개 노트북을 대상으로 설정했다.
+- 저장소 `.env`의 `OPENAI_API_KEY`로 최소 SDK 인증 요청을 보냈으나 HTTP 401 `AuthenticationError`가 반환됐다.
+- 첫 LLM 호출 노트북 `01_beginner/01_llm_basics.ipynb`도 같은 401에서 중단됐다.
+- 따라서 API 키가 필요한 셀의 실제 실행은 완료로 판정하지 않는다. 유효한 OpenAI 키를 설정한 뒤 전수 실행을 재개해야 한다.
+
+## 환경 경고 판정
+
+- Python 3.14 경고는 `langchain-core`가 하위 호환을 위해 `pydantic.v1`을 import할 때 발생했다. 프로젝트 기본 버전을 `.python-version`의 3.12로 고정했고, Python 3.12에서 10개 테스트가 해당 Pydantic 경고 없이 통과했다.
+- `langchain-community 0.4.2` 경고는 FAISS와 SQLDatabase import 시 패키지 자체가 출력하는 sunset 안내다. 실행 실패는 아니지만 해당 구성요소의 별도 패키지 또는 직접 구현 전환을 추적해야 한다.
+
 ## 산출물
 
 - 한국어 핸드북: `book/agent-handbook.pdf` (628쪽)
@@ -38,4 +50,4 @@
 
 ## 남은 리스크
 
-652개 장문 코드 셀은 기존 스타일 부채다. 이번 검증에서 구문·import·링크 오류는 없지만, 외부 서비스에 연결되는 모든 셀의 실호출 성공까지 보증하지는 않는다.
+652개 장문 코드 셀은 기존 스타일 부채다. 이번 검증에서 구문·import·링크 오류는 없지만, OpenAI 인증 실패로 외부 서비스에 연결되는 셀의 실호출 성공은 아직 보증하지 않는다.
