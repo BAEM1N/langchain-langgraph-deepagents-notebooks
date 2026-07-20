@@ -8,12 +8,19 @@
 
 ## 현재 산출물
 
-| 모듈 | 슬라이드 PDF | 대본 PDF | 기타 |
-|---|---:|---:|---|
-| `01_beginner` | 있음 | 있음 | PPTX, Markdown 대본 있음 |
-| `02_langchain` | 있음 | 있음 | - |
-| `03_langgraph` | 있음 | 있음 | - |
-| `04_deepagents` | 있음 | 있음 | - |
-| `05_advanced` | 있음 | 있음 | - |
+각 모듈 폴더는 다음 4종을 포함합니다.
 
-PPTX는 용량이 커서 전 과정 일괄 Git 일반 커밋에는 포함하지 않습니다. 필요 시 GitHub Release, Git LFS, 또는 Google Drive 배포 링크로 분리합니다.
+- `*.pptx` — 강의장 발표용 PowerPoint
+- `*.pdf` — 슬라이드 PDF
+- `*_대본.md` — 강사용 상세 대본 Markdown
+- `*_대본.pdf` — 강사용 상세 대본 PDF
+
+| 모듈 | PPTX | 슬라이드 PDF | 대본 MD | 대본 PDF |
+|---|---:|---:|---:|---:|
+| `01_beginner` | 있음 | 있음 | 있음 | 있음 |
+| `02_langchain` | 있음 | 있음 | 있음 | 있음 |
+| `03_langgraph` | 있음 | 있음 | 있음 | 있음 |
+| `04_deepagents` | 있음 | 있음 | 있음 | 있음 |
+| `05_advanced` | 있음 | 있음 | 있음 | 있음 |
+
+파일별 슬라이드/페이지 수는 `decks/manifest.csv`를 기준으로 확인합니다.
