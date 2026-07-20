@@ -1,0 +1,6 @@
+track,slide_pdf_pages,script_pdf_pages,has_pptx,has_script_md
+01_beginner,40,5,true,true
+02_langchain,325,67,false,false
+03_langgraph,324,65,false,false
+04_deepagents,226,44,false,false
+05_advanced,279,52,false,false
