@@ -6,7 +6,7 @@
 
 | 파일 | 용도 |
 |---|---|
+| `03_langgraph.pptx` | 강의장 발표용 PowerPoint |
 | `03_langgraph.pdf` | 배포/검토용 슬라이드 PDF |
+| `03_langgraph_대본.md` | 강사용 상세 대본 Markdown |
 | `03_langgraph_대본.pdf` | 강사용 상세 대본 PDF |
-
-PPTX는 용량이 커서 전 과정 일괄 Git 커밋 대상에서 제외할 수 있습니다. 필요하면 GitHub Release, Git LFS, 또는 Google Drive 링크로 분리합니다.
