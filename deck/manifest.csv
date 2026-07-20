@@ -1,0 +1,6 @@
+track,slide_pdf_pages,script_pdf_pages
+01_beginner,40,5
+02_langchain,325,67
+03_langgraph,324,65
+04_deepagents,226,44
+05_advanced,279,52
