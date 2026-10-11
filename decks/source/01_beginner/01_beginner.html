@@ -1,0 +1,512 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI 에이전트 개발</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="template-navy.css" />
+<style>
+.code-body pre{margin:0;font-family:var(--font-mono);font-size:19px;line-height:1.55;color:var(--c-base);white-space:pre;overflow:hidden;}
+.code-tall .code-body pre{font-size:22px;line-height:1.62;}
+.code-body .kw{color:var(--c-kw);} .code-body .fn{color:var(--c-fn);}
+.code-body .str{color:var(--c-str);} .code-body .num{color:var(--c-num);} .code-body .cmt{color:var(--c-cmt);font-style:italic;}
+.code-stack{display:flex;flex-direction:column;gap:26px;flex:1;min-width:0;}
+.code-stack .code-panel{flex:none;}
+.code-stack .code-body{padding:22px 32px;}
+.layers{display:flex;flex-direction:column;gap:18px;margin-top:10px;}
+.layer{display:flex;align-items:center;gap:34px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:30px 38px;}
+.layer .lname{font-size:31px;font-weight:750;color:var(--ink);min-width:240px;display:flex;flex-direction:column;gap:7px;}
+.layer .lname .ltag{font-size:16px;font-weight:500;color:var(--accent);letter-spacing:0.02em;}
+.layer .ldesc{flex:1;font-size:23px;color:var(--sub);line-height:1.45;}
+.layer .lmono{font-family:var(--font-mono);font-size:19px;color:var(--faint);white-space:nowrap;}
+.s-body.center{justify-content:center;}
+.fig-img.has-img{background:#ffffff;border-radius:8px;padding:22px;}
+.fig-img.has-img img{max-width:100%;max-height:100%;object-fit:contain;}
+.diagram-full{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;}
+.diagram-full img{max-width:90%;max-height:600px;object-fit:contain;background:#ffffff;border-radius:10px;padding:26px;}
+.diagram-full .dgm-cap{font-family:var(--font-mono);font-size:18px;color:var(--sub);}
+.div-lab{margin:34px 0 0;font-size:21px;color:var(--faint);}
+.div-lab .mono{font-family:var(--font-mono);color:var(--accent);}
+</style></head><body>
+<deck-stage width="1920" height="1080">
+<section data-speaker-notes="안녕하세요. AI 에이전트 개발 과정에 오신 걸 환영합니다. 이 과정에서는 LangChain, LangGraph, Deep Agents 세 가지로 LLM 에이전트를 처음부터 만들어 봅니다. Python 기초만 있으면 충분해요." class="cover" data-label="표지">
+  <img class="cover-bg dark" src="assets/cover-bg.png" alt="" />
+  <img class="cover-bg light" src="assets/cover-bg-light.png" alt="" />
+  <div class="cover-eyebrow">BEGINNER TRACK</div>
+  <div class="cover-main"><h1>AI 에이전트 개발</h1><div class="tagline">LangChain · LangGraph · Deep Agents 미리보기</div></div>
+  <div class="cover-meta"><div class="row"><span>주식회사 똑똑한청년들 · 배움 에이아이</span></div></div>
+</section>
+<section data-speaker-notes="먼저 큰 그림부터 보겠습니다. 세 프레임워크가 어떻게 한 계열로 이어지는지, 이 과정이 어디로 향하는지 짚고 가겠습니다." class="divider" data-label="섹션 구분">
+  <div class="div-kicker">PART 01</div>
+  <h2 class="div-title">오리엔테이션</h2><p class="div-sub">세 프레임워크가 어떻게 한 계열로 쌓이는지, 이 과정이 어디로 향하는지 먼저 살펴봅니다.</p>
+</section>
+<section data-speaker-notes="헷갈리기 쉬운데, 셋은 경쟁 관계가 아닙니다. 맨 아래 LangChain이 모델과 도구를 잇는 토대이고, 그 위에 LangGraph가 흐름 제어를 얹습니다. Deep Agents는 그 위에 파일, 서브에이전트, 백엔드가 붙은 장기 작업 하네스입니다. 계획 도구는 이제 기본이라고 외우기보다, 필요한 작업에서 TodoListMiddleware로 붙인다고 기억하면 됩니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">01 / 오리엔테이션</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">세 프레임워크는 경쟁이 아니라 한 계열</h2>
+<p class="s-lead">위로 갈수록 더 많은 것이 내장되고, 각 층은 <strong>아래 층을 그대로 사용</strong>합니다</p>
+</header>
+<div class="s-body"><div class="layers"><div class="layer"><div class="lname">Deep Agents<span class="ltag">올인원 하네스</span></div><div class="ldesc">파일·서브에이전트·백엔드를 묶는 장기 작업 하네스입니다. 계획 도구는 필요할 때 TodoListMiddleware로 명시합니다.</div><div class="lmono">create_deep_agent()</div></div><div class="layer"><div class="lname">LangGraph<span class="ltag">오케스트레이션</span></div><div class="ldesc">상태·노드·엣지로 흐름을 직접 설계 — 분기·반복·중단과 재개까지 제어합니다.</div><div class="lmono">StateGraph → compile()</div></div><div class="layer"><div class="lname">LangChain<span class="ltag">인터페이스 레이어 (베이스)</span></div><div class="ldesc">100+ LLM 프로바이더와 도구를 잇는 토대. 위 두 층이 이 인터페이스를 공유합니다.</div><div class="lmono">create_agent()</div></div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>01 / 29</span></footer>
+</section>
+<section data-speaker-notes="진행 순서입니다. LLM 기초로 시작해서 LangChain으로 첫 에이전트를 만들고, 메모리를 붙이고, LangGraph로 흐름을 직접 그려보고, Deep Agents를 거쳐 마지막에 검색·요약 에이전트로 종합합니다. 각 단계마다 노트북을 직접 돌려볼 거예요." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">01 / 오리엔테이션</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">과정 로드맵 — 노트북 하나씩 쌓아 올립니다</h2>
+<p class="s-lead">각 단계는 앞 단계를 이어받고, 마지막에는 직접 만든 에이전트가 손에 남습니다</p>
+</header>
+<div class="s-body center"><div class="flow"><div class="fnode"><h4>LLM</h4><p>메시지·스트리밍</p></div><div class="flink"></div><div class="fnode hl"><h4>AGENT</h4><p>LangChain</p></div><div class="flink"></div><div class="fnode"><h4>GRAPH</h4><p>LangGraph</p></div><div class="flink"></div><div class="fnode"><h4>DEEP</h4><p>올인원</p></div><div class="flink"></div><div class="fnode"><h4>BUILD</h4><p>미니 프로젝트</p></div></div><div class="flow-notes"><div class="fn-note"><div class="fn-k">LLM</div><p>에이전트의 재료인 LLM을 메시지 단위로 다룹니다.</p></div><div class="fn-note"><div class="fn-k">AGENT</div><p>도구를 붙여 스스로 판단하는 에이전트를 만듭니다.</p></div><div class="fn-note"><div class="fn-k">GRAPH</div><p>흐름을 직접 그려 정밀하게 제어합니다.</p></div><div class="fn-note"><div class="fn-k">DEEP</div><p>파일·서브에이전트가 붙은 하네스를 쓰고, 긴 작업에는 계획 미들웨어를 추가합니다.</p></div><div class="fn-note"><div class="fn-k">BUILD</div><p>검색과 요약 리서치 에이전트로 종합합니다.</p></div></div><p class="flow-sum">환경 설정에서 출발해 LLM · LangChain · 메모리 · LangGraph · Deep Agents · 비교를 거쳐 미니 프로젝트로 마무리합니다.</p></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>02 / 29</span></footer>
+</section>
+<section data-speaker-notes="이 과정의 결과물은 분명합니다. 질문을 주면 웹을 검색하고 한국어로 요약해 주는 리서치 에이전트를 마지막에 직접 완성합니다. 개념만 배우고 끝나지 않고, 실제로 도는 에이전트가 손에 남아요." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">01 / 오리엔테이션</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">이 과정에서 직접 만드는 것</h2>
+</header>
+<div class="s-body"><div class="statement"><p class="big">질문을 주면 <em>웹을 검색하고 한국어로 요약</em>하는 리서치 에이전트를, 마지막 장에서 직접 완성합니다.</p><p class="note">입문이지만 개념만 훑고 끝나지 않습니다. 실제로 동작하는 에이전트 한 개가 남습니다. <span class="mono">Deep Agents + Tavily</span></p></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>03 / 29</span></footer>
+</section>
+<section data-speaker-notes="그럼 손부터 풀어보겠습니다. 키를 넣고 모델을 띄워서 첫 응답을 받는 데까지 해볼게요." class="divider" data-label="섹션 구분">
+  <div class="div-kicker">PART 02</div>
+  <h2 class="div-title">환경 설정</h2><p class="div-sub">키를 넣고 모델을 띄워 첫 응답을 받아 봅니다. 여기서 만든 환경을 과정 내내 그대로 재사용합니다.</p><div class="div-lab">실습 · <span class="mono">01_beginner/00_setup.ipynb</span></div>
+</section>
+<section data-speaker-notes="에이전트가 뭔지부터 짚고 가죠. 그냥 LLM은 물으면 한 번 답하고 끝이지만, 에이전트는 어떤 도구를 쓸지 스스로 판단하고, 실행하고, 결과를 보고 다음 행동을 정하는 걸 반복합니다. 추론하고 행동하는 거예요." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">02 / 환경 설정</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">에이전트란 무엇인가</h2>
+</header>
+<div class="s-body"><div class="statement"><p class="big">에이전트는 LLM이 <em>어떤 도구를 어떤 순서로 쓸지 스스로 판단</em>하고, 실행하고, 결과를 관찰해 작업이 끝날 때까지 반복하는 시스템입니다.</p><p class="note">단발 프롬프트-응답과 다른 까닭은, 모델이 행동을 직접 <span class="mono">추론(reason)</span>하고 <span class="mono">실행(act)</span>하기 때문입니다.</p></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>04 / 29</span></footer>
+</section>
+<section data-speaker-notes="준비물은 단출합니다. OpenAI 키는 필수고, 검색용 Tavily 키는 마지막 프로젝트에서만 필요해요. 키는 .env 파일에 두고 깃에는 절대 올리지 않습니다. ▶ 화면 오른쪽처럼 .env에 키를 적고, load_dotenv로 불러온 뒤 잘 들어왔는지 확인하면 됩니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">02 / 환경 설정</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">키 발급과 환경 변수 로드</h2>
+</header>
+<div class="s-body"><div class="code-split"><div class="explain"><div class="point"><h4>필수: OPENAI_API_KEY</h4><p>LLM 호출에 쓰입니다. <span class="mono">platform.openai.com</span>에서 발급합니다.</p></div><div class="point"><h4>선택: TAVILY_API_KEY</h4><p>웹 검색 도구에 쓰이며, 마지막 미니 프로젝트에서만 필요합니다. <span class="mono">tavily.com</span>.</p></div><div class="point"><h4>.env로 관리합니다</h4><p>키는 <span class="mono">.env</span>에 두고 <span class="mono">.gitignore</span>에 포함해 절대 커밋하지 않습니다.</p></div></div><div class="code-stack"><div class="code-panel"><div class="code-file"><span class="tab">.env</span><span>키 보관</span></div><div class="code-body"><pre><span class="fn">OPENAI_API_KEY</span>=sk-...
+<span class="fn">TAVILY_API_KEY</span>=tvly-...   <span class="cmt"># 선택</span></pre></div></div><div class="code-panel"><div class="code-file"><span class="tab">키 로드</span><span>load_dotenv</span></div><div class="code-body"><pre><span class="kw">from</span> dotenv <span class="kw">import</span> load_dotenv
+<span class="kw">import</span> os
+
+<span class="fn">load_dotenv</span>(override=<span class="kw">True</span>)
+assert os.environ.<span class="fn">get</span>(<span class="str">&quot;OPENAI_API_KEY&quot;</span>), \
+    <span class="str">&quot;OPENAI_API_KEY가 설정되지 않았습니다!&quot;</span></pre></div></div></div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>05 / 29</span></footer>
+</section>
+<section data-speaker-notes="이제 모델을 정의합니다. ChatOpenAI는 OpenAI 모델을 LangChain에서 쓰기 좋게 감싼 클래스예요. 여기서 만든 이 model 객체를 앞으로 계속 재사용합니다. init_chat_model을 쓰면 이름만으로 프로바이더를 자동 감지해서, 나중에 모델을 바꿔 끼울 때 편합니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">02 / 환경 설정</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">ChatModel로 LLM을 정의합니다</h2>
+</header>
+<div class="s-body"><div class="code-split"><div class="explain"><div class="point"><h4>ChatOpenAI</h4><p>OpenAI 모델을 감싸는 LangChain 챗 모델 클래스입니다. temperature·max_retries 같은 인자를 직접 제어합니다.</p></div><div class="point"><h4>이 model을 재사용합니다</h4><p>여기서 만든 객체를 이후 모든 노트북에서 그대로 가져다 씁니다.</p></div><div class="point"><h4>init_chat_model</h4><p>이름에서 프로바이더를 자동 감지하는 팩토리입니다. 런타임에 모델을 바꿔 끼울 때 편리합니다.</p></div></div><div class="code-stack"><div class="code-panel"><div class="code-file"><span class="tab">ChatOpenAI</span><span>프로바이더 클래스 직접</span></div><div class="code-body"><pre><span class="kw">from</span> langchain_openai <span class="kw">import</span> <span class="fn">ChatOpenAI</span>
+
+model = <span class="fn">ChatOpenAI</span>(model=<span class="str">&quot;gpt-4.1&quot;</span>)
+response = model.<span class="fn">invoke</span>(<span class="str">&quot;안녕하세요!&quot;</span>)
+<span class="fn">print</span>(response.content)</pre></div></div><div class="code-panel"><div class="code-file"><span class="tab">init_chat_model</span><span>프로바이더 자동 감지</span></div><div class="code-body"><pre><span class="kw">from</span> langchain.chat_models <span class="kw">import</span> init_chat_model
+
+<span class="cmt"># 이름만으로 감지 (또는 &quot;openai:gpt-4.1&quot;)</span>
+model = <span class="fn">init_chat_model</span>(<span class="str">&quot;gpt-4.1&quot;</span>)</pre></div></div></div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>06 / 29</span></footer>
+</section>
+<section data-speaker-notes="한 가지 짚을 게, model.invoke의 결과는 그냥 문자열이 아니라 AIMessage 객체입니다. .content에 답이 들어있고, .usage_metadata에 토큰 수, .tool_calls에 도구 호출 정보까지 함께 담겨요. 그래서 응답뿐 아니라 비용·도구 사용까지 한 객체로 볼 수 있습니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">02 / 환경 설정</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">model.invoke()는 문자열이 아니라 AIMessage를 돌려줍니다</h2>
+<p class="s-lead">응답 객체 안에는 텍스트뿐 아니라 <strong>토큰 사용량과 메타데이터</strong>가 함께 담겨 있습니다</p>
+</header>
+<div class="s-body center"><div class="dense"><ul class="blist"><li><span class="mk"></span><strong>AIMessage의 주요 속성</strong>입니다<ul><li><span class="mk">–</span><span class="mono">.content</span> — 모델이 생성한 텍스트 응답입니다</li><li><span class="mk">–</span><span class="mono">.usage_metadata</span> — 토큰 수입니다 (input / output / total)</li><li><span class="mk">–</span><span class="mono">.response_metadata</span> — 모델 버전·종료 사유 같은 프로바이더 메타입니다</li><li><span class="mk">–</span><span class="mono">.tool_calls</span> — 모델이 요청한 도구 호출이 있을 때 담깁니다</li></ul></li><li><span class="mk"></span><strong>모델 초기화는 두 가지 방식</strong>이 있습니다<ul><li><span class="mk">–</span><span class="mono">ChatOpenAI(...)</span> — 프로바이더 클래스를 직접 씁니다. temperature·max_retries 같은 고유 인자를 제어할 수 있어 이 과정에서 사용합니다</li><li><span class="mk">–</span><span class="mono">init_chat_model("...")</span> — 이름에서 프로바이더를 자동 감지하므로 런타임 전환에 유용합니다</li></ul></li></ul></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>07 / 29</span></footer>
+</section>
+<section data-speaker-notes="에이전트는 여러 단계를 거치기 때문에, 어디서 실패했고 토큰을 얼마나 썼는지 보려면 트레이싱이 사실상 필수입니다. LangSmith는 환경변수 한 줄로 자동으로 켜지고, Langfuse는 오픈소스 대안이에요. 벤더에 안 묶이고 싶으면 OpenTelemetry로 Datadog이나 Grafana 같은 데로 보낼 수도 있습니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">02 / 환경 설정</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">관측성 — 어디서 실패했고 토큰은 얼마나 썼나</h2>
+<p class="s-lead">에이전트는 여러 단계를 거치므로 <strong>트레이싱</strong>이 사실상 필수입니다</p>
+</header>
+<div class="s-body center"><div class="tbl-wrap"><table class="tbl"><thead><tr><th style="width:22%">도구</th><th style="width:32%">연동</th><th class="accent">특징</th></tr></thead><tbody><tr><td class="k">LangSmith</td><td><span class="mono">LANGSMITH_TRACING=true</span></td><td>LangChain 1차 지원, 코드 수정 없이 자동 계측</td></tr><tr><td class="k">Langfuse</td><td><span class="mono">CallbackHandler</span>를 config로</td><td>오픈소스·셀프호스트, 비용·평가·프롬프트 관리</td></tr><tr><td class="k">OpenTelemetry</td><td>OTel 콜렉터로 라우팅</td><td>벤더 중립 — Datadog·Grafana·Jaeger로 전송</td></tr><tr><td class="k">Traceloop</td><td>OpenLLMetry SDK</td><td>OpenTelemetry 기반 자동 계측, 한 줄 초기화</td></tr><tr><td class="k">Arize Phoenix</td><td>로컬·셀프호스트</td><td>오픈소스, 트레이싱과 평가를 함께</td></tr></tbody></table></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>08 / 29</span></footer>
+</section>
+<section data-speaker-notes="에이전트로 가기 전에, 그 재료인 LLM을 제대로 다루는 법부터 익히겠습니다. 메시지, 프롬프트, 스트리밍이에요." class="divider" data-label="섹션 구분">
+  <div class="div-kicker">PART 03</div>
+  <h2 class="div-title">LLM 기초</h2><p class="div-sub">현대 LLM은 메시지 시퀀스를 입력으로 받습니다. 이 메시지 시스템 위에 모든 에이전트가 세워집니다.</p><div class="div-lab">실습 · <span class="mono">01_beginner/01_llm_basics.ipynb</span></div>
+</section>
+<section data-speaker-notes="LLM에 말을 거는 기본 단위는 메시지 리스트입니다. System은 행동 지침, Human은 사용자 입력, AI는 모델 응답이고요. 도구 결과를 돌려줄 땐 ToolMessage를 씁니다. 스트리밍 중에 나오는 조각은 AIMessageChunk인데, 합쳐지면 최종 AIMessage가 돼요." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">03 / LLM 기초</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">LangChain 메시지 타입 — System · Human · AI · Tool</h2>
+<p class="s-lead">LLM은 문자열이 아니라 <strong>메시지 리스트</strong>를 입력으로 받습니다</p>
+</header>
+<div class="s-body center"><div class="tbl-wrap"><table class="tbl"><thead><tr><th style="width:14%">역할</th><th class="accent" style="width:26%">클래스</th><th>설명</th></tr></thead><tbody><tr><td class="k">system</td><td><span class="mono">SystemMessage</span></td><td>행동 지침·페르소나·톤·규칙을 정해 초기 동작을 결정합니다</td></tr><tr><td class="k">human</td><td><span class="mono">HumanMessage</span></td><td>사용자 입력입니다. 텍스트뿐 아니라 이미지·오디오·문서도 다룹니다</td></tr><tr><td class="k">ai</td><td><span class="mono">AIMessage</span></td><td>모델 응답입니다. tool_calls·usage_metadata가 함께 담깁니다</td></tr><tr><td class="k">tool</td><td><span class="mono">ToolMessage</span></td><td>도구 실행 결과를 모델에 돌려줍니다. tool_call_id로 매칭하며 artifact도 담을 수 있습니다</td></tr><tr><td class="k">스트림</td><td><span class="mono">AIMessageChunk</span></td><td>스트리밍 중 생성되는 조각으로, + 연산으로 합쳐져 최종 AIMessage가 됩니다</td></tr></tbody></table></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>09 / 29</span></footer>
+</section>
+<section data-speaker-notes="여기서 가장 강력한 게 시스템 메시지예요. 같은 질문이라도 시스템 메시지를 바꾸면 답의 톤과 관점이 완전히 달라집니다. 이게 프롬프트 엔지니어링의 출발점이고요. 메시지는 객체로 줘도 되고 딕셔너리로 줘도 결과는 같습니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">03 / LLM 기초</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">시스템 메시지가 모델의 성격을 결정합니다</h2>
+</header>
+<div class="s-body"><div class="code-split"><div class="explain"><div class="point"><h4>가장 강력한 다이얼입니다</h4><p>같은 질문이라도 <span class="mono">SystemMessage</span>를 바꾸면 톤과 관점이 완전히 달라집니다. 프롬프트 엔지니어링의 핵심입니다.</p></div><div class="point"><h4>import 경로</h4><p>LangChain v1에서는 <span class="mono">langchain.messages</span>에서 가져옵니다.</p></div><div class="point"><h4>형식은 세 가지입니다</h4><p>문자열·메시지 객체·딕셔너리 모두 같은 결과를 냅니다. 딕셔너리는 OpenAI 코드를 옮겨올 때 편리합니다.</p></div></div><div class="code-panel"><div class="code-file"><span class="tab">messages.py</span><span>langchain v1</span></div><div class="code-body"><pre><span class="kw">from</span> langchain.messages <span class="kw">import</span> <span class="fn">SystemMessage</span>, <span class="fn">HumanMessage</span>
+
+messages = [
+    <span class="fn">SystemMessage</span>(content=<span class="str">&quot;당신은 유용한 어시스턴트입니다.&quot;</span>),
+    <span class="fn">HumanMessage</span>(content=<span class="str">&quot;Python이란 무엇인가요?&quot;</span>),
+]
+response = model.<span class="fn">invoke</span>(messages)
+
+<span class="cmt"># 딕셔너리 형식 — 결과는 동일</span>
+model.<span class="fn">invoke</span>([
+    {<span class="str">&quot;role&quot;</span>: <span class="str">&quot;system&quot;</span>, <span class="str">&quot;content&quot;</span>: <span class="str">&quot;한국어로 답하세요.&quot;</span>},
+    {<span class="str">&quot;role&quot;</span>: <span class="str">&quot;user&quot;</span>, <span class="str">&quot;content&quot;</span>: <span class="str">&quot;LangChain이란?&quot;</span>},
+])</pre></div></div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>10 / 29</span></footer>
+</section>
+<section data-speaker-notes="호출 방식은 세 가지를 기억하세요. invoke는 전체 응답을 한 번에, stream은 토큰이 나오는 대로 실시간으로, batch는 여러 입력을 병렬로 처리합니다. ▶ stream을 돌려보면 글자가 주르륵 흘러나오는데, 사용자를 기다리게 하지 않는 이 느낌이 UX 포인트예요." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">03 / LLM 기초</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">호출은 세 가지 — invoke · stream · batch</h2>
+</header>
+<div class="s-body"><div class="code-split"><div class="explain"><div class="point"><h4>invoke</h4><p>동기 호출로, 전체 응답을 한 번에 받습니다.</p></div><div class="point"><h4>stream</h4><p>토큰이 생성되는 대로 <span class="mono">AIMessageChunk</span>를 순차로 받습니다. 단일 요청의 응답성을 높여 줍니다.</p></div><div class="point"><h4>batch</h4><p>여러 입력을 <strong>병렬</strong>로 처리합니다. 루프로 invoke를 반복할 때보다 훨씬 빠릅니다.</p></div></div><div class="code-panel"><div class="code-file"><span class="tab">stream.py</span><span>응답성 vs 처리량</span></div><div class="code-body"><pre><span class="cmt"># 스트리밍 — 토큰 단위 실시간 출력</span>
+<span class="kw">for</span> chunk <span class="kw">in</span> model.<span class="fn">stream</span>(<span class="str">&quot;우주에 대한 사실 2가지?&quot;</span>):
+    <span class="fn">print</span>(chunk.content, end=<span class="str">&quot;&quot;</span>, flush=<span class="kw">True</span>)
+
+<span class="cmt"># 배치 — 여러 질문을 병렬로</span>
+model.<span class="fn">batch</span>([<span class="str">&quot;2+2는?&quot;</span>, <span class="str">&quot;3*5는?&quot;</span>])</pre></div></div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>11 / 29</span></footer>
+</section>
+<section data-speaker-notes="이제 진짜 에이전트를 만들어 봅니다. LangChain으로 가장 빠르게요." class="divider" data-label="섹션 구분">
+  <div class="div-kicker">PART 04</div>
+  <h2 class="div-title">첫 에이전트 — LangChain</h2><p class="div-sub">create_agent() 한 줄로 ReAct 루프를 도는 에이전트를 만듭니다. 도구는 @tool로 정의합니다.</p><div class="div-lab">실습 · <span class="mono">01_beginner/02_langchain_basics.ipynb</span></div>
+</section>
+<section data-speaker-notes="LangChain 에이전트는 ReAct 루프로 돕니다. 사용자 입력이 들어오면 모델이 도구를 쓸지 판단하고, 필요하면 도구를 실행해서 결과를 받고, 그걸 보고 다시 판단하는 걸 반복해요. 답이 나오거나 최대 횟수에 도달하면 멈춥니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">04 / 첫 에이전트</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">ReAct 루프 — 생각하고 행동하기를 반복합니다</h2>
+<p class="s-lead">모델이 도구 호출이 필요한지 판단하고, 실행 결과를 다시 받아 이어 갑니다</p>
+</header>
+<div class="s-body"><div class="figure-split"><div class="fig"><div class="fig-img has-img"><img src="assets/diagrams/react_loop.png" alt=""></div><div class="fig-cap"><span>ReAct loop</span><span></span></div></div><div class="fig-exp"><div class="point"><h4>판단</h4><p>사용자 입력을 받아, 도구를 호출할지 바로 답할지 모델이 추론합니다.</p></div><div class="point"><h4>도구 실행</h4><p>필요하면 tool_calls를 프레임워크가 실행해 <span class="mono">ToolMessage</span>를 만듭니다.</p></div><div class="point"><h4>관찰·반복</h4><p>결과를 보고 다시 판단하며, 텍스트로 답하거나 최대 횟수에 도달할 때까지 반복합니다.</p></div></div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>12 / 29</span></footer>
+</section>
+<section data-speaker-notes="도구 만드는 법은 의외로 쉬워요. 평범한 함수에 @tool만 붙이면 됩니다. 타입 힌트가 입력 형식을 정하고, docstring이 이 도구가 뭐 하는 건지를 모델에게 알려줘요. 그래서 설명을 잘 써주는 게 정말 중요합니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">04 / 첫 에이전트</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">도구 만들기 — docstring이 가장 중요합니다</h2>
+</header>
+<div class="s-body"><div class="code-split"><div class="explain"><div class="point"><h4>@tool 데코레이터</h4><p>일반 함수를 에이전트 도구로 바꿔 줍니다. <span class="mono">langchain.tools</span>에서 가져옵니다.</p></div><div class="point"><h4>타입 힌트가 스키마입니다</h4><p>인자 타입이 입력 스키마를 정의합니다. <span class="mono">Literal</span>로 허용 값을 제한합니다.</p></div><div class="point"><h4>docstring이 설명입니다</h4><p>모델은 docstring을 읽고 <strong>언제 이 도구를 쓸지</strong> 판단합니다. 동료에게 설명하듯 명확히 적습니다.</p></div></div><div class="code-panel"><div class="code-file"><span class="tab">tools.py</span><span>@tool</span></div><div class="code-body"><pre><span class="kw">from</span> langchain.tools <span class="kw">import</span> tool
+
+@tool
+<span class="kw">def</span> <span class="fn">add</span>(a: <span class="kw">int</span>, b: <span class="kw">int</span>) -&gt; <span class="kw">int</span>:
+    <span class="str">&quot;&quot;&quot;두 수를 더합니다.&quot;&quot;&quot;</span>
+    <span class="kw">return</span> a + b
+
+@tool
+<span class="kw">def</span> <span class="fn">multiply</span>(a: <span class="kw">int</span>, b: <span class="kw">int</span>) -&gt; <span class="kw">int</span>:
+    <span class="str">&quot;&quot;&quot;두 수를 곱합니다.&quot;&quot;&quot;</span>
+    <span class="kw">return</span> a * b</pre></div></div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>13 / 29</span></footer>
+</section>
+<section data-speaker-notes="이제 모델·도구·시스템 프롬프트를 create_agent에 묶으면 끝이에요. 입력은 messages 리스트로 주고, 답은 마지막 메시지에서 꺼냅니다. ▶ &#x27;15 더하기 27&#x27; 하고 물으면 에이전트가 알아서 add 도구를 골라 쓰고 답을 줍니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">04 / 첫 에이전트</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">create_agent — 모델·도구·프롬프트를 묶습니다</h2>
+</header>
+<div class="s-body"><div class="code-split"><div class="explain"><div class="point"><h4>구성요소는 셋입니다</h4><p>모델(판단)·도구(행동)·시스템 프롬프트(지침)입니다. 프롬프트가 구체적일수록 유용합니다.</p></div><div class="point"><h4>입력과 출력</h4><p>입력은 <span class="mono">messages</span> 리스트이고, 답은 <span class="mono">result["messages"][-1].content</span>에서 꺼냅니다.</p></div><div class="point"><h4>예약어에 주의합니다</h4><p><span class="mono">config</span>·<span class="mono">runtime</span>은 내부 예약어라 도구 인자 이름으로 쓰지 않습니다.</p></div></div><div class="code-panel"><div class="code-file"><span class="tab">first_agent.py</span><span>create_agent</span></div><div class="code-body"><pre><span class="kw">from</span> langchain.agents <span class="kw">import</span> create_agent
+
+agent = <span class="fn">create_agent</span>(
+    model=model,
+    tools=[add, multiply],
+    system_prompt=<span class="str">&quot;당신은 수학 도우미입니다.&quot;</span>,
+)
+result = agent.<span class="fn">invoke</span>(
+    {<span class="str">&quot;messages&quot;</span>: [{<span class="str">&quot;role&quot;</span>: <span class="str">&quot;user&quot;</span>, <span class="str">&quot;content&quot;</span>: <span class="str">&quot;15 + 27은?&quot;</span>}]}
+)
+<span class="fn">print</span>(result[<span class="str">&quot;messages&quot;</span>][-<span class="num">1</span>].content)</pre></div></div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>14 / 29</span></footer>
+</section>
+<section data-speaker-notes="그런데 방금 만든 에이전트엔 약점이 하나 있어요. 대화를 기억하지 못합니다. 이걸 해결해 보겠습니다." class="divider" data-label="섹션 구분">
+  <div class="div-kicker">PART 05</div>
+  <h2 class="div-title">멀티턴 메모리</h2><p class="div-sub">기본 에이전트는 매 호출마다 모든 것을 잊습니다. 체크포인터로 대화를 기억하게 만듭니다.</p><div class="div-lab">실습 · <span class="mono">01_beginner/03_langchain_memory.ipynb</span></div>
+</section>
+<section data-speaker-notes="기본 에이전트는 매번 새 대화로 취급해요. &#x27;내 이름은 철수야&#x27; 다음에 &#x27;내 이름이 뭐야&#x27; 하고 물으면 답을 못 합니다. invoke가 처리하고 나면 아무것도 저장하지 않기 때문이에요." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">05 / 메모리</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">메모리 없는 에이전트의 한계</h2>
+</header>
+<div class="s-body"><div class="statement"><p class="big">“내 이름은 철수야” 다음에 “내 이름이 뭐야?”라고 물으면 <em>답하지 못합니다.</em></p><p class="note"><span class="mono">invoke()</span>는 입력을 처리해 돌려준 뒤 아무것도 보존하지 않기 때문입니다. 매번 새 대화로 취급합니다.</p></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>15 / 29</span></footer>
+</section>
+<section data-speaker-notes="해결책은 checkpointer입니다. InMemorySaver를 붙이고 thread_id로 &#x27;같은 대화&#x27;라고 표시해 주면 돼요. ▶ thread_id를 똑같이 두고 두 번 물어보면, &#x27;그 결과에 2를 곱해&#x27;라는 말을 알아듣습니다. 메모리가 붙었다는 증거예요." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">05 / 메모리</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">checkpointer와 thread_id로 대화를 기억합니다</h2>
+</header>
+<div class="s-body"><div class="code-split"><div class="explain"><div class="point"><h4>InMemorySaver</h4><p>메시지 히스토리를 포함한 그래프 전체 상태를 저장하는 체크포인터입니다. <span class="mono">langgraph.checkpoint.memory</span>에서 가져옵니다.</p></div><div class="point"><h4>thread_id의 의미</h4><p>같은 <span class="mono">thread_id</span>는 연속된 대화이고, 다른 값은 완전히 별개의 대화입니다.</p></div><div class="point"><h4>동작 방식</h4><p>호출하면 이전 상태를 불러오고, 새 메시지를 더하고, 실행한 뒤, 상태를 다시 저장합니다.</p></div></div><div class="code-panel"><div class="code-file"><span class="tab">memory.py</span><span>InMemorySaver</span></div><div class="code-body"><pre><span class="kw">from</span> langgraph.checkpoint.memory <span class="kw">import</span> <span class="fn">InMemorySaver</span>
+
+agent = <span class="fn">create_agent</span>(
+    model=model, tools=[add],
+    checkpointer=<span class="fn">InMemorySaver</span>(),
+)
+config = {<span class="str">&quot;configurable&quot;</span>: {<span class="str">&quot;thread_id&quot;</span>: <span class="str">&quot;session-1&quot;</span>}}
+
+agent.<span class="fn">invoke</span>({<span class="str">&quot;messages&quot;</span>: [{<span class="str">&quot;role&quot;</span>: <span class="str">&quot;user&quot;</span>,
+    <span class="str">&quot;content&quot;</span>: <span class="str">&quot;7 + 8은?&quot;</span>}]}, config=config)
+agent.<span class="fn">invoke</span>({<span class="str">&quot;messages&quot;</span>: [{<span class="str">&quot;role&quot;</span>: <span class="str">&quot;user&quot;</span>,
+    <span class="str">&quot;content&quot;</span>: <span class="str">&quot;그 결과에 2를 곱하세요.&quot;</span>}]}, config=config)</pre></div></div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>16 / 29</span></footer>
+</section>
+<section data-speaker-notes="InMemorySaver는 프로세스가 꺼지면 사라지니까, 실제 서비스에선 PostgresSaver 같은 DB 체크포인터로 바꿉니다. API는 똑같아서 한 줄만 교체하면 돼요. 그리고 대화가 길어지면 트리밍·요약·삭제로 토큰을 관리합니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">05 / 메모리</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">단기에서 영속으로, 그리고 긴 대화 관리</h2>
+<p class="s-lead">InMemorySaver는 프로세스가 끝나면 사라지므로, 프로덕션에서는 영속 체크포인터를 씁니다</p>
+</header>
+<div class="s-body center"><div class="dense"><ul class="blist"><li><span class="mk"></span><strong>영속 체크포인터</strong> — API는 같고 한 줄만 교체하면 됩니다<ul><li><span class="mk">–</span><span class="mono">PostgresSaver(connection_string)</span> — PostgreSQL에 저장합니다</li><li><span class="mk">–</span><span class="mono">SqliteSaver</span> — SQLite에 저장합니다. 이전 체크포인트를 재생하는 타임 트래블도 가능합니다</li></ul></li><li><span class="mk"></span><strong>긴 대화 관리 전략</strong> — 유한한 컨텍스트 윈도우에 대응합니다<ul><li><span class="mk">–</span>트리밍 — 최근 N개 메시지만 남깁니다. 단순하지만 초기 맥락을 잃습니다</li><li><span class="mk">–</span>요약 — 오래된 메시지를 하나의 요약으로 압축합니다. 핵심은 지키면서 토큰을 아낍니다</li><li><span class="mk">–</span>삭제 — 중간 도구 호출처럼 노이즈가 되는 메시지를 제거합니다</li></ul></li></ul></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>17 / 29</span></footer>
+</section>
+<section data-speaker-notes="LangChain이 흐름을 알아서 감춰줘서 편했다면, 이번엔 그 흐름을 직접 그려보겠습니다. LangGraph예요." class="divider" data-label="섹션 구분">
+  <div class="div-kicker">PART 06</div>
+  <h2 class="div-title">LangGraph 워크플로</h2><p class="div-sub">create_agent가 감춘 흐름을 직접 그립니다. 분기·반복·중단과 재개가 필요할 때 그래프로 모델링합니다.</p><div class="div-lab">실습 · <span class="mono">01_beginner/04_langgraph_basics.ipynb</span></div>
+</section>
+<section data-speaker-notes="실제 앱은 조건 분기, 병렬 실행, 사람 승인, 오류 복구 같은 게 필요합니다. 단순 ReAct 루프만으로는 부족해요. LangGraph는 이걸 방향 그래프로 그려서, 중단했다 재개할 수 있는 내구적인 실행을 만들어 줍니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">06 / LangGraph</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">왜 create_agent를 넘어가나</h2>
+</header>
+<div class="s-body"><div class="statement"><p class="big">실제 앱에는 <em>조건 분기 · 병렬 실행 · 인간 승인 · 오류 복구</em>가 필요합니다. 단순 ReAct 루프만으로는 부족합니다.</p><p class="note">LangGraph는 이를 <strong>방향 그래프</strong>로 모델링합니다. 노드는 처리 단계, 엣지는 흐름이며, 중단과 재개가 가능한 내구적 실행을 얻습니다.</p></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>18 / 29</span></footer>
+</section>
+<section data-speaker-notes="구성요소는 셋입니다. State는 노드들이 공유하는 데이터, Node는 상태를 받아 일을 하는 함수, Edge는 다음에 어디로 갈지 정하는 연결이에요. 노드는 무엇을 한다, 엣지는 다음에 어디로 간다, 이렇게 기억하시면 됩니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">06 / LangGraph</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">구성요소는 셋 — 상태 · 노드 · 엣지</h2>
+<p class="s-lead"><strong>노드는 무엇을 하고, 엣지는 다음에 어디로 갈지를 정합니다</strong></p>
+</header>
+<div class="s-body"><div class="figure-split"><div class="fig"><div class="fig-img has-img"><img src="assets/diagrams/stategraph_structure.png" alt=""></div><div class="fig-cap"><span>StateGraph 구조</span><span></span></div></div><div class="fig-exp"><div class="point"><h4>State</h4><p>노드들이 공유하는 데이터 구조(TypedDict)로, 현재 스냅샷을 담습니다.</p></div><div class="point"><h4>Node</h4><p>상태를 받아 업데이트를 돌려주는 함수 — 실제 작업을 수행합니다.</p></div><div class="point"><h4>Edge</h4><p>다음 노드를 결정해 흐름을 지시하며, 조건부 분기도 가능합니다.</p></div></div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>19 / 29</span></footer>
+</section>
+<section data-speaker-notes="기본 흐름은 다섯 단계예요. 그래프를 만들고, 노드를 더하고, 엣지로 잇고, 컴파일하고, 실행. 컴파일할 때 빠진 연결이나 도달 못 하는 노드 같은 오류를 잡아줍니다. 노드는 전체 상태가 아니라 바뀐 부분만 돌려주면 돼요." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">06 / LangGraph</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">기본 흐름 — 정의에서 실행까지 다섯 단계</h2>
+</header>
+<div class="s-body"><div class="code-split"><div class="explain"><div class="point"><h4>다섯 단계입니다</h4><p><span class="mono">StateGraph → add_node → add_edge → compile → invoke</span> 순서입니다.</p></div><div class="point"><h4>반드시 compile()</h4><p>컴파일할 때 도달할 수 없는 노드나 누락된 엣지 같은 구조적 오류를 검증합니다.</p></div><div class="point"><h4>업데이트만 돌려줍니다</h4><p>노드는 전체 상태가 아니라 <strong>변경된 키만</strong> 담은 dict를 반환합니다.</p></div></div><div class="code-panel"><div class="code-file"><span class="tab">graph.py</span><span>StateGraph</span></div><div class="code-body"><pre><span class="kw">from</span> langgraph.graph <span class="kw">import</span> <span class="fn">StateGraph</span>, <span class="fn">START</span>, <span class="fn">END</span>
+<span class="kw">from</span> typing <span class="kw">import</span> <span class="fn">TypedDict</span>
+
+<span class="kw">class</span> <span class="fn">State</span>(<span class="fn">TypedDict</span>):
+    text: <span class="kw">str</span>
+    word_count: <span class="kw">int</span>
+
+<span class="kw">def</span> <span class="fn">count_words</span>(state: <span class="fn">State</span>) -&gt; <span class="kw">dict</span>:
+    <span class="kw">return</span> {<span class="str">&quot;word_count&quot;</span>: <span class="fn">len</span>(state[<span class="str">&quot;text&quot;</span>].<span class="fn">split</span>())}
+
+builder = <span class="fn">StateGraph</span>(<span class="fn">State</span>)
+builder.<span class="fn">add_node</span>(<span class="str">&quot;counter&quot;</span>, count_words)
+builder.<span class="fn">add_edge</span>(<span class="fn">START</span>, <span class="str">&quot;counter&quot;</span>)
+builder.<span class="fn">add_edge</span>(<span class="str">&quot;counter&quot;</span>, <span class="fn">END</span>)
+graph = builder.<span class="fn">compile</span>()</pre></div></div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>20 / 29</span></footer>
+</section>
+<section data-speaker-notes="이번엔 노드 안에서 LLM을 불러봅니다. MessagesState를 쓰면 메시지를 담는 칸과 누적해 주는 리듀서가 이미 들어있어요. ▶ 이 chatbot 그래프를 돌려보면, 아까 create_agent가 한 줄로 감춰뒀던 흐름을 우리가 직접 그려본 게 됩니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">06 / LangGraph</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">LLM을 노드로 — MessagesState와 리듀서</h2>
+</header>
+<div class="s-body"><div class="code-split"><div class="explain"><div class="point"><h4>MessagesState</h4><p><span class="mono">messages</span> 단일 키와 <span class="mono">add_messages</span> 리듀서가 내장된 사전 정의 상태입니다.</p></div><div class="point"><h4>add_messages 리듀서</h4><p>메시지 ID를 추적해 중복 없이 누적하고, JSON을 Message 객체로 자동 역직렬화합니다.</p></div><div class="point"><h4>노드의 정체</h4><p>상태를 받아 업데이트를 돌려주는 일반 함수입니다. LangGraph가 RunnableLambda로 변환합니다.</p></div></div><div class="code-panel"><div class="code-file"><span class="tab">llm_node.py</span><span>MessagesState</span></div><div class="code-body"><pre><span class="kw">from</span> langgraph.graph <span class="kw">import</span> <span class="fn">StateGraph</span>, <span class="fn">START</span>, <span class="fn">END</span>, <span class="fn">MessagesState</span>
+<span class="kw">from</span> langchain.messages <span class="kw">import</span> <span class="fn">HumanMessage</span>
+
+<span class="kw">def</span> <span class="fn">chatbot</span>(state: <span class="fn">MessagesState</span>) -&gt; <span class="kw">dict</span>:
+    <span class="kw">return</span> {<span class="str">&quot;messages&quot;</span>: [model.<span class="fn">invoke</span>(state[<span class="str">&quot;messages&quot;</span>])]}
+
+builder = <span class="fn">StateGraph</span>(<span class="fn">MessagesState</span>)
+builder.<span class="fn">add_node</span>(<span class="str">&quot;chatbot&quot;</span>, chatbot)
+builder.<span class="fn">add_edge</span>(<span class="fn">START</span>, <span class="str">&quot;chatbot&quot;</span>)
+builder.<span class="fn">add_edge</span>(<span class="str">&quot;chatbot&quot;</span>, <span class="fn">END</span>)
+graph = builder.<span class="fn">compile</span>()
+
+graph.<span class="fn">invoke</span>({<span class="str">&quot;messages&quot;</span>: [<span class="fn">HumanMessage</span>(content=<span class="str">&quot;2+2는?&quot;</span>)]})</pre></div></div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>21 / 29</span></footer>
+</section>
+<section data-speaker-notes="직접 그리는 것도 좋지만, 파일 작업과 서브에이전트가 필요한 장기 작업에는 Deep Agents 하네스가 편합니다. 계획이 필요한 작업에서는 TodoListMiddleware를 명시적으로 붙입니다." class="divider" data-label="섹션 구분">
+  <div class="div-kicker">PART 07</div>
+  <h2 class="div-title">Deep Agents 올인원</h2><p class="div-sub">LangGraph 위에 파일·서브에이전트·백엔드를 얹은 장기 작업 하네스입니다. 계획은 필요할 때 TodoListMiddleware로 추가합니다.</p><div class="div-lab">실습 · <span class="mono">01_beginner/05_deep_agents_basics.ipynb</span></div>
+</section>
+<section data-speaker-notes="Deep Agents는 하네스 자체와 선택 미들웨어를 구분해서 봐야 합니다. 파일 작업, 백엔드, 서브에이전트는 장기 작업의 중심 표면이고, 단계 계획은 TodoListMiddleware를 붙였을 때 활성화됩니다. 그래서 최신 버전에서는 모델만 넘기면 계획까지 항상 켜진다고 설명하지 않습니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">07 / Deep Agents</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">하네스의 기본 기능과 선택 미들웨어</h2>
+<p class="s-lead">Deep Agents 0.7 기준으로 파일·백엔드·서브에이전트는 하네스의 중심이고, todo 계획은 <span class="mono">TodoListMiddleware</span>를 붙여 활성화합니다</p>
+</header>
+<div class="s-body"><div class="diagram-full"><img src="assets/diagrams/deepagents_architecture.png" alt=""><div class="dgm-cap">Deep Agent 내부 구조 · LangGraph 실행 엔진 위에 구축</div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>22 / 29</span></footer>
+</section>
+<section data-speaker-notes="도구를 순수 함수로 넘기는 패턴은 유지됩니다. 달라진 포인트는 계획입니다. 리서치나 보고서처럼 여러 단계를 추적해야 할 때 TodoListMiddleware를 middleware 목록에 명시합니다. 이 한 줄이 있어야 todo 상태를 수업에서 다룰 수 있습니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">07 / Deep Agents</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">create_deep_agent — 도구는 순수 함수로 넘깁니다</h2>
+</header>
+<div class="s-body"><div class="code-split"><div class="explain"><div class="point"><h4>한 줄로 만듭니다</h4><p>모델만 넘기면 LangGraph <span class="mono">CompiledStateGraph</span>가 만들어집니다. 긴 작업 계획은 <span class="mono">TodoListMiddleware()</span>를 추가합니다.</p></div><div class="point"><h4>@tool이 필요 없습니다</h4><p>Deep Agents는 <strong>순수 함수</strong>를 그대로 도구로 받습니다. docstring과 타입 힌트가 스키마가 됩니다. LangChain은 @tool이 필요했습니다.</p></div><div class="point"><h4>대체가 아니라 추가입니다</h4><p><span class="mono">tools</span>는 빌트인 도구에 더해집니다. 커스텀 도구와 빌트인 도구를 함께 씁니다.</p></div></div><div class="code-panel"><div class="code-file"><span class="tab">deep_agent.py</span><span>deepagents</span></div><div class="code-body"><pre><span class="kw">from</span> deepagents <span class="kw">import</span> create_deep_agent
+<span class="kw">from</span> langchain.agents.middleware <span class="kw">import</span> <span class="fn">TodoListMiddleware</span>
+
+<span class="kw">def</span> <span class="fn">greet</span>(name: <span class="kw">str</span>) -&gt; <span class="kw">str</span>:
+    <span class="str">&quot;&quot;&quot;이름으로 인사합니다.&quot;&quot;&quot;</span>
+    <span class="kw">return</span> f<span class="str">&quot;안녕하세요, {name}님!&quot;</span>
+
+agent = <span class="fn">create_deep_agent</span>(
+    model=model,
+    tools=[greet],
+    middleware=[<span class="fn">TodoListMiddleware</span>()],
+    system_prompt=<span class="str">&quot;자기소개를 하면 greet 도구를 사용하세요.&quot;</span>,
+)
+agent.<span class="fn">invoke</span>({<span class="str">&quot;messages&quot;</span>: [{<span class="str">&quot;role&quot;</span>: <span class="str">&quot;user&quot;</span>,
+    <span class="str">&quot;content&quot;</span>: <span class="str">&quot;제 이름은 앨리스입니다.&quot;</span>}]})</pre></div></div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>23 / 29</span></footer>
+</section>
+<section data-speaker-notes="셋을 다 만들어봤으니, 이제 머릿속에서 정리할 시간입니다. 언제 뭘 쓸지요." class="divider" data-label="섹션 구분">
+  <div class="div-kicker">PART 08</div>
+  <h2 class="div-title">세 프레임워크 비교</h2><p class="div-sub">지금 내 문제에 필요한 것이 빠른 시작인지, 정밀한 제어인지, 작업형 하네스인지로 고릅니다.</p><div class="div-lab">실습 · <span class="mono">01_beginner/06_comparison.ipynb</span></div>
+</section>
+<section data-speaker-notes="추상화 수준은 앞 1장에서 봤으니, 여기선 실무 특성으로 가르겠습니다. 모델 지원은 LangChain만 100개가 넘는 프로바이더를 직접 쓰고 나머지는 그걸 공유해요. 상태 관리는 LangGraph와 Deep Agents가 체크포인터를 쓰고, 샌드박스 실행은 Deep Agents가 지원합니다. 라이선스는 셋 다 MIT예요." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">08 / 비교</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">프레임워크 특성 한눈 비교</h2>
+<p class="s-lead">추상화 수준은 앞에서 봤으니, 여기선 <strong>실무 특성</strong>으로 가릅니다</p>
+</header>
+<div class="s-body center"><div class="tbl-wrap"><table class="tbl"><thead><tr><th style="width:20%">항목</th><th class="accent">LangChain</th><th class="accent">LangGraph</th><th class="accent">Deep Agents</th></tr></thead><tbody><tr><td class="k">모델 지원</td><td>모델 무관 (100+)</td><td>LangChain 공유</td><td>LangChain 공유</td></tr><tr><td class="k">상태 관리</td><td>메모리 기반</td><td>체크포인터 · 타임트래블</td><td>LangGraph 체크포인터</td></tr><tr><td class="k">샌드박스</td><td>기본 없음</td><td>기본 없음</td><td>샌드박스 실행 지원</td></tr><tr><td class="k">관측성</td><td>LangSmith 연동</td><td>LangSmith 네이티브</td><td>LangSmith 지원</td></tr><tr><td class="k">라이선스</td><td>MIT</td><td>MIT</td><td>MIT</td></tr></tbody></table></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>24 / 29</span></footer>
+</section>
+<section data-speaker-notes="선택 기준은 &#x27;어디까지 직접 제어하고 싶은가&#x27;예요. 간단한 도구 호출이면 LangChain, 분기와 사람 개입이 있는 워크플로면 LangGraph, 파일·계획이 필요한 장기 작업이면 Deep Agents. 반대로 그 수준이 필요 없으면 과한 선택이 됩니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">08 / 비교</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">이럴 때 씁니다 — 의사결정 기준</h2>
+<p class="s-lead">먼저 물어볼 것은 <strong>“어디까지 직접 제어하고 싶은가”</strong>입니다</p>
+</header>
+<div class="s-body center"><div class="dense"><ul class="blist"><li><span class="mk"></span><strong>LangChain</strong> — 빠른 시작과 단순한 도구 호출에 적합합니다<ul><li><span class="mk">–</span>주문 조회와 FAQ 챗봇 같은 단순 워크플로라면 20줄 미만으로 끝납니다</li><li><span class="mk">✕</span>상태 전이·병렬·조건부 그래프가 핵심이라면 과합니다</li></ul></li><li><span class="mk"></span><strong>LangGraph</strong> — 세밀한 제어와 장기 실행에 강합니다<ul><li><span class="mk">–</span>분류 → 라우팅 → 검토 → 인간 승인처럼 분기와 HITL이 있는 파이프라인에 맞습니다</li><li><span class="mk">✕</span>단순 ReAct 루프만 필요하다면 과합니다</li></ul></li><li><span class="mk"></span><strong>Deep Agents</strong> — 파일·서브에이전트·장기 작업 하네스가 필요할 때 씁니다<ul><li><span class="mk">–</span>웹 검색·문서 읽기·노트 작성·보고서처럼 중간 산출물이 필요한 자율 작업에 어울립니다</li><li><span class="mk">✕</span>짧고 단순한 도구 호출이라면 과합니다</li></ul></li></ul></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>25 / 29</span></footer>
+</section>
+<section data-speaker-notes="같은 &#x27;3 더하기 4&#x27; 질문을 세 방식으로 짜보면 차이가 한눈에 들어옵니다. LangChain은 한 줄, LangGraph는 흐름을 직접 그리고, Deep Agents는 하네스가 다 들어있죠. 하나만 평생 쓰는 게 아니라 작업에 맞춰 고르고 섞는 겁니다." data-label="실습 (코드)">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">08 / 비교</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">같은 질문, 세 가지 방식</h2>
+<p class="s-lead">코드량과 제어 범위의 차이가 한눈에 보입니다. 배타적 선택이 아니라 작업에 맞춰 고르고 섞습니다</p>
+</header>
+<div class="s-body code-tall"><div class="code-only"><div class="code-panel">
+  <div class="code-file"><span class="tab">three_ways.py</span><span>같은 질문 "3+4?"</span></div>
+  <div class="code-body"><pre><span class="cmt"># LangChain — 한 줄로 에이전트</span>
+<span class="kw">from</span> langchain.agents <span class="kw">import</span> create_agent
+agent = <span class="fn">create_agent</span>(model=model, tools=[add])
+agent.<span class="fn">invoke</span>({<span class="str">&quot;messages&quot;</span>: [{<span class="str">&quot;role&quot;</span>: <span class="str">&quot;user&quot;</span>, <span class="str">&quot;content&quot;</span>: <span class="str">&quot;3+4?&quot;</span>}]})
+
+<span class="cmt"># LangGraph — 흐름을 직접 그린다</span>
+<span class="kw">from</span> langgraph.graph <span class="kw">import</span> <span class="fn">StateGraph</span>, <span class="fn">START</span>, <span class="fn">END</span>, <span class="fn">MessagesState</span>
+<span class="kw">def</span> <span class="fn">chatbot</span>(state):
+    <span class="kw">return</span> {<span class="str">&quot;messages&quot;</span>: [model.<span class="fn">invoke</span>(state[<span class="str">&quot;messages&quot;</span>])]}
+builder = <span class="fn">StateGraph</span>(<span class="fn">MessagesState</span>)
+builder.<span class="fn">add_node</span>(<span class="str">&quot;chat&quot;</span>, chatbot)
+builder.<span class="fn">add_edge</span>(<span class="fn">START</span>, <span class="str">&quot;chat&quot;</span>); builder.<span class="fn">add_edge</span>(<span class="str">&quot;chat&quot;</span>, <span class="fn">END</span>)
+graph = builder.<span class="fn">compile</span>()
+graph.<span class="fn">invoke</span>({<span class="str">&quot;messages&quot;</span>: [{<span class="str">&quot;role&quot;</span>: <span class="str">&quot;user&quot;</span>, <span class="str">&quot;content&quot;</span>: <span class="str">&quot;3+4?&quot;</span>}]})
+
+<span class="cmt"># Deep Agents — 장기 작업 하네스</span>
+<span class="kw">from</span> deepagents <span class="kw">import</span> create_deep_agent
+agent = <span class="fn">create_deep_agent</span>(model=model)
+agent.<span class="fn">invoke</span>({<span class="str">&quot;messages&quot;</span>: [{<span class="str">&quot;role&quot;</span>: <span class="str">&quot;user&quot;</span>, <span class="str">&quot;content&quot;</span>: <span class="str">&quot;3+4?&quot;</span>}]})</pre></div></div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>26 / 29</span></footer>
+</section>
+<section data-speaker-notes="자, 배운 걸 다 모아서 진짜 하나 만들어 봅시다. 검색하고 요약하는 리서치 에이전트예요." class="divider" data-label="섹션 구분">
+  <div class="div-kicker">PART 09</div>
+  <h2 class="div-title">미니 프로젝트</h2><p class="div-sub">앞의 여덟 파트를 종합해 웹 검색과 한국어 요약을 수행하는 리서치 에이전트를 만듭니다.</p><div class="div-lab">실습 · <span class="mono">01_beginner/07_mini_project.ipynb</span></div>
+</section>
+<section data-speaker-notes="먼저 검색 도구부터요. Tavily 클라이언트를 함수로 감싸고, docstring과 타입 힌트, Args 설명까지 적어줍니다. Literal로 허용 값을 제한하고 기본값을 두면, 에이전트가 이 도구를 정확히 쓸 수 있어요. Tavily 키는 무료로 발급받으시면 됩니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">09 / 미니 프로젝트</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">검색 도구 정의 — Tavily</h2>
+</header>
+<div class="s-body"><div class="code-split"><div class="explain"><div class="point"><h4>docstring과 타입 힌트</h4><p>에이전트가 언제 어떻게 쓸지 판단하는 근거입니다. Args 설명까지 적으면 인자를 정확히 채웁니다.</p></div><div class="point"><h4>Literal로 제한합니다</h4><p><span class="mono">topic</span>처럼 허용 값을 타입으로 강제하고, 합리적인 기본값을 둡니다.</p></div><div class="point"><h4>import</h4><p><span class="mono">from tavily import TavilyClient</span>로 가져오며, 키는 tavily.com에서 무료로 발급합니다.</p></div></div><div class="code-panel"><div class="code-file"><span class="tab">search_tool.py</span><span>Tavily</span></div><div class="code-body"><pre><span class="kw">from</span> typing <span class="kw">import</span> <span class="fn">Literal</span>
+<span class="kw">from</span> tavily <span class="kw">import</span> <span class="fn">TavilyClient</span>
+
+tavily = <span class="fn">TavilyClient</span>(api_key=os.environ[<span class="str">&quot;TAVILY_API_KEY&quot;</span>])
+
+<span class="kw">def</span> <span class="fn">internet_search</span>(
+    query: <span class="kw">str</span>,
+    max_results: <span class="kw">int</span> = <span class="num">3</span>,
+    topic: <span class="fn">Literal</span>[<span class="str">&quot;general&quot;</span>, <span class="str">&quot;news&quot;</span>] = <span class="str">&quot;general&quot;</span>,
+) -&gt; <span class="kw">dict</span>:
+    <span class="str">&quot;&quot;&quot;인터넷에서 정보를 검색합니다.
+
+    Args:
+        query: 검색 쿼리
+        max_results: 최대 결과 수
+        topic: 검색 주제 카테고리
+    &quot;&quot;&quot;</span>
+    <span class="kw">return</span> tavily.<span class="fn">search</span>(query, max_results=max_results, topic=topic)</pre></div></div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>27 / 29</span></footer>
+</section>
+<section data-speaker-notes="검색 도구와 시스템 프롬프트만으로도 에이전트는 만들 수 있습니다. 다만 긴 리서치처럼 단계 관리가 필요하면 TodoListMiddleware를 함께 붙여야 합니다. 이렇게 하면 검색, 중간 메모, 종합 단계를 todo로 관찰하면서 설명할 수 있습니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">09 / 미니 프로젝트</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">Deep Agents 리서치 에이전트</h2>
+</header>
+<div class="s-body"><div class="code-split"><div class="explain"><div class="point"><h4>검색 도구와 프롬프트만</h4><p>검색 도구와 지침을 넘기고, 긴 리서치처럼 단계 관리가 필요하면 <span class="mono">TodoListMiddleware</span>를 함께 붙입니다.</p></div><div class="point"><h4>프롬프트가 행동을 좌우합니다</h4><p>“3개 핵심 포인트로 정리”처럼 출력 형식을 구체화하면 결과가 한결 일관됩니다.</p></div><div class="point"><h4>트레이드오프</h4><p>더 철저하지만 토큰을 더 씁니다. 단순한 질문이라면 LangChain이 더 빠르고 저렴합니다.</p></div></div><div class="code-panel"><div class="code-file"><span class="tab">research_agent.py</span><span>Deep Agents</span></div><div class="code-body"><pre><span class="kw">from</span> deepagents <span class="kw">import</span> create_deep_agent
+<span class="kw">from</span> langchain.agents.middleware <span class="kw">import</span> <span class="fn">TodoListMiddleware</span>
+
+research_agent = <span class="fn">create_deep_agent</span>(
+    model=model,
+    tools=[internet_search],
+    middleware=[<span class="fn">TodoListMiddleware</span>()],
+    system_prompt=(
+        <span class="str">&quot;당신은 전문 리서처입니다. &quot;</span>
+        <span class="str">&quot;웹을 검색한 후 결과를 한국어로 요약하세요.&quot;</span>
+    ),
+)
+
+<span class="cmt"># 스트리밍으로 도구 호출 → 요약 과정을 관찰</span>
+<span class="kw">for</span> chunk <span class="kw">in</span> research_agent.<span class="fn">stream</span>(
+    {<span class="str">&quot;messages&quot;</span>: [{<span class="str">&quot;role&quot;</span>: <span class="str">&quot;user&quot;</span>,
+        <span class="str">&quot;content&quot;</span>: <span class="str">&quot;LangChain v1의 주요 변경사항을 요약해 주세요.&quot;</span>}]},
+    stream_mode=<span class="str">&quot;updates&quot;</span>,
+):
+    <span class="fn">print</span>(chunk)</pre></div></div></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>28 / 29</span></footer>
+</section>
+<section data-speaker-notes="같은 걸 LangChain으로도 만들어 비교해 보면 성격 차이가 분명해져요. LangChain은 바로 검색하고 요약하는 데 가볍고, Deep Agents는 파일 작업과 서브에이전트가 필요한 장기 작업에 맞습니다. todo 계획은 Deep Agents 0.7 기준으로 명시한 미들웨어가 담당합니다." data-label="콘텐츠">
+<header class="s-head">
+<div class="s-eyebrow"><span class="s-course">AI 에이전트 개발</span><span class="s-meta">09 / 미니 프로젝트</span></div>
+<div class="s-rule"></div>
+<h2 class="s-title">LangChain 버전과 비교, 그리고 다음 단계</h2>
+<p class="s-lead">같은 검색을 <span class="mono">@tool</span>과 <span class="mono">create_agent</span>로도 만들어 성격 차이를 봅니다</p>
+</header>
+<div class="s-body center"><div class="dense"><ul class="blist"><li><span class="mk"></span><strong>두 방식의 차이</strong>입니다<ul><li><span class="mk">–</span>LangChain은 검색을 호출한 뒤 바로 요약합니다. 계획이나 파일 관리는 없습니다</li><li><span class="mk">–</span>Deep Agents는 파일 작업과 서브에이전트 경계를 제공하고, todo 계획은 명시한 미들웨어가 담당합니다</li></ul></li><li><span class="mk"></span><strong>입문을 정리하면</strong> — LLM → 도구 → 에이전트 → 워크플로 → 올인원 → 직접 만든 리서치 에이전트로 이어졌습니다</li><li><span class="mk"></span><strong>다음은 중급</strong>입니다 — 미들웨어 · MCP · HITL · RAG · 멀티에이전트를 다룹니다</li></ul></div></div>
+<footer class="s-foot"><span>© 주식회사 똑똑한청년들 · 배움 에이아이</span><span>29 / 29</span></footer>
+</section>
+<section data-speaker-notes="수고하셨습니다. LLM 한 번의 호출에서 출발해서, 도구를 붙이고, 에이전트를 만들고, 흐름을 그려보고, 마지막엔 직접 리서치 에이전트까지 완성했어요. 작은 조각들이 같은 인터페이스 위에서 하나로 이어진 겁니다." class="divider" data-label="마무리">
+  <div class="div-kicker">CLOSING</div>
+  <h2 class="div-title">작은 조각들이 하나로 이어졌습니다</h2>
+  <p class="div-sub">LLM 한 번의 호출에서 출발해 스스로 검색하고 요약하는 에이전트까지, 같은 인터페이스 위에서 쌓아 올렸습니다.</p>
+</section>
+</deck-stage>
+<script src="deck-stage.js"></script>
+</body></html>

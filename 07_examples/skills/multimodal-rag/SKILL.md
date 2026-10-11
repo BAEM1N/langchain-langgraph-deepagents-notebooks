@@ -1,3 +1,18 @@
+---
+name: multimodal-rag
+description: >
+  Multimodal PDF RAG guide for slide-level indexing with extracted text,
+  images, tables, and grounded slide citations.
+license: MIT
+compatibility: Python 3.12+
+metadata:
+  category: rag
+  difficulty: advanced
+  include_tools: search_slides
+---
+
+> Skill tools note: `metadata.include_tools` is a space-separated Deep Agents field. The tools become visible only after this skill is read or pinned, and the agent or `SkillsMiddleware` must provide matching tool implementations.
+
 # Multimodal PDF RAG Skill
 
 공개 강의 PDF/PPTX-export PDF를 슬라이드 단위로 인덱싱하는 예제용 규칙.

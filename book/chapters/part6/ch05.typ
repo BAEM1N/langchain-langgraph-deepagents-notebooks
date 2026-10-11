@@ -41,7 +41,7 @@ UI의 프로젝트 페이지에는 기본 3개 탭이 있습니다.
   [특정 key 점수 하락 알림],
 )
 
-대시보드를 _직접 구성하고 싶다면_ `Dashboards`에서 커스텀 차트를 묶을 수 있습니다. 같은 지표를 `client.list_runs`로 뽑아 Grafana 같은 사내 시스템에 붙여도 됩니다.
+대시보드를 _직접 구성하고 싶다면_ `Dashboards`에서 커스텀 차트를 묶을 수 있습니다. 같은 지표를 SmithDB `client.runs.query`로 뽑아 Grafana 같은 사내 시스템에 붙여도 됩니다.
 
 #figure(image("../../../assets/images/langsmith/05_production_monitoring/01_monitoring_dashboards_list.png", width: 95%), caption: [Project Monitoring Dashboards — 6개 탭(Traces / LLM Calls / Cost & Tokens / Tools / Run Types / Feedback Scores) × 기간])
 

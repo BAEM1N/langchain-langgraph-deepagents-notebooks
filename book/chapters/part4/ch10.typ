@@ -446,7 +446,7 @@ toad acp "uv run python path/to/your_server.py" .
 
 === 통합 아키텍처
 
-#code-block(`````python
+#code-block(`````
 [에디터/IDE] <-- ACP --> [에이전트] <-- API --> [샌드박스]
     |                       |                      |
   코드 편집              태스크 관리            코드 실행

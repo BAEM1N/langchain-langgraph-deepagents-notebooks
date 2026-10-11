@@ -324,7 +324,9 @@ def convert_markdown_cell(source: str, is_first_cell: bool = False,
 
         # Fenced code block in markdown
         if stripped.startswith('```'):
-            lang = stripped[3:].strip() or "python"
+            # Unlabelled fences also contain diagrams and console output.
+            # Preserve their neutral language instead of marking them Python.
+            lang = stripped[3:].strip()
             code_lines = []
             i += 1
             while i < len(lines) and not lines[i].strip().startswith('```'):

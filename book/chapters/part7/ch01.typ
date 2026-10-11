@@ -277,7 +277,7 @@ Prompt 'deep-research-agent-label:production' not found during refresh, evicting
 
 Agentic RAG 는 에이전트가 한 번에 검색·답변을 다 결정하지만, 도메인 어휘가 풍부할수록 _질의 재작성(rewrite)_ 을 분리하면 재현율이 올라갑니다. LangGraph 의 `StateGraph` 로 3개 노드를 명시적으로 구성합니다.
 
-#code-block(`````python
+#code-block(`````
 사용자 입력
    │
    ▼

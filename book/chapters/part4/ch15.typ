@@ -4,7 +4,7 @@
 
 #chapter(15, "권한 관리", subtitle: "FilesystemPermission · first-match-wins")
 
-Deep Agents의 built-in 파일시스템 도구(`ls`, `read_file`, `glob`, `grep`, `write_file`, `edit_file`)에 선언적 allow/deny 규칙을 적용해 _경로 기반 접근 제어_를 강제합니다. 프롬프트 인젝션 방어, 읽기 전용 에이전트, 특정 디렉터리만 허용하는 워크스페이스 격리를 구성할 때 이 장을 씁니다.
+Deep Agents의 built-in 파일시스템 도구(`ls`, `read_file`, `glob`, `grep`, `write_file`, `edit_file`, `delete`)에 선언적 allow/deny/interrupt 규칙을 적용해 _경로 기반 접근 제어_를 강제합니다. 프롬프트 인젝션 방어, 읽기 전용 에이전트, 특정 디렉터리만 허용하는 워크스페이스 격리를 구성할 때 이 장을 씁니다.
 
 #learning-header()
 #learning-objectives(
@@ -44,14 +44,16 @@ Deep Agents의 built-in 파일시스템 도구(`ls`, `read_file`, `glob`, `grep`
   text(weight: "bold")[설명],
   [`operations`],
   [`list["read" | "write"]`],
-  [`read` = `ls` / `read_file` / `glob` / `grep`, `write` = `write_file` / `edit_file`],
+  [`read` = `ls` / `read_file` / `glob` / `grep`, `write` = `write_file` / `edit_file` / `delete`],
   [`paths`],
   [`list[str]`],
   [글로브 패턴, `**` 재귀, `{a,b}` 선택자 지원],
   [`mode`],
-  [`"allow" | "deny"`],
+  [`"allow" | "deny" | "interrupt"`],
   [기본 `"allow"`],
 )
+
+`mode="interrupt"`는 일치하는 built-in 쓰기 도구 호출을 실행 전 승인 대기로 멈춥니다. 재개 방식은 일반 `interrupt_on` 승인 흐름과 같고, `delete`는 파일은 정확한 경로 규칙을, 디렉터리는 대상과 모든 하위 경로의 write 권한을 보수적으로 검사합니다.
 
 == 15.4 패턴 1: 읽기 전용 에이전트
 
@@ -163,10 +165,15 @@ agent = create_deep_agent(
 기본 동작은 _부모 에이전트의 permissions가 서브에이전트에 그대로 상속_되는 것입니다. 서브에이전트 스펙에 `permissions`를 주면 _부모 규칙을 완전히 대체_합니다(부분 오버라이드 아님). 대체할 때는 catch-all deny까지 직접 넣어야 안전합니다.
 
 #code-block(`````python
+parent_rules = [
+    FilesystemPermission(operations=["read"], paths=["/workspace/**"], mode="allow"),
+    FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
+]
+
 agent = create_deep_agent(
     model=model,
     backend=backend,
-    permissions=[...parent_rules...],
+    permissions=parent_rules,
     subagents=[
         {
             "name": "auditor",

@@ -1,4 +1,4 @@
-# Grading Rubrics — Deep Agents 0.6.5+
+# Grading Rubrics — Deep Agents 0.7+
 
 > 에이전트가 “완료” 기준을 스스로 점검하고, 부족하면 피드백을 받아 다시 실행하도록 만드는 LLM-as-a-judge 런타임 평가 미들웨어.
 
@@ -6,7 +6,7 @@
 
 `RubricMiddleware`는 Deep Agent가 답변을 만든 뒤 별도의 grader 모델로 전체 transcript와 rubric을 평가한다. 결과가 `needs_revision`이면 기준별 피드백을 대화에 주입하고 agent를 다시 실행한다. 루프는 `satisfied`, `max_iterations_reached`, `failed`, `grader_error` 중 하나로 종료된다.
 
-`RubricMiddleware`는 beta API이며 `deepagents>=0.6.5`가 필요하다. 프로덕션에서는 grader 모델 비용, 지연 시간, rubric 품질을 함께 관리한다.
+`RubricMiddleware`는 beta API이며 현재 교육 기준은 `deepagents>=0.7.23`이다. 프로덕션에서는 grader 모델 비용, 지연 시간, criterion coverage, rubric 품질을 함께 관리한다.
 
 ## 언제 쓰나
 
@@ -88,7 +88,9 @@ agent = create_deep_agent(
 )
 ```
 
-`stream_events(..., version="v3")`와 `CustomTransformer`를 함께 쓰면 `stream.custom`에서 `rubric_evaluation_start`, `rubric_evaluation_end` 이벤트를 UI로 보낼 수 있다.
+`stream_events(..., version="v3")`와 `CustomTransformer`를 함께 쓰면 `stream.custom`에서 rubric 평가 이벤트를 UI로 보낼 수 있다.
+
+교육용 결정적 grader와 SDK의 실제 rubric/grader hook은 구분한다. SDK rubric은 criterion별 coverage와 grader 연동 hook을 포함하므로, 단순 문자열 검사 예제는 동작 설명용으로만 둔다.
 
 ## 설계 주의사항
 

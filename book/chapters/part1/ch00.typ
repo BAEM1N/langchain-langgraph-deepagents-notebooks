@@ -15,7 +15,7 @@ AI 에이전트의 핵심만 빠르게 체험하는 입문 과정입니다.
 
 프로젝트 루트의 `.env.example`을 `.env`로 복사하고, 아래 키를 입력하세요:
 
-#code-block(`````python
+#code-block(`````
 OPENAI_API_KEY=sk-...
 TAVILY_API_KEY=tvly-...   # 선택
 `````)

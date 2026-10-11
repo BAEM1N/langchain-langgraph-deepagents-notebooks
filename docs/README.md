@@ -9,7 +9,7 @@
 | [`concepts/`](concepts/) | LangChain/LangGraph/Deep Agents 공통 개념: 제품 선택, provider/model, memory, context |
 | [`langchain/`](langchain/) | LangChain v1 agents, tools, middleware, RAG, streaming, deploy, observability 정리 |
 | [`langgraph/`](langgraph/) | LangGraph v1 Graph API, Functional API, persistence, interrupts, subgraphs, deploy 정리 |
-| [`deepagents/`](deepagents/) | Deep Agents SDK, backend, subagents, memory, skills, sandbox, production 정리 |
+| [`deepagents/`](deepagents/) | Deep Agents SDK, backend, subagents, memory, skills, sandbox, Code/Frontend 경로 정리 |
 | [`skills/`](skills/) | LangChain/LangGraph/Deep Agents 코딩 에이전트용 SKILL.md 가드레일 |
 | [`translation/`](translation/) | 한국어↔영어 mirror 제작을 위한 용어와 번역 기준 |
 | [`verification/`](verification/) | 노트북 smoke test, book build, 링크/비밀값 검증 evidence |
@@ -17,6 +17,18 @@
 | [`OBSERVABILITY.md`](OBSERVABILITY.md) | LangSmith, Langfuse 관측성 설정 |
 | [`MODEL_PROVIDERS.md`](MODEL_PROVIDERS.md) | OpenAI 외 provider와 로컬 모델 사용 방식 |
 | [`SKILLS.md`](SKILLS.md) | LangChain Skills 설치와 repo 내 활용 방식 |
+
+## 최신 업데이트 노트
+
+현재 문서 지도는 2026-10-11 조사에서 확인한 LangChain 1.4.4, LangGraph 1.2.14, Deep Agents 0.7.23, LangSmith 0.14.7 변경점을 반영한다. 세부 근거와 아직 노트북까지 이전하지 않은 항목은 [`verification/2026-10-11-update-research.md`](verification/2026-10-11-update-research.md)와 [`verification/2026-10-11-update-research-matrix.csv`](verification/2026-10-11-update-research-matrix.csv)를 기준으로 확인한다.
+
+핵심 주의점:
+
+- Deep Agents 계획 도구는 opt-in이다. 계획 예제에는 `TodoListMiddleware` 구성을 명시한다.
+- Deep Agents backend 예시는 `BackendProtocol` 인스턴스, `StoreBackend(namespace=...)`, overwrite/delete 권한 의미를 함께 설명한다.
+- LangChain MCP는 `langchain.mcp.MCPAdapter` beta API가 현재 기준이다. `MultiServerMCPClient`는 migration 비교용으로만 유지한다.
+- LangSmith run 조회는 SmithDB `runs.query()`로 이전하되 async, project UUID, 시간 범위, pagination, `selects=[...]` projection을 함께 다룬다. `selects`를 생략하면 `ID`만 채워지므로 읽는 필드를 `NAME`, `INPUTS`, `OUTPUTS`, `START_TIME`, `END_TIME`, `TRACE_ID`, `METADATA`, `FEEDBACK_STATS`, `LS_USER_ID`처럼 대문자 이름으로 명시한다.
+- Deep Agents Code 문서는 `/oss/deepagents/code/*`, Python SDK 문서는 `/oss/python/deepagents/*` 경로를 구분한다.
 
 ## 공개 문서 기준
 

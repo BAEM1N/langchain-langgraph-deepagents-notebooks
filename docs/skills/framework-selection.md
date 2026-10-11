@@ -6,10 +6,10 @@ LangChain, LangGraph, Deep Agents 세 프레임워크의 비교 및 선택 기�
 
 ```
 Deep Agents (최상위 하네스)
-  ├── 계획, 메모리, 스킬, 파일, 서브에이전트
+  ├── 메모리, 스킬, 파일, 서브에이전트, 선택적 계획
   ├── 17-파라미터 create_deep_agent() 진입점
-  ├── 내장 미들웨어: TodoList, Filesystem, SubAgent, Summarization,
-  │   AnthropicPromptCaching, PatchToolCalls (+ Skills/Memory/HITL)
+  ├── 미들웨어: Filesystem, SubAgent, Summarization,
+  │   AnthropicPromptCaching, PatchToolCalls (+ TodoList/Skills/Memory/HITL)
   │
 LangChain v1 (에이전트 + 미들웨어)
   ├── create_agent(), 6단계 미들웨어 훅
@@ -31,7 +31,7 @@ Deep Agents 는 LangChain 위에 얹는 사전 구성 미들웨어 묶음, LangC
 | 상태 관리 | AgentState (TypedDict) | 임의 state schema + checkpointer | StateBackend/StoreBackend/FilesystemBackend/Composite |
 | 멀티 에이전트 | handoff 도구 | 서브그래프 / Send fan-out | `SubAgentMiddleware` + `task` 도구 |
 | 파일 I/O | 수동 (도구 직접 작성) | 수동 | 내장 도구 7종 + BackendProtocol |
-| 계획 수립 | 수동 | 수동 | `write_todos` 내장 |
+| 계획 수립 | 수동 | 수동 | `TodoListMiddleware` 구성 시 `write_todos` |
 | 컨텍스트 압축 | 수동 / `SummarizationMiddleware` | 수동 | 기본 활성 (offload + summarize) |
 | HITL | `HumanInTheLoopMiddleware` | `interrupt()` + `Command(resume=...)` | `interrupt_on` 설정만 |
 | 학습 곡선 | 낮음 | 중간 | 중간 (의견 있는 기본값) |
@@ -55,7 +55,7 @@ Deep Agents 는 LangChain 위에 얹는 사전 구성 미들웨어 묶음, LangC
 
 - **LangChain v1**: 단일 에이전트, 도구 호출, 구조화 출력, RAG. 미들웨어로 정책·관찰성·HITL 을 부착한다.
 - **LangGraph**: 단계가 분리되거나 사람 승인·재시도·서브그래프가 필요한 워크플로. 상태 schema 와 checkpointer 를 직접 다룬다.
-- **Deep Agents**: 파일 시스템·계획·서브에이전트가 한꺼번에 필요한 자율 에이전트. Anthropic 캐싱·요약·오류 복구가 기본 활성이라 처음부터 작업 자체에 집중할 수 있다.
+- **Deep Agents**: 파일 시스템·서브에이전트·스킬·메모리와 선택적 계획 도구가 한꺼번에 필요한 자율 에이전트. 캐싱·요약·오류 복구 같은 harness 기능과 명시한 middleware 구성을 함께 확인한다.
 
 ## 프레임워크 혼합
 
@@ -81,5 +81,5 @@ agent = create_deep_agent(
 
 1. **단계가 하나뿐이고 도구 호출만 있는가?** → LangChain v1 `create_agent()`.
 2. **분기·루프·HITL 이 명시적으로 보이는가?** → LangGraph `StateGraph`.
-3. **파일/계획/서브에이전트가 함께 필요한가?** → Deep Agents `create_deep_agent()`.
+3. **파일/스킬/서브에이전트와 선택적 계획 도구가 함께 필요한가?** → Deep Agents `create_deep_agent()`.
 4. **여러 형태가 섞여 있는가?** → Deep Agents 를 셸로 두고 내부 노드에 LangGraph/LangChain 을 끼워 넣는다.

@@ -9,13 +9,13 @@ Deep agents expose filesystem operations through pluggable backends. Tools like 
 Stores files in LangGraph agent state for the current thread. Ideal for scratch pads and automatic eviction of large outputs. Files persist across agent turns via checkpoints but only within a single thread. Note: calling backend methods outside of a graph run won't take effect until the graph executes.
 
 ### FilesystemBackend
-Provides local disk access with configurable `root_dir`. Setting `virtual_mode=True` blocks `..`, `~`, and absolute paths outside `root_dir`. **Security warning**: agents can read any accessible file including secrets (API keys, `.env`, credentials). Combined with network tools, secrets may be exfiltrated via SSRF attacks.
+Provides local disk access with configurable `root_dir`. `virtual_mode=True` is the default and blocks `..`, `~`, and absolute paths outside `root_dir`, but it is not a security sandbox. **Security warning**: agents can read any accessible file including secrets (API keys, `.env`, credentials). Combined with network tools, secrets may be exfiltrated via SSRF attacks.
 
 ### LocalShellBackend
 Extends FilesystemBackend with unrestricted shell command execution via the `execute` tool. Commands run with `subprocess.run(shell=True)` without sandboxing — full user permissions, unlimited CPU/memory/disk, permanent and irreversible. **Requires extreme caution**; never use on shared or production systems.
 
 ### StoreBackend
-Leverages LangGraph's `BaseStore` for cross-thread persistent storage. Works with Redis, Postgres, or cloud implementations. Supports namespace factories for multi-user isolation — as of `deepagents>=0.5.2`, the factory receives a LangGraph `Runtime` object. Automatically provisioned when deployed via LangSmith.
+Leverages LangGraph's `BaseStore` for cross-thread persistent storage. Works with Redis, Postgres, or cloud implementations. Current `StoreBackend` construction requires keyword-only `namespace=...`; namespace factories such as `lambda rt: (...)` are valid and receive a LangGraph `Runtime` object. Automatically provisioned when deployed via LangSmith.
 
 ### ContextHubBackend
 Stores files in LangSmith Hub repositories. Pulls the Hub repo tree lazily on first use, serves reads from an in-memory cache, commits writes, and handles optimistic parent-commit conflicts automatically.
@@ -30,11 +30,12 @@ Execute code in isolated environments (Modal, Daytona, Deno, or local VFS) with 
 
 Implement `BackendProtocol` with these required methods:
 - `ls(path)` – returns `LsResult` with entries (`path`, optionally `is_dir`, `size`, `modified_at`), sorted deterministically
-- `read(file_path, offset=0, limit=2000)` – returns `ReadResult` with data or `ReadResult(error=...)` on missing files
+- `read(file_path, offset=0, limit=2000)` – returns `ReadResult(file_data=...)` or `ReadResult(error=...)` on missing files
 - `grep(pattern, path=None, glob=None)` – returns structured matches in `GrepResult`; on error return `GrepResult(error=...)` (do not raise)
 - `glob(pattern, path="/")` – returns matched `FileInfo` entries, empty list if none match
-- `write(file_path, content)` – create-only semantics; on conflict return `WriteResult(error=...)`. Return `files_update=None` for external backends
+- `write(file_path, content)` – write or replace content according to the backend contract and permission rules
 - `edit(file_path, old_string, new_string, replace_all=False)` – enforce uniqueness of `old_string` unless `replace_all=True`; include `occurrences` count on success
+- `delete(file_path)` – optional deletion support; tools expose it only when the backend implements it and permissions allow it
 
 ## Security Considerations
 
@@ -42,7 +43,7 @@ Both `FilesystemBackend` and `LocalShellBackend` pose significant risks in produ
 - Enable Human-in-the-Loop middleware for sensitive operations
 - Use sandbox backends for production filesystem access
 - Never expose API keys or credentials to agent-accessible paths
-- Consider virtual_mode restrictions for local filesystem access
+- Treat `virtual_mode` as path normalization, not isolation. Use sandbox backends for code execution or untrusted workloads
 
 ## Policy Enforcement
 
@@ -75,5 +76,6 @@ backend = StoreBackend(
 
 ## Version Notes
 
-- Pre-constructed backend instances are preferred over factory functions (the older factory pattern is deprecated).
-- Namespace factories receive a LangGraph `Runtime` object as of `deepagents>=0.5.2` (previously a `BackendContext` wrapper).
+- Pass pre-constructed backend instances to `create_deep_agent`; the older backend factory pattern has been removed from the current signature.
+- `StateBackend()` takes no runtime argument.
+- `StoreBackend(namespace=...)` requires `namespace` and may use a callable namespace factory that receives a LangGraph `Runtime`.

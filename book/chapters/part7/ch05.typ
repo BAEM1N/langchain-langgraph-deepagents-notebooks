@@ -3,10 +3,10 @@
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-#chapter(5, "딥 리서치 에이전트", subtitle: "`create_deep_agent` + TodoList + 서브에이전트 dispatch")
+#chapter(5, "딥 리서치 에이전트", subtitle: "`create_deep_agent` + TodoListMiddleware + 서브에이전트 dispatch")
 
 == 학습 목표
-#learning-objectives([`create_deep_agent` 의 표준 구성(harness + 빌트인 도구 + 서브에이전트)으로 리서치 에이전트를 만든다], [빌트인 `write_todos` 로 _TodoList 기반 계획_을 세우고 `task` 도구로 서브에이전트에 dispatch 한다], [`think_tool` 로 전략적 반성(strategic reflection)을 구현한다], [5단계 워크플로(Plan → Delegate → Synthesize → Verify → Report)를 설계한다], [_AsyncSubAgent 5-tool 패턴_(`start_async_task` / `check_async_task` / `update_async_task` / `cancel_async_task` / `list_async_tasks`)을 안내한다], [v1 미들웨어(`SummarizationMiddleware`, `ModelCallLimitMiddleware`, `ModelFallbackMiddleware`)를 적용한다])
+#learning-objectives([`create_deep_agent`의 하네스와 서브에이전트 구성으로 리서치 에이전트를 만든다], [`TodoListMiddleware`를 명시적으로 추가해 `write_todos` 기반 계획을 세우고 `task` 도구로 서브에이전트에 dispatch 한다], [`think_tool`로 전략적 반성(strategic reflection)을 구현한다], [5단계 워크플로(Plan → Delegate → Synthesize → Verify → Report)를 설계한다], [_AsyncSubAgent 5-tool 패턴_(`start_async_task` / `check_async_task` / `update_async_task` / `cancel_async_task` / `list_async_tasks`)을 안내한다], [v1 미들웨어(`SummarizationMiddleware`, `ModelCallLimitMiddleware`, `ModelFallbackMiddleware`)를 적용한다])
 
 == 개요
 
@@ -19,11 +19,11 @@
   text(weight: "bold")[항목],
   text(weight: "bold")[내용],
   [_프레임워크_],
-  [Deep Agents 0.6+],
+  [Deep Agents],
   [_진입점_],
-  [`create_deep_agent(model, tools, subagents, ...)` — harness 가 빌트인 도구·서브에이전트를 자동 부착],
+  [`create_deep_agent(model, tools, subagents, ...)` — 하네스가 파일 도구와 서브에이전트를 조립],
   [_계획 도구_],
-  [빌트인 `write_todos` — TodoList 로 다단계 계획 작성/업데이트],
+  [`TodoListMiddleware`를 명시적으로 추가해 `write_todos` 사용],
   [_위임 도구_],
   [빌트인 `task` — 동기 서브에이전트 dispatch (Plan → Delegate)],
   [_반성 도구_],
@@ -98,7 +98,7 @@ def web_search(query: str) -> str:
 
 == 3단계: 5단계 리서치 워크플로 프롬프트
 
-`prompts.load_prompt()` 가 프롬프트를 로드합니다 (LangSmith Hub → Langfuse → 기본값).
+`prompts.load_prompt()`가 프롬프트를 로드합니다 (LangSmith Hub → Langfuse → 기본값).
 
 #table(
   columns: 4,
@@ -113,7 +113,7 @@ def web_search(query: str) -> str:
   [1],
   [_Plan_],
   [`write_todos`],
-  [TodoList 로 리서치 계획 작성],
+  [`TodoListMiddleware`로 노출한 계획 도구 사용],
   [2],
   [_Delegate_],
   [`task`],
@@ -134,9 +134,9 @@ def web_search(query: str) -> str:
 
 === TodoList + dispatch 패턴
 
-빌트인 `write_todos` 는 다단계 리서치에서 메인 에이전트의 _계획-기억-진행 상황_을 외부 상태로 분리합니다. 컨텍스트가 압축되어도 todos 가 살아남기 때문에, 긴 리서치 중에 어디까지 했는지 잃지 않습니다.
+`write_todos`는 다단계 리서치에서 메인 에이전트의 _계획-기억-진행 상황_을 외부 상태로 분리합니다. 이 도구는 기본 전제가 아니라 `TodoListMiddleware()`를 추가했을 때 사용할 수 있습니다.
 
-#code-block(`````python
+#code-block(`````
 write_todos([
   {"content": "LangGraph 핵심 개념 조사", "status": "in_progress"},
   {"content": "Deep Agents 핵심 개념 조사", "status": "pending"},
@@ -148,7 +148,7 @@ task(subagent_type="researcher-1", description="LangGraph 핵심 개념 조사 .
 task(subagent_type="researcher-2", description="Deep Agents 핵심 개념 조사 ...")
 `````)
 
-`task` 는 동기 서브에이전트 dispatch 도구입니다. 메인 에이전트는 서브에이전트 결과를 받아 todos 상태를 갱신하고 다음 단계로 넘어갑니다.
+`task`는 동기 서브에이전트 dispatch 도구입니다. 메인 에이전트는 서브에이전트 결과를 받아 todos 상태를 갱신하고 다음 단계로 넘어갑니다.
 
 #code-block(`````python
 from prompts import RESEARCH_AGENT_PROMPT
@@ -261,6 +261,7 @@ from langchain.agents.middleware import (
     SummarizationMiddleware,
     ModelCallLimitMiddleware,
     ModelFallbackMiddleware,
+    TodoListMiddleware,
 )
 
 research_agent = create_deep_agent(
@@ -272,6 +273,7 @@ research_agent = create_deep_agent(
     skills=["/skills/"],
     checkpointer=InMemorySaver(),
     middleware=[
+        TodoListMiddleware(),
         SummarizationMiddleware(model=model, trigger=("messages", 15)),
         ModelCallLimitMiddleware(run_limit=30),
         ModelFallbackMiddleware("openai:gpt-5.4-mini"),
@@ -394,9 +396,9 @@ agent = create_deep_agent(
   text(weight: "bold")[항목],
   text(weight: "bold")[핵심],
   [_진입점_],
-  [`create_deep_agent(model, tools, subagents, ...)` — harness 가 빌트인 도구·서브에이전트 자동 부착],
+  [`create_deep_agent(model, tools, subagents, ...)` — 하네스가 파일 도구와 서브에이전트 구성 조립],
   [_TodoList_],
-  [빌트인 `write_todos` — 다단계 리서치 계획 외부 상태로 분리],
+  [`TodoListMiddleware()`를 명시적으로 추가하면 `write_todos` 사용 가능],
   [_dispatch_],
   [빌트인 `task` — 동기 서브에이전트 호출 (Plan → Delegate)],
   [_think_tool_],

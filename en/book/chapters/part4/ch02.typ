@@ -78,7 +78,7 @@ print("API keys loaded successfully.")
 == 2. Creating the Simplest Agent
 
 `create_deep_agent()` is the core function in Deep Agents.
-If you call it with no additional configuration, it automatically assembles a default model and the built-in tools.
+If you call it with no additional configuration, it assembles the harness around your model and the default filesystem/subagent tools. Planning is an explicit middleware choice in current Deep Agents.
 
 
 #code-block(`````python
@@ -173,7 +173,7 @@ print("Research agent created!")
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 5. Checking the Built-In Tools
 
-These are the built-in tools that `create_deep_agent()` adds automatically:
+These are the core harness tools you will see in current Deep Agents. Planning appears when you add `TodoListMiddleware`.
 
 #table(
   columns: 2,
@@ -184,13 +184,13 @@ These are the built-in tools that `create_deep_agent()` adds automatically:
   text(weight: "bold")[Tool],
   text(weight: "bold")[Description],
   [`write_todos`],
-  [Manage a structured task list (`pending` → `in_progress` → `completed`)],
+  [Manage a structured task list when `TodoListMiddleware` is enabled],
   [`ls`],
   [List directory contents with metadata],
   [`read_file`],
   [Read a file (with line numbers and image support)],
   [`write_file`],
-  [Create a new file],
+  [Write or replace a file],
   [`edit_file`],
   [Replace text inside a file (`old_string` → `new_string`)],
   [`glob`],
@@ -198,7 +198,7 @@ These are the built-in tools that `create_deep_agent()` adds automatically:
   [`grep`],
   [Search file contents (with regex support)],
   [`task`],
-  [Call a subagent (added automatically when subagents are configured)],
+  [Call a subagent],
 )
 
 #tip-box[All of these tools work through the _backend_. The default is `StateBackend`, which stores files inside agent state.]

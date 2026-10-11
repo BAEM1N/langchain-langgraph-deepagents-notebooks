@@ -181,18 +181,25 @@ with ls.tracing_context(
 
 == 6.01.5 Retrieve Traces from Code
 
-You can programmatically fetch traces without the UI using `langsmith.Client`. This is useful for evaluation or regression test inputs.
+You can programmatically fetch traces without the UI using `langsmith.Client`. SmithDB-backed `runs.query()` is async, uses project UUIDs rather than project names, and should receive an explicit time window if you need more than the recent default range. If you omit `selects`, the response only includes `ID`; list every field your code reads, such as `NAME`, `START_TIME`, `INPUTS`, or `OUTPUTS`.
 
 #code-block(`````python
 from langsmith import Client
-client = Client()
+from datetime import datetime, timedelta, timezone
 
-runs = list(client.list_runs(
-    project_name=os.environ["LANGSMITH_PROJECT"],
-    run_type="chain",
-    limit=5,
-))
-for r in runs:
+client = Client()
+project = client.read_project(project_name=os.environ["LANGSMITH_PROJECT"])
+window_end = datetime.now(timezone.utc)
+since = window_end - timedelta(days=7)
+
+async for r in client.runs.query(
+    project_ids=[str(project.id)],
+    run_type="CHAIN",
+    min_start_time=since,
+    max_start_time=window_end,
+    page_size=5,
+    selects=["NAME", "START_TIME", "END_TIME", "TOTAL_TOKENS"],
+):
     duration = (r.end_time - r.start_time).total_seconds() if r.end_time else 0.0
     print(f"{r.start_time:%H:%M:%S}  {r.name:30s}  {r.total_tokens or 0:>5} tok  {duration:.2f}s")
 `````)
@@ -217,7 +224,7 @@ _Settings left nav: API Keys · Members · OAuth providers · Provider secrets �
 - [ ] Attach `run_name` + `tags` + `metadata` and confirm UI filtering works
 - [ ] Include regular functions in traces with `@traceable`
 - [ ] Use `import langsmith as ls` + `ls.tracing_context(enabled=True, ...)` for block-level control
-- [ ] Programmatically fetch traces with `Client().list_runs(...)`
+- [ ] Programmatically fetch traces with async `Client().runs.query(...)`
 
 == Next
 

@@ -95,8 +95,8 @@ The repository also maintains Typst-generated PDF handbooks.
 Build:
 
 ```bash
-python book/scripts/build.py      # Korean PDF, from repo root
-python en/book/scripts/build.py   # English PDF, from repo root
+uv run --all-extras python book/scripts/build.py      # Korean PDF, from repo root
+uv run --all-extras python en/book/scripts/build.py   # English PDF, from repo root
 ```
 
 Part layout:
@@ -112,7 +112,7 @@ Part layout:
 | VII | Applied examples | 11 |
 | VIII | Integrations | 8 |
 
-Regeneration note: the Korean handbook build converts the notebook-derived chapters listed in `book/scripts/config.yaml` before compiling. The English handbook build compiles the curated Typst tree directly; `en/book/scripts/config.yaml` is a targeted regeneration list for the new English notebook-derived chapters only, so older hand-polished chapters are not overwritten accidentally. Part VIII / `08_integration` is a separate handbook lane and is not generated from either notebook YAML config.
+Regeneration note: the Korean handbook build converts the notebook-derived chapters listed in `book/scripts/config.yaml` before compiling. The English handbook build compiles the curated Typst tree directly; `en/book/scripts/config.yaml` is a targeted regeneration list for the new English notebook-derived chapters only, so older hand-polished chapters are not overwritten accidentally. When English notebook-derived chapters need refresh, run `uv run --all-extras python book/scripts/nb2typ.py --config en/book/scripts/config.yaml` before rebuilding the English PDF. Part VIII / `08_integration` is a separate handbook lane and is not generated from either notebook YAML config.
 
 ---
 
@@ -121,6 +121,11 @@ Regeneration note: the Korean handbook build converts the notebook-derived chapt
 Default validation targets only 01~07 notebooks. `08_integration/` is excluded.
 
 ```bash
+# Offline SDK/book/source-contract checks
+uv run --all-extras python -m unittest discover -s tests -v
+uv run --all-extras python scripts/validate_materials.py --changed-only \
+  --report .local/materials-validation-report.json
+
 # Run changed 01~07 notebooks with gpt-4.1 on transformed local copies
 UV_NO_SYNC=1 uv run python local/notebook_execution_01_07_gpt41/run_notebooks.py \
   --changed-only --force --timeout 300
@@ -130,6 +135,8 @@ UV_NO_SYNC=1 uv run python local/notebook_execution_01_07_gpt41/run_notebooks.py
   --changed-only --force --timeout 300 --allow-langsmith-mutations
 ```
 
+Lecture deck rebuilds are documented in [`../decks/README.md`](../decks/README.md). Current PPTX files preserve the existing image-based presentation format; edit slide content in the HTML/Python sources under `../decks/source/` and rebuild from there.
+
 The harness:
 
 - excludes `08_integration/`,
@@ -138,7 +145,7 @@ The harness:
 - logs to the LangSmith project `langchain-langgraph-deepagents-notebooks`, and
 - namespaces LangSmith mutations with `local-exec-*` prefixes.
 
-Recent verification evidence is in [`../docs/verification/2026-06-21-official-docs-implementation-batch-2.md`](../docs/verification/2026-06-21-official-docs-implementation-batch-2.md).
+The latest ecosystem update research is in [`../docs/verification/2026-10-11-update-research.md`](../docs/verification/2026-10-11-update-research.md). Recent notebook smoke evidence remains in [`../docs/verification/2026-06-21-official-docs-implementation-batch-2.md`](../docs/verification/2026-06-21-official-docs-implementation-batch-2.md).
 
 ---
 
@@ -148,16 +155,16 @@ Recent verification evidence is in [`../docs/verification/2026-06-21-official-do
 |---|---|---|
 | `python` | `>=3.12` | Notebook runtime |
 | `uv` | lockfile-based | Dependency management |
-| `langchain` | `>=1.3.9` | agents, tools, middleware, streaming |
-| `langchain-core` | `>=1.4.7` | message/tool/model core abstractions |
-| `langgraph` | `>=1.2.5` | state graphs, persistence, fault tolerance |
-| `deepagents` | `>=0.6.10` | Deep Agents SDK, backends, subagents, skills |
+| `langchain` | 1.4.4 update target | agents, tools, middleware, streaming, MCPAdapter |
+| `langchain-core` | 1.6.9 update target | message/tool/model core abstractions |
+| `langgraph` | 1.2.14 update target | state graphs, persistence, interrupts, trace policy |
+| `deepagents` | 0.7.23 update target | Deep Agents SDK, backends, subagents, skills |
 | `agentevals` | `>=0.0.9` | trajectory matching and LLM-as-judge evals |
-| `langsmith` | lockfile | tracing, datasets, experiments, prompt hub |
-| `langchain-openai` | `>=1.3.2` | OpenAI model integration |
+| `langsmith` | 0.14.7 update target | tracing, datasets, experiments, SmithDB-backed run queries |
+| `langchain-openai` | 1.7.0 update target | OpenAI model integration |
 | `pymupdf4llm` | `>=1.27.2.3` | multimodal PDF RAG preprocessing |
 
-Dependencies are managed through [`../pyproject.toml`](../pyproject.toml) and `uv.lock`.
+Dependencies are managed through [`../pyproject.toml`](../pyproject.toml) and `uv.lock`; compare them with the update research before changing notebook code.
 
 ---
 
@@ -174,4 +181,4 @@ Dependencies are managed through [`../pyproject.toml`](../pyproject.toml) and `u
 
 ## License
 
-MIT
+There is no root `LICENSE` file in this repository yet. Confirm reuse terms before redistributing the materials.

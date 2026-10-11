@@ -26,14 +26,14 @@ print("\u2713 모델 준비 완료")
 
 == 5.2 에이전트 생성
 
-`create_deep_agent()`는 LangChain 모델을 받아, 파일 읽기/쓰기/검색 등의 _빌트인 도구_가 자동으로 포함된 에이전트를 반환합니다.
+`create_deep_agent()`는 LangChain 모델을 받아 파일 읽기/쓰기/검색, `execute`, `task` 같은 _빌트인 도구_가 포함된 에이전트를 반환합니다.
 반환 타입이 LangGraph의 `CompiledStateGraph`이므로 `invoke()`, `stream()` 등을 그대로 쓸 수 있습니다.
 
 _Deep Agents란?_
 
 Deep Agents는 에이전트 개발을 단순하게 만들기 위해 설계된 프레임워크로, _에이전트 하네스(harness)_ 역할을 합니다. LangChain의 기본 에이전트 컴포넌트 위에 구축되며, 실행 관리에는 LangGraph를 씁니다.
 
-_핵심 내장 기능:_
+_핵심 기능:_
 
 #table(
   columns: 2,
@@ -43,21 +43,21 @@ _핵심 내장 기능:_
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[기능],
   text(weight: "bold")[설명],
-  [_태스크 플래닝_],
-  [`write_todos` 도구로 복잡한 문제를 관리 가능한 단계로 자동 분해],
   [_컨텍스트 관리_],
-  [파일 시스템 도구(`write_file`, `read_file`)로 토큰 한도를 넘지 않고 대량 데이터 처리],
+  [파일 시스템 도구(`write_file`, `read_file`)로 토큰 한도를 넘는 중간 산출물을 다룹니다.],
   [_유연한 저장소_],
-  [인메모리, 로컬 디스크, 영구 저장소, 샌드박스 환경 등 플러거블 백엔드 지원],
+  [상태 기반, 로컬 디스크, 영구 store, 샌드박스 환경 등 플러거블 백엔드를 지원합니다.],
   [_서브에이전트 위임_],
-  [특정 하위 작업을 위한 전문 서브에이전트를 만들어 컨텍스트 격리],
+  [특정 하위 작업을 전문 서브에이전트에 맡겨 컨텍스트를 격리합니다.],
+  [_계획 도구_],
+  [복잡한 작업에서 `TodoListMiddleware`를 명시적으로 추가하면 `write_todos`로 단계 관리를 할 수 있습니다.],
   [_영구 메모리_],
-  [LangGraph 메모리 인프라로 여러 대화에 걸쳐 정보를 유지],
+  [LangGraph store/checkpointer와 Deep Agents memory·skills 계층으로 여러 대화에 걸쳐 정보를 유지합니다.],
 )
 
 _에이전트 생성 방법:_
 
-`create_deep_agent()`에 모델, 도구, 시스템 프롬프트를 전달하면 됩니다. 도구 호출을 지원하는 모델이 필요하며, Anthropic, OpenAI 등 다양한 프로바이더를 쓸 수 있습니다.
+`create_deep_agent()`에 모델, 도구, 시스템 프롬프트를 전달하면 됩니다. 계획을 실습하려면 `middleware=[TodoListMiddleware()]`를 함께 전달합니다. 도구 호출을 지원하는 모델이 필요하며, Anthropic, OpenAI 등 다양한 프로바이더를 쓸 수 있습니다.
 
 #code-block(`````python
 from deepagents import create_deep_agent

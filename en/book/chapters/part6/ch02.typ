@@ -14,7 +14,7 @@ If you saw a single `create_agent` execution in the UI in `01_quickstart`, now w
 - Distinguish between synchronous and asynchronous subagent traces (`async_tasks` channel) in Deep Agents
 - Group multiple executions into a session view using `thread_id` / `session_id` / `conversation_id`
 - Attach evaluation scores to runs using `client.create_feedback(run_id, key, score)`
-- Programmatically filter using tags/metadata with `client.list_runs(filter=...)`
+- Programmatically filter using tags/metadata with SmithDB `client.runs.query(filter=...)`
 - _Permanently store_ important traces as datasets to overcome the 400-day retention limit
 
 == Prerequisites
@@ -238,12 +238,17 @@ from langsmith import Client
 
 client = Client()
 
-# Get the most recent root run and attach feedback
-latest = next(client.list_runs(
-    project_name=os.environ["LANGSMITH_PROJECT"],
+# Get the most recent root run and attach feedback.
+project = client.read_project(project_name=os.environ["LANGSMITH_PROJECT"])
+latest = None
+async for run in client.runs.query(
+    project_ids=[str(project.id)],
     is_root=True,
-    limit=1,
-))
+    page_size=1,
+    selects=["ID"],
+):
+    latest = run
+    break
 
 client.create_feedback(
     run_id=latest.id,
@@ -257,7 +262,7 @@ print(f"Feedback attached → run {latest.id}")
 
 == 6.02.6 Tag/Metadata-Based Filter Queries
 
-You can use the same filter expressions as the UI in code with `client.list_runs(filter=...)`. Useful for regression tests, nightly batches, and dashboard feeding.
+You can use the same filter expressions as the UI in code with SmithDB `client.runs.query(filter=...)`. Useful for regression tests, nightly batches, and dashboard feeding. Resolve the project UUID first and set a time window explicitly when you need repeatable history. A query without `selects` returns only `ID`, so every field you read later must be listed explicitly.
 
 \<!-- phase-c:embed --\>
 #image("../../assets/images/langsmith/02_tracing_agents/06_add_filter_menu.png")
@@ -265,22 +270,35 @@ You can use the same filter expressions as the UI in code with `client.list_runs
 _Field list shown when clicking `Add filter` — Input/Output/Run Name/Run Type/Latency/Status/Error Message/Tag/Metadata/Feedback/Run ID/Trace ID/Thread ID/Token Count/Cost + Advanced. Tag and Metadata are separate fields, so you can query with conditions like `tags contains env:dev`._
 
 #code-block(`````python
+from datetime import datetime, timedelta, timezone
+
+project = client.read_project(project_name=os.environ["LANGSMITH_PROJECT"])
+window_end = datetime.now(timezone.utc)
+since = window_end - timedelta(days=7)
+
 # 1) Get only root runs with a specific tag
-runs = list(client.list_runs(
-    project_name=os.environ["LANGSMITH_PROJECT"],
+async for r in client.runs.query(
+    project_ids=[str(project.id)],
     filter='and(eq(is_root, true), has(tags, "demo:deepagent"))',
-    limit=5,
-))
-for r in runs:
+    min_start_time=since,
+    max_start_time=window_end,
+    page_size=5,
+    selects=["ID", "NAME", "START_TIME", "TAGS"],
+):
     print(f"{r.start_time:%H:%M:%S}  {r.name:30s}  tags={r.tags}")
 
 # 2) Query runs with metadata.thread_id
-thread_runs = list(client.list_runs(
-    project_name=os.environ["LANGSMITH_PROJECT"],
+thread_count = 0
+async for _ in client.runs.query(
+    project_ids=[str(project.id)],
     filter='eq(metadata_key, "thread_id")',
-    limit=20,
-))
-print(f"Number of runs with thread_id: {len(thread_runs)}")
+    min_start_time=since,
+    max_start_time=window_end,
+    page_size=20,
+    selects=["ID"],
+):
+    thread_count += 1
+print(f"Number of runs with thread_id: {thread_count}")
 `````)
 
 == 6.02.7 `\@traceable` run_type Classification + Low-Level `create_run` / `update_run`
@@ -374,6 +392,7 @@ SaaS LangSmith _deletes traces 400 days after ingestion_. To use important execu
 #code-block(`````python
 # Permanently store traces as a dataset
 # Since langsmith 0.7.x, add_runs_to_dataset has been removed. Use create_examples instead.
+from datetime import datetime, timedelta, timezone
 from langsmith import Client
 
 client = Client()
@@ -386,11 +405,20 @@ try:
 except Exception:
     ds = client.read_dataset(dataset_name=DS_NAME)
 
-runs = list(client.list_runs(
-    project_name=os.environ["LANGSMITH_PROJECT"],
-    run_type="chain",
-    limit=5,
-))
+runs = []
+project = client.read_project(project_name=os.environ["LANGSMITH_PROJECT"])
+since = datetime.now(timezone.utc) - timedelta(days=30)
+async for run in client.runs.query(
+    project_ids=[str(project.id)],
+    run_type="CHAIN",
+    min_start_time=since,
+    max_start_time=window_end,
+    page_size=5,
+    selects=["ID", "INPUTS", "OUTPUTS"],
+):
+    runs.append(run)
+    if len(runs) >= 5:
+        break
 
 examples = [
     {"inputs": r.inputs, "outputs": r.outputs, "metadata": {"source_run_id": str(r.id)}}
@@ -407,7 +435,7 @@ print(f"Added {len(examples)} examples to dataset '{ds.name}'.")
 - [ ] Understand that Deep Agents synchronous subagents are recorded as child trees under the `task` tool, while asynchronous ones are recorded as separate traces
 - [ ] Confirm that executions with the same `metadata.thread_id` are grouped as a single line in the Threads view
 - [ ] Attach feedback to the latest run using `client.create_feedback(run_id, key, score)`
-- [ ] Programmatically query using tags/metadata with `client.list_runs(filter=...)`
+- [ ] Programmatically query using tags/metadata with async `client.runs.query(filter=...)`
 - [ ] Use all 7 `run_type`s of `@traceable` (chain/llm/tool/retriever/embedding/prompt/parser) + low-level `Client.create_run` / `update_run`
 - [ ] Explicitly inject `LangChainTracer` callback + use `Runnable.with_config({"tags": [...]})`
 - [ ] Use `ls.tracing_context(enabled=True)` for selective tracing when `LANGSMITH_TRACING=false`

@@ -147,7 +147,7 @@ $ langgraph dev
 `````)
 
 _예상 출력:_
-#code-block(`````python
+#code-block(`````
 Ready!
 - API: http://127.0.0.1:2024
 - Docs: http://127.0.0.1:2024/docs

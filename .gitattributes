@@ -1,0 +1,9 @@
+# Generated artifacts must keep their bytes and never be treated as text diffs.
+*.pdf binary
+*.pptx binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ttf binary
+*.woff binary
+*.woff2 binary

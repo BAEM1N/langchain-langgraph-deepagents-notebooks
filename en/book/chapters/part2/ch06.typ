@@ -261,6 +261,32 @@ Common uses:
 - _Error handling:_ apply fallback behavior if a tool fails
 - _Access control:_ block or restrict specific tools
 
+==== Updating custom state from `\@wrap_tool_call`
+
+When a wrapper needs to persist audit data, declare the custom state with `state_schema=` and return a `Command(update=...)`. Without the schema, the extra field is not part of the agent state contract.
+
+#code-block(`````python
+from typing_extensions import NotRequired, TypedDict
+from langchain.messages import ToolMessage
+from langchain.agents.middleware import ToolCallRequest, wrap_tool_call
+from langgraph.types import Command
+
+class AuditState(TypedDict):
+    tool_calls_log: NotRequired[list[str]]
+
+@wrap_tool_call(state_schema=AuditState)
+def audit_tool_call(request: ToolCallRequest, handler):
+    response: ToolMessage | Command = handler(request)
+    name = request.tool_call["name"]
+    prior = request.state.get("tool_calls_log", [])
+    if isinstance(response, Command):
+        return response
+    return Command(update={
+        "messages": [response],
+        "tool_calls_log": prior + [name],
+    })
+`````)
+
 
 == 6.9 Simple Guardrails
 

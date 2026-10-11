@@ -8,8 +8,10 @@ compatibility: Python 3.12+
 metadata:
   category: analysis
   difficulty: intermediate
-allowed-tools: execute write_todos data_summary
+  include_tools: execute write_todos data_summary
 ---
+
+> Skill tools note: `metadata.include_tools` is a space-separated Deep Agents field. The tools become visible only after this skill is read or pinned, and the agent or `SkillsMiddleware` must provide matching tool implementations.
 
 # Data Analysis 스킬
 

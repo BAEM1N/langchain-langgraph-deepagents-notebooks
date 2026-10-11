@@ -1,9 +1,9 @@
 # Permissions
 
-> Deep Agents의 built-in 파일시스템 도구(`ls`, `read_file`, `glob`, `grep`, `write_file`, `edit_file`)에 선언적 allow/deny 규칙을 적용해 경로 기반 접근 제어를 강제한다.
+> Deep Agents의 built-in 파일시스템 도구(`ls`, `read_file`, `glob`, `grep`, `write_file`, `edit_file`, `delete`)에 선언적 allow/deny 규칙을 적용해 경로 기반 접근 제어를 강제한다.
 > 프롬프트 인젝션 방어, 읽기 전용 에이전트, 특정 디렉터리만 쓰게 하는 워크스페이스 격리를 구성할 때 읽는다.
 
-> 요구 사항: `deepagents>=0.5.2`.
+> 요구 사항: `deepagents>=0.7.23` 조사 기준.
 
 ## 개요
 
@@ -27,13 +27,13 @@
 
 | 필드 | 값 | 설명 |
 |------|----|------|
-| `operations` | `list["read" \| "write"]` | `read` = `ls` / `read_file` / `glob` / `grep`, `write` = `write_file` / `edit_file` |
+| `operations` | `list["read" \| "write"]` | `read` = `ls` / `read_file` / `glob` / `grep`, `write` = `write_file` / `edit_file` / backend가 노출하는 삭제 도구 |
 | `paths` | `list[str]` | 글로브 패턴, `**` 재귀, `{a,b}` 선택자 지원 |
 | `mode` | `"allow" \| "deny"` | 기본 `"allow"` |
 
 ## 패턴 1: 읽기 전용 에이전트
 
-모든 쓰기를 전역 차단. 조사·감사·리포트 생성 에이전트에 유용.
+모든 쓰기와 삭제를 전역 차단. 조사·감사·리포트 생성 에이전트에 유용.
 
 ```python
 from deepagents import create_deep_agent, FilesystemPermission
@@ -135,6 +135,8 @@ agent = create_deep_agent(
 ```
 
 메모리/정책은 애플리케이션 코드로만 갱신하고 에이전트는 읽기만 하게 한다.
+
+현재 파일 도구에서 쓰기는 기존 파일 교체로 이어질 수 있고, backend가 삭제를 지원하면 삭제 도구도 노출될 수 있다. 권한 표에는 쓰기와 삭제가 학습자에게 어떤 파일 범위를 허용하는지 함께 설명한다.
 
 ## Subagent 상속
 

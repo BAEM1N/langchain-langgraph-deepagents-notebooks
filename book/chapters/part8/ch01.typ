@@ -112,7 +112,66 @@ Provider Middleware는 _프로바이더 서버 측_에서 활성화되는 기능
   [OpenAI Moderation API로 사전/사후 검사],
 )
 
-== 1.4 공통 패턴
+
+== 1.4 새 통합 표면: UI · Code · 견고성
+
+2026년 기준 통합 범위는 provider middleware만으로 끝나지 않습니다. 새 표면은 이 Part의 13개 카테고리 수를 바꾸지 않고, 기존 카테고리 위에 얹히는 _연결 방식_으로 읽는 것이 안전합니다.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[표면],
+  text(weight: "bold")[핵심],
+  text(weight: "bold")[이 책에서 이어지는 위치],
+  [Generative UI / AG-UI],
+  [controlled · declarative · open-ended UI 생성 패턴과 frontend/server 이벤트 경계],
+  [Part 2/3의 agent state · streaming, Part 8의 provider/runtime 통합],
+  [Deep Agents Code],
+  [`/oss/deepagents/code`의 configuration · approval · extensions · plugins · MCP tools],
+  [Part 4의 permissions/skills/subagents/backend와 같은 개념을 코딩 에이전트 런타임으로 확장],
+  [RAG · fault tolerance · multimodal],
+  [retrieval, checkpointer/retry/resume, multimodal `read_file`이 Deep Agents 파일시스템과 결합],
+  [Part 4/5/7의 core agent · advanced patterns · examples와 연결],
+)
+
+Generative UI는 LLM이 UI를 _어느 정도까지_ 결정하느냐에 따라 controlled, declarative, open-ended로 나뉩니다. AG-UI는 이 흐름을 frontend와 agent server 사이의 이벤트 프로토콜로 연결하는 별도 트랙입니다. 따라서 이 장에서는 새 노트북을 만들지 않고, state/streaming/hosted runtime을 배운 뒤 frontend 통합 후보로 표시합니다.
+
+Deep Agents Code 문서는 `configuration`, `approval`, `extensions`, `plugins`, `MCP tools`처럼 코딩 에이전트 제품화 표면을 다룹니다. 여기서의 승인·확장·플러그인은 Part 4의 permissions, skills, subagents, backend와 같은 개념을 더 좁은 코딩 에이전트 실행 환경에 맞춘 것입니다. 별도 자격 증명이나 환경 변수를 추가로 전제하지 않습니다.
+
+RAG, fault tolerance, multimodal은 새 카테고리가 아니라 기존 축의 결합입니다. RAG는 Retriever/Vector Store와 Deep Agents 파일 컨텍스트의 결합이고, fault tolerance는 LangGraph checkpointer · retry · resume과 운영 장의 연결이며, multimodal은 `read_file`이 이미지/PDF/오디오/비디오 입력을 모델별 제한 안에서 전달하는 문제입니다.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[공식 참조],
+  text(weight: "bold")[확인할 내용],
+  [#link("https://docs.langchain.com/oss/python/langchain/frontend/generative-ui")[LangChain Generative UI]],
+  [controlled/declarative/open-ended UI 패턴],
+  [#link("https://docs.langchain.com/oss/python/deepagents/ag-ui")[Deep Agents AG-UI]],
+  [frontend/server 통합 이벤트 경계],
+  [#link("https://docs.langchain.com/oss/deepagents/code/configuration")[Deep Agents Code configuration]],
+  [코딩 에이전트 런타임 설정],
+  [#link("https://docs.langchain.com/oss/deepagents/code/approval-modes")[Code approval modes]],
+  [실행 전 승인 정책과 권한 경계],
+  [#link("https://docs.langchain.com/oss/deepagents/code/extensions")[Code extensions]],
+  [런타임 기능 확장과 스킬/메모리 연결],
+  [#link("https://docs.langchain.com/oss/deepagents/code/plugins")[Code plugins]],
+  [외부 도구 묶음과 배포 단위],
+  [#link("https://docs.langchain.com/oss/python/deepagents/fault-tolerance")[Deep Agents fault tolerance]],
+  [재시도·재개·체크포인터와 운영 안정성],
+  [#link("https://docs.langchain.com/oss/python/deepagents/multimodal")[Deep Agents multimodal]],
+  [파일 백엔드와 멀티모달 입력 처리],
+  [#link("https://docs.langchain.com/oss/python/deepagents/rag")[Deep Agents RAG]],
+  [검색·파일 컨텍스트·서브에이전트 결합],
+)
+
+== 1.5 공통 패턴
 
 이 Part의 모든 장은 세 단계 루프를 공유합니다.
 
@@ -122,7 +181,7 @@ Provider Middleware는 _프로바이더 서버 측_에서 활성화되는 기능
 
 #tip-box[프로바이더 특화 미들웨어는 _모델을 같이 정해야_ 합니다. Anthropic 미들웨어를 OpenAI 모델에 붙이면 `unsupported_model_behavior` 설정에 따라 경고만 나오거나 예외가 발생합니다. 멀티 프로바이더 파이프라인에서는 `ModelFallbackMiddleware`와 조합할 때 순서에 주의하세요.]
 
-== 1.5 Observability 환경변수 표준화
+== 1.6 Observability 환경변수 표준화
 
 LangChain 1.1부터 트레이싱 관련 환경변수는 `LANGCHAIN_*` → `LANGSMITH_*`로 표준화되었습니다. 옛 변수도 호환을 위해 일정 기간 동작하지만, _신규 코드는 새 이름만 씁니다_.
 
@@ -151,7 +210,8 @@ LangChain 1.1부터 트레이싱 관련 환경변수는 `LANGCHAIN_*` → `LANGS
 
 == 핵심 정리
 
-- 통합은 12개 카테고리로 정리되며, 각 카테고리는 "프로바이더 플러그인 + 공통 인터페이스" 구조를 공유한다
+- 통합은 13개 카테고리로 정리되며, 각 카테고리는 "프로바이더 플러그인 + 공통 인터페이스" 구조를 공유한다
 - Provider Middleware는 프로바이더 _서버 측_ 고유 기능을 LangChain 미들웨어로 감싼 영역
 - 이 Part의 2~8장이 7개 Provider Middleware를 1장씩 실행 가능한 코드로 다룬다
+- Generative UI/AG-UI, Deep Agents Code, RAG/fault tolerance/multimodal은 새 노트북 목록이 아니라 기존 state·streaming·backend·retrieval·operations 축과 연결해 읽는다
 - 중복 인스턴스 제약, 모델 매칭, 멀티 프로바이더 폴백은 Provider Middleware 공통 주의점

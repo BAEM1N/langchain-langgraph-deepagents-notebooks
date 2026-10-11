@@ -28,7 +28,7 @@ print("\u2713 모델 준비 완료")
 
 LangGraph의 기본 흐름은 5단계입니다:
 
-#code-block(`````python
+#code-block(`````
 StateGraph(State) → add_node() → add_edge() → compile() → invoke()
 `````)
 
@@ -49,7 +49,7 @@ LangGraph는 에이전트 워크플로를 _그래프_로 모델링하며, 세 �
 두 개의 노드를 순서대로 연결합니다.
 첫 번째 노드가 텍스트를 대문자로 변환하고, 두 번째 노드가 단어 수를 셉니다.
 
-#code-block(`````python
+#code-block(`````
 START → uppercase → counter → END
 `````)
 

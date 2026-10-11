@@ -78,9 +78,9 @@ print("✓ Search tool ready")
 
 Pass the search tool and a system prompt into `create_deep_agent()`.
 
-_The agent's automatic workflow:_
+_The agent's workflow with planning enabled:_
 
-When the agent receives a request, it can automatically go through the following steps:
+When the agent receives a request, this example can go through the following steps because it opts into `TodoListMiddleware`:
 
 + _Planning_: Breaks the task into steps with the built-in `write_todos` tool
 + _Research_: Collects information from the web with the provided `internet_search` tool
@@ -92,10 +92,12 @@ For more complex tasks, the agent can also create specialized subagents and isol
 
 #code-block(`````python
 from deepagents import create_deep_agent
+from deepagents.middleware import TodoListMiddleware
 
 research_agent = create_deep_agent(
     model=model,
     tools=[internet_search],
+    middleware=[TodoListMiddleware()],
     system_prompt="You are an expert researcher. Search the web and summarize the results in English.",
 )
 print("✓ Research agent created")
@@ -142,7 +144,7 @@ _How it differs from a LangChain agent:_
 LangChain's `create_agent()` builds a simple ReAct agent from a model and a list of tools. Compared with Deep Agents:
 
 - _LangChain_: A lightweight baseline for tool-calling agents. It is excellent for fast prototyping, but advanced capabilities such as task planning or filesystem management must be added manually.
-- _Deep Agents_: Includes planning (`write_todos`), file management, and subagent delegation by default, so it is a better fit for complex multi-step tasks.
+- _Deep Agents_: Provides the harness for file management and subagent delegation, and can opt into planning (`TodoListMiddleware` / `write_todos`), so it is a better fit for complex multi-step tasks.
 
 If you add the `@tool` decorator, you can convert a function into LangChain's tool interface. The general pattern of passing a system prompt and a list of tools into `create_agent()` is similar to Deep Agents.
 

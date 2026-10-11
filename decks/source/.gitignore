@@ -1,0 +1,4 @@
+.render/
+**/_render/
+**/__pycache__/
+*.pyc

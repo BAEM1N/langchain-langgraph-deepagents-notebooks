@@ -1,19 +1,20 @@
 # Deep Agents Harness
 
 ## Overview
-The agent harness provides a comprehensive set of capabilities for building long-running autonomous agents. These include planning, filesystem access, task delegation, context management, code execution, and human oversight features.
+The agent harness provides a comprehensive set of capabilities for building long-running autonomous agents. These include filesystem access, task delegation, context management, code execution, human oversight features, and optional planning middleware.
 
 ## Core Capabilities
 
 ### Planning Tools
-Agents access a `write_todos` tool for maintaining structured task lists with status tracking (pending, in_progress, completed). This helps organize complex multi-step workflows.
+When `TodoListMiddleware` is configured, agents access a `write_todos` tool for maintaining structured task lists with status tracking. This helps organize complex multi-step workflows. Do not describe planning as always present in Deep Agents 0.7 examples.
 
 ### Virtual Filesystem Access
 A configurable filesystem backend supports standard operations:
 - **ls**: Directory listing with metadata (size, modified time)
 - **read_file**: Content retrieval with line numbers and offset/limit for large files; returns multimodal content for images (PNG, JPG, GIF, WebP, HEIC), video (MP4, MOV, AVI), audio (WAV, MP3, AAC, FLAC), and documents (PDF, PPT)
-- **write_file**: File creation
+- **write_file**: File creation or replacement according to backend and permission rules
 - **edit_file**: Exact string replacement with optional global replace mode
+- **delete**: File deletion when the backend and permissions expose it
 - **glob**: Pattern-based file discovery (e.g., `**/*.py`)
 - **grep**: Content searching with multiple output modes
 - **execute**: Shell command execution (sandbox backends only)

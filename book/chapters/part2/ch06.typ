@@ -318,6 +318,22 @@ print("request.override 패턴 미들웨어 등록 준비 완료")
 - _에러 핸들링:_ 도구 실패 시 폴백 처리
 - _접근 제어:_ 특정 도구 호출 차단 또는 제한
 
+=== 도구 호출 상태 업데이트 — `state_schema`
+
+도구 실행 횟수처럼 기본 agent state에 없는 값을 저장하려면 `@wrap_tool_call(state_schema=...)`로 추가 state 필드를 선언합니다. `handler(request)` 결과를 `messages`에 다시 넣고, 같은 `Command(update=...)`에서 카운터를 함께 갱신해야 다음 노드가 누적 값을 볼 수 있습니다.
+
+#code-block(`````python
+from typing_extensions import NotRequired, TypedDict
+from langgraph.types import Command
+ToolAuditState = TypedDict("ToolAuditState", {"messages": list, "tool_call_count": NotRequired[int]})
+
+@wrap_tool_call(state_schema=ToolAuditState)
+def count_tool_calls(request, handler):
+    result = handler(request)
+    count = request.state.get("tool_call_count", 0) + 1
+    return Command(update={"messages": [result], "tool_call_count": count})
+`````)
+
 == 6.9 가드레일
 
 가드레일은 _안전하지 않은 입력이나 출력을 차단_하는 메커니즘입니다. 미들웨어로 구현하며, 금지된 키워드 감지, 프롬프트 인젝션 방어, 민감 정보 필터링 등에 씁니다.

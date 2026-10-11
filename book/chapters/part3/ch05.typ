@@ -69,7 +69,7 @@ ReAct(Reasoning + Acting) 패턴은 세 가지 요소로 구성됩니다:
 - _Tool 노드_: LLM이 선택한 도구를 실제로 실행합니다
 - _조건부 엣지_: `tool_calls`가 있으면 `tool_node`로, 없으면 `END`로 라우팅합니다
 
-#code-block(`````python
+#code-block(`````
 START → llm → [tool_calls?] → tools → llm → ... → END
 `````)
 

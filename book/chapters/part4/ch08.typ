@@ -36,7 +36,7 @@ print(f"모델 설정 완료: {model.model_name}")
 == 1. AgentHarness 개념
 
 _AgentHarness_는 장기 실행 자율 에이전트를 위한 _포괄적 기능 제공자_입니다.
-에이전트가 복잡한 멀티 스텝 작업을 수행할 때 필요한 모든 인프라를 하나로 묶어 제공합니다.
+에이전트가 복잡한 멀티 스텝 작업을 수행할 때 필요한 인프라를 하나로 묶어 제공합니다.
 
 === 하네스가 제공하는 핵심 기능
 
@@ -48,55 +48,52 @@ _AgentHarness_는 장기 실행 자율 에이전트를 위한 _포괄적 기능 
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[기능],
   text(weight: "bold")[설명],
-  [_Planning_],
-  [구조화된 태스크 리스트 관리 (`write_todos`, status: pending/in_progress/completed)],
   [_Filesystem_],
-  [가상/로컬 파일 읽기·쓰기·검색 (멀티모달 read_file 포함)],
+  [가상/로컬 파일 읽기·쓰기·검색 (멀티모달 `read_file` 포함)],
   [_Task Delegation_],
   [서브에이전트를 통한 격리·병렬·전문화 작업 위임],
   [_Context Management_],
   [설정 가능한 임계값 기반 오프로딩 + 요약 압축],
   [_Code Execution_],
-  [샌드박스 백엔드의 `execute` 셸 도구 또는 _QuickJS interpreter_],
+  [샌드박스 백엔드의 `execute` 셸 도구 또는 QuickJS interpreter],
   [_Human-in-the-Loop_],
   [민감 작업에 대한 사람 승인],
   [_Skills & Memory_],
   [전문 워크플로(Agent Skills 표준) + 영속적 컨텍스트(`AGENTS.md`)],
+  [_Planning_],
+  [필요할 때 `TodoListMiddleware`를 추가해 `write_todos` 노출],
 )
 
-`create_deep_agent()`를 호출하면 이 모든 기능이 자동으로 조립되어 하나의 에이전트로 제공됩니다.
-
+`create_deep_agent()`는 파일·서브에이전트·요약·skills/memory 계층을 조립합니다. 계획 도구는 자동 전제가 아니라 수업 목적에 맞게 명시적으로 켭니다.
 
 #code-block(`````python
-# AgentHarness 개념 — create_deep_agent가 하네스를 조립합니다
+from langchain.agents.middleware import TodoListMiddleware
+
 harness_config = {
     "model": "gpt-5.4",
-    "system_prompt": "당신은 프로젝트 관리 어시스턴트입니다.",
-    "planning": True,         # write_todos 도구 활성화
-    "filesystem": True,       # 파일시스템 도구 활성화
-    "subagents": [],          # 서브에이전트 목록
-    "context_management": True,  # 컨텍스트 압축 활성화 (configurable threshold)
+    "filesystem": "built-in file tools",
+    "subagents": "task delegation",
+    "planning": TodoListMiddleware.__name__,
 }
 
-print("AgentHarness 구성 요소:")
 for key, value in harness_config.items():
-    print(f"  {key}: {value}")
-
-`````)
-#output-block(`````
-AgentHarness 구성 요소:
-  model: gpt-4.1
-  system_prompt: 당신은 프로젝트 관리 어시스턴트입니다.
-  planning: True
-  filesystem: True
-  subagents: []
-  context_management: True
+    print(f"{key}: {value}")
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 2. 계획 도구
 
-에이전트는 `write_todos` 도구로 복잡한 작업을 _구조화된 태스크 리스트_로 분해합니다.
+계획이 필요한 예제에서는 LangChain의 `TodoListMiddleware`를 `middleware` 목록에 추가합니다. 그러면 에이전트가 `write_todos` 도구로 복잡한 작업을 _구조화된 태스크 리스트_로 분해할 수 있습니다.
+
+#code-block(`````python
+from langchain.agents.middleware import TodoListMiddleware
+
+agent = create_deep_agent(
+    model=model,
+    middleware=[TodoListMiddleware()],
+)
+`````)
+
 각 태스크는 상태를 가집니다:
 
 #table(
@@ -504,114 +501,34 @@ for scope, path in memory_config.items():
   text(weight: "bold")[핵심 개념],
   text(weight: "bold")[핵심 API/도구],
   [하네스 개념],
-  [장기 실행 에이전트를 위한 포괄적 기능 제공자],
+  [장기 실행 에이전트를 위한 기능 조립],
   [`create_deep_agent()`],
   [계획 도구],
-  [구조화된 태스크 리스트 (pending/in_progress/completed)],
-  [`write_todos`],
+  [opt-in 태스크 리스트 관리],
+  [`TodoListMiddleware`, `write_todos`],
   [파일시스템],
-  [가상/로컬 파일 작업 + 멀티모달 read_file (HEIC/MP4/MOV/AVI/WAV/MP3/AAC/FLAC/PDF/PPT)],
-  [`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `execute`],
+  [가상/로컬 파일 작업 + 멀티모달 read_file],
+  [`ls`, `read_file`, `write_file`, `edit_file`, `delete`, `glob`, `grep`, `execute`],
   [서브에이전트],
-  [격리된 태스크 위임, 병렬 실행],
-  [`subagents`, `task`],
+  [기본 isolated 위임, 실험적 fork 문맥 상속],
+  [`subagents`, `task`, `mode="fork"`],
   [컨텍스트 관리],
-  [configurable threshold 오프로딩 + 85% 트리거 요약],
-  [자동 관리],
+  [configurable threshold 오프로딩 + 요약],
+  [middleware stack],
   [코드 실행],
-  [Sandbox `execute` (셸) + QuickJS `CodeInterpreterMiddleware`],
+  [Sandbox `execute` + QuickJS `CodeInterpreterMiddleware`],
   [`execute`, `eval`],
   [HITL],
-  [4-decision (approve/edit/reject/respond)],
-  [`interrupt_on`, `Command(resume=...)`, `version="v2"`],
+  [approve/edit/reject/respond 재개],
+  [`interrupt_on`, `Command(resume=...)`],
   [스킬/메모리],
   [전문 워크플로 + 영속적 컨텍스트],
-  [`SKILL.md`, `AGENTS.md`],
+  [`SKILL.md`, `metadata.include_tools`, `pinned_skills`, `AGENTS.md`],
 )
 
-=== Profiles 보강 (docs/deepagents/18-profiles.md, `deepagents\>=0.5.4`)
+=== Profiles 보강
 
-Provider/모델별 harness 기본값을 자동으로 겹쳐 적용하는 beta API.
-
-_`HarnessProfile` 7 필드_
-
-#table(
-  columns: 2,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[필드],
-  text(weight: "bold")[설명],
-  [`base_system_prompt`],
-  [베이스 system prompt 자체를 교체],
-  [`system_prompt_suffix`],
-  [조립된 베이스 prompt 끝에 텍스트 추가],
-  [`tool_description_overrides`],
-  [도구 이름별 설명 override],
-  [`excluded_tools`],
-  [주입 이후 이름으로 제거할 도구 집합],
-  [`excluded_middleware`],
-  [제거할 middleware 클래스 집합],
-  [`extra_middleware`],
-  [추가로 붙일 middleware 인스턴스 리스트],
-  [`general_purpose_subagent`],
-  [`GeneralPurposeSubagentProfile`로 일반 서브에이전트 on/off/커스터마이즈],
-)
-
-_Merge semantics_
-
-- mapping 필드(`tool_description_overrides`): 키 단위 merge
-- set 필드(`excluded_tools`/`excluded_middleware`): 합집합
-- middleware 인스턴스: 동일 구체 클래스가 등장하면 교체, 새 타입은 append
-- provider-level + model-level 둘 다 있으면 model-level 우선, 나머지는 provider-level 상속
-
-_`ProviderProfile` 3 필드_
-
-#table(
-  columns: 2,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[필드],
-  text(weight: "bold")[설명],
-  [`init_kwargs`],
-  [`init_chat_model()`에 정적으로 전달할 kwargs],
-  [`pre_init`],
-  [모델 생성 전 side effect (예: credential 검증)],
-  [`init_kwargs_factory`],
-  [runtime 정보 기반 kwargs 동적 생성],
-)
-
-_`HarnessProfileConfig` (YAML/JSON)_
-
-#code-block(`````python
-import yaml
-from deepagents import HarnessProfileConfig, register_harness_profile
-
-with open("openai.yaml") as f:
-    register_harness_profile(
-        "openai",
-        HarnessProfileConfig.from_dict(yaml.safe_load(f)),
-    )
-`````)
-
-`HarnessProfileConfig`는 `from_dict()`, `to_dict()`, `from_harness_profile()` 클래스 메서드를 제공합니다.
-
-_Entry-point plugin 배포_
-
-#code-block(`````toml
-[project.entry-points."deepagents.harness_profiles"]
-my_provider = "my_pkg.profiles:register_harness"
-
-[project.entry-points."deepagents.provider_profiles"]
-my_provider = "my_pkg.profiles:register_provider"
-`````)
-
-로드 순서: _built-ins → entry-point plugins → 사용자 코드의 직접 `register_*_profile`_.
-
-
+Profile은 provider/model별 도구 설명, 제외 도구, 추가 middleware, 프롬프트 suffix를 묶습니다. Profile이 조정하는 것은 실행 환경이고, Rubric은 결과물이 충족해야 할 완료 기준입니다.
 
 #references-box[
 - #link("../docs/deepagents/05-harness.md")[Deep Agents Harness]

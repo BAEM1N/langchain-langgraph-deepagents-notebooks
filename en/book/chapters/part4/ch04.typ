@@ -29,7 +29,7 @@ model = "anthropic:claude-sonnet-4-6"
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 1. What Is a Backend?
 
-Deep Agents' built-in file tools (`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`) all operate through a _backend_.
+Deep Agents' built-in file tools (`ls`, `read_file`, `write_file`, `edit_file`, `delete`, `glob`, `grep`) all operate through a _backend_.
 
 A backend abstracts the _storage layer_ that the agent uses to read and write files.
 
@@ -116,7 +116,7 @@ It is _ephemeral_: files live only inside the current conversation thread.
 - Home expansion starting with `~` or `~user`
 - Absolute paths outside `root_dir` (such as `/etc/hosts`)
 
-When any of these are submitted, the backend returns a result whose `error` field is filled and never touches the real disk.
+When any of these are submitted, the backend rejects the operation before touching the real disk; writes can raise `ValueError` rather than returning a normal result object.
 
 === ⚠️ Security Considerations
 #tip-box[`FilesystemBackend` gives the agent access to the real filesystem. In production, set `virtual_mode=True` or use a sandbox backend.]
@@ -142,11 +142,12 @@ from langgraph.checkpoint.memory import MemorySaver
 store = InMemoryStore()
 checkpointer = MemorySaver()
 
-# StoreBackend must be passed as a backend factory
+backend = StoreBackend(namespace=lambda rt: (rt.server_info.assistant_id,))
+
 store_agent = create_deep_agent(
     model=model,
     system_prompt="You are an assistant that manages notes. Respond in English.",
-    backend=lambda runtime: StoreBackend(runtime),
+    backend=backend,
     store=store,
     checkpointer=checkpointer,
 )
@@ -165,15 +166,15 @@ A common pattern is to persist `/memories/*` while keeping everything else ephem
 
 
 #code-block(`````python
-# CompositeBackend factory function
-def create_composite_backend(runtime):
-    """Create a backend with path-based routing."""
-    return CompositeBackend(
-        default=StateBackend(runtime),
-        routes={
-            "/memories/": StoreBackend(runtime),
-        },
-    )
+# CompositeBackend with path-based routing
+backend = CompositeBackend(
+    default=StateBackend(),
+    routes={
+        "/memories/": StoreBackend(
+            namespace=lambda rt: (rt.server_info.user.identity,),
+        ),
+    },
+)
 
 
 composite_store = InMemoryStore()
@@ -185,7 +186,7 @@ composite_agent = create_deep_agent(
 - Save notes that need to persist under /memories/.
 - Save temporary work files under the root path /.
 Respond in English.""",
-    backend=create_composite_backend,
+    backend=backend,
     store=composite_store,
     checkpointer=composite_checkpointer,
 )
@@ -224,7 +225,7 @@ agent = create_deep_agent(
 
 If you implement `BackendProtocol`, you can build your own backend.
 
-#warning-box[Recent `deepagents` releases (`>=0.5.0`) renamed the protocol methods. _Old:_ `ls_info` / `grep_raw` / `glob_info`. _Current:_ `ls` / `grep` / `glob`. Return types are now explicit dataclasses / TypedDicts (`LsResult`, `ReadResult`, `GrepResult`, `WriteResult`, `EditResult`, `list[FileInfo]`) rather than bare dicts.]
+#warning-box[Implement the current `BackendProtocol` methods directly: `ls` / `grep` / `glob` plus `read` / `write` / `edit`. Return types are explicit dataclasses / TypedDicts (`LsResult`, `ReadResult`, `GrepResult`, `WriteResult`, `EditResult`, `list[FileInfo]`) rather than bare dicts.]
 
 === Required Methods and Return Types
 
@@ -245,7 +246,7 @@ If you implement `BackendProtocol`, you can build your own backend.
   [Read a file with line numbers],
   [`write(file_path, content)`],
   [`WriteResult`],
-  [Create a new file],
+  [Write or replace a file],
   [`edit(file_path, old_string, new_string)`],
   [`EditResult`],
   [Replace text (with `occurrences`)],
@@ -253,7 +254,7 @@ If you implement `BackendProtocol`, you can build your own backend.
   [`GrepResult`],
   [Search file contents by pattern],
   [`glob(pattern, path)`],
-  [`list[FileInfo]`],
+  [`GlobResult`],
   [Search files by glob pattern],
 )
 
@@ -261,7 +262,7 @@ If you implement `BackendProtocol`, you can build your own backend.
 #code-block(`````python
 # Simple example: read-only dictionary-backed backend
 from deepagents.backends.protocol import (
-    FileInfo, GrepResult, GrepMatch,
+    FileData, FileInfo, GlobResult, GrepResult, GrepMatch,
     LsResult, ReadResult, WriteResult, EditResult,
 )
 
@@ -285,30 +286,46 @@ class ReadOnlyDictBackend:
         lines = content.splitlines()
         selected = lines[offset:offset + limit]
         rendered = "\n".join(f"{i + offset + 1}\t{line}" for i, line in enumerate(selected))
-        return ReadResult(content=rendered, error=None)
+        return ReadResult(
+            file_data=FileData(content=rendered, encoding="utf-8"),
+            error=None,
+            total_lines=len(lines),
+            start_line=offset + 1 if selected else None,
+            end_line=offset + len(selected) if selected else None,
+        )
 
     def write(self, file_path: str, content: str) -> WriteResult:
-        return WriteResult(error="This backend is read-only.", path=None, files_update=None)
+        return WriteResult(error="This backend is read-only.", path=None)
 
     def edit(self, file_path: str, old_string: str, new_string: str, replace_all: bool = False) -> EditResult:
-        return EditResult(error="This backend is read-only.", path=None, files_update=None, occurrences=None)
+        return EditResult(error="This backend is read-only.", path=None, occurrences=None)
 
-    def grep(self, pattern: str, path: str | None = None, glob: str | None = None) -> GrepResult:
+    def grep(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+        *,
+        max_count: int | None = None,
+    ) -> GrepResult:
         import re
         matches: list[GrepMatch] = []
         for fpath, content in self._files.items():
             for i, line in enumerate(content.splitlines(), 1):
                 if re.search(pattern, line):
                     matches.append({"path": fpath, "line": i, "text": line})
+                    if max_count is not None and len(matches) >= max_count:
+                        return GrepResult(matches=matches, error=None, truncated=True)
         return GrepResult(matches=matches, error=None)
 
-    def glob(self, pattern: str, path: str = "/") -> list[FileInfo]:
+    def glob(self, pattern: str, path: str | None = None) -> GlobResult:
         import fnmatch
-        return [
+        matches = [
             {"path": p, "is_dir": False, "size": len(c), "modified_at": None}
             for p, c in self._files.items()
             if fnmatch.fnmatch(p, pattern)
         ]
+        return GlobResult(matches=matches, error=None)
 
 
 custom_backend = ReadOnlyDictBackend({
@@ -319,7 +336,8 @@ custom_backend = ReadOnlyDictBackend({
 print("File list:", custom_backend.ls("/").entries)
 print()
 print("File contents:")
-print(custom_backend.read("/docs/guide.md").content)
+result = custom_backend.read("/docs/guide.md")
+print(result.file_data["content"] if result.file_data else result.error)
 print()
 print("Search results:", custom_backend.grep("Installation").matches)
 

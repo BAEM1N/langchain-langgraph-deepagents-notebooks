@@ -228,8 +228,12 @@ from langgraph.store.memory import InMemoryStore
 
 def make_backend(runtime):
     return CompositeBackend(
-        default=StateBackend(runtime),
-        routes={"/memories/": StoreBackend(runtime)},
+        default=StateBackend(),
+        routes={
+            "/memories/": StoreBackend(
+                namespace=lambda rt: ("memories", rt.context.get("user_id", "anonymous")),
+            )
+        },
     )
 
 agent = create_deep_agent(

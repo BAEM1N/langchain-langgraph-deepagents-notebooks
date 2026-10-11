@@ -28,7 +28,7 @@ CompositeBackend(
 )
 ```
 
-The backend factory function receives a runtime parameter and returns the configured router.
+Current examples pass the configured backend instance directly. Namespace factories such as `lambda rt: (...)` receive the LangGraph runtime and decide the storage scope.
 
 ## Storage Behavior
 
@@ -56,7 +56,7 @@ For deployed agents on LangSmith, external code can interact with memories via t
 
 ---
 
-## 정보 유형 분류 (0.5 기준)
+## 정보 유형 분류
 
 Deep Agents는 저장되는 정보를 세 범주로 구분해 관리한다. 각 유형은 저장 메커니즘·업데이트 주기·적합한 백엔드가 다르다.
 

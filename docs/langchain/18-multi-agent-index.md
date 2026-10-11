@@ -61,7 +61,7 @@ A **supervisor** is a main agent dynamically deciding which subagents to call as
 
 ## Deep Agents and Observability
 
-[Deep Agents](../deepagents/01-introduction.md) is a higher-level harness built on LangChain that bundles these patterns (subagents, skills, planning, filesystem) into a single `create_deep_agent` factory — useful when you want the supervisor + subagent + skills wiring out of the box.
+[Deep Agents](../deepagents/01-overview.md) is a higher-level harness built on LangChain that bundles these patterns (subagents, skills, planning, filesystem) into a single `create_deep_agent` factory — useful when you want the supervisor + subagent + skills wiring out of the box.
 
 For tracing and evaluation of multi-agent flows, instrument runs with **LangSmith**, which captures per-agent spans, tool calls, and token usage across all five patterns.
 

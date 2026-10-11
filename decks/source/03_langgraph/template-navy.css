@@ -1,0 +1,300 @@
+/* ============================================================
+   딥 네이비 테크 — 슬라이드 템플릿 시스템 (B안 기반)
+   캔버스: 1920 × 1080 · 16:9
+   각 슬라이드는 [헤더 / 본문(flex:1·overflow:hidden) / 푸터]
+   본문은 어떤 콘텐츠를 넣어도 푸터를 침범하지 않는다
+   ============================================================ */
+:root{
+  --bg:#071521;        /* 슬라이드 배경 */
+  --bg2:#04101a;       /* 섹션/표지 진한 배경 */
+  --panel:#0c2235;     /* 카드 · 패널 면 */
+  --panel2:#0e2942;    /* 강조 패널 */
+  --ink:#eaf3fb;       /* 본문 텍스트 */
+  --sub:#8fa9bf;       /* 보조 텍스트 */
+  --accent:#53b8ff;    /* 강조 (라인/모노) */
+  --faint:#9ed2ff;     /* 보조 강조 */
+  --line:#1d3b56;      /* 구분선 · 테두리 */
+  --font-sans:'Pretendard Variable',Pretendard,'Noto Sans KR',sans-serif;
+  --font-mono:'JetBrains Mono','Pretendard',monospace;
+
+  /* 코드 신택스 */
+  --c-base:#cfe2f2; --c-kw:#53b8ff; --c-fn:#ffd479;
+  --c-str:#8fe3ad; --c-num:#ff9e9e; --c-cmt:#5d7f9c; --c-gutter:#33536f;
+}
+
+/* ── 라이트 테마 (html[data-theme="light"]) ──────────────
+   토큰만 갈아끼우면 전체 슬라이드가 라이트로 전환된다 */
+html[data-theme="light"]{
+  --bg:#ffffff;
+  --bg2:#f4f8fc;
+  --panel:#ffffff;
+  --panel2:#eef5fc;
+  --ink:#0e2438;
+  --sub:#5c748c;
+  --accent:#1f74d6;
+  --faint:#2f86d6;
+  --line:#dde6f0;
+  --c-base:#2f4a63; --c-kw:#1f74d6; --c-fn:#b06a00;
+  --c-str:#1f8a52; --c-num:#c0392b; --c-cmt:#8aa0b4; --c-gutter:#c2d2e2;
+}
+html[data-theme="light"] body{background:#c8d3e2;}
+/* 흰 배경에서 카드·표 경계가 분명하도록 */
+html[data-theme="light"] .card{box-shadow:0 1px 3px rgba(14,36,56,0.06);}
+html[data-theme="light"] .fnode.hl{box-shadow:0 0 40px rgba(31,116,214,0.10);}
+html[data-theme="light"] .code-body,
+html[data-theme="light"] .fig-img{background:#f6f9fc;}
+
+deck-stage:not(:defined){visibility:hidden;}
+html,body{margin:0;padding:0;background:#000;}
+
+/* ── 슬라이드 골격 ───────────────────────────────────── */
+deck-stage > section{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--font-sans);
+  padding:42px 120px 32px;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+deck-stage > section *{box-sizing:border-box;}
+
+/* ── 헤더 ───────────────────────────────────────────── */
+.s-head{flex:none;}
+.s-eyebrow{
+  display:flex;justify-content:space-between;align-items:baseline;
+  font-family:var(--font-mono);margin-bottom:18px;
+}
+.s-course{font-size:22px;color:var(--accent);letter-spacing:0.12em;}
+.s-meta{font-size:22px;color:var(--sub);}
+.s-rule{height:1px;background:var(--line);}
+.s-title{
+  margin:26px 0 0;font-size:54px;font-weight:750;color:var(--ink);
+  letter-spacing:-0.015em;line-height:1.16;text-wrap:pretty;
+}
+.s-lead{
+  margin:13px 0 0;font-size:26px;color:var(--sub);line-height:1.48;
+  max-width:1480px;text-wrap:pretty;
+}
+.s-lead strong{color:var(--accent);font-weight:700;}
+
+/* ── 본문 세이프존 ──────────────────────────────────── */
+.s-body{
+  flex:1;min-height:0;
+  margin:24px 0 24px;
+  overflow:hidden;
+  position:relative;
+  display:flex;flex-direction:column;
+}
+
+/* ── 푸터 ───────────────────────────────────────────── */
+.s-foot{
+  flex:none;
+  display:flex;justify-content:space-between;
+  font-family:var(--font-mono);font-size:19px;color:var(--sub);
+}
+
+/* ============================================================
+   플레이스홀더 — 레이아웃 가늠용. 내용 채울 때 교체/삭제
+   ============================================================ */
+.ph{
+  border:1.5px dashed var(--line);border-radius:2px;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--sub);font-family:var(--font-mono);font-size:22px;
+  letter-spacing:0.06em;text-align:center;
+  background:repeating-linear-gradient(135deg,
+    rgba(83,184,255,0.035) 0 14px, transparent 14px 28px);
+}
+.ph-fill{flex:1;min-height:0;}
+.ph-label{
+  font-family:var(--font-mono);font-size:20px;color:var(--accent);
+  letter-spacing:0.1em;opacity:.85;
+}
+
+/* 본문 세이프존 코너 마커 (기본 콘텐츠 템플릿) */
+.safe{position:relative;flex:1;min-height:0;}
+.safe .corner{position:absolute;width:18px;height:18px;border:2px solid var(--accent);opacity:.5;}
+.safe .corner.tl{top:0;left:0;border-right:0;border-bottom:0;}
+.safe .corner.tr{top:0;right:0;border-left:0;border-bottom:0;}
+.safe .corner.bl{bottom:0;left:0;border-right:0;border-top:0;}
+.safe .corner.br{bottom:0;right:0;border-left:0;border-top:0;}
+
+/* ============================================================
+   콘텐츠 패턴 — 본문 세이프존 안에 들어가는 레이아웃
+   ============================================================ */
+
+/* 카드 그리드 (2~4열) */
+.cards{display:grid;gap:28px;flex:1;min-height:0;}
+.cards.c2{grid-template-columns:repeat(2,1fr);}
+.cards.c3{grid-template-columns:repeat(3,1fr);}
+.cards.c4{grid-template-columns:repeat(4,1fr);}
+.card{
+  background:var(--panel);border:1px solid var(--line);
+  border-top:5px solid var(--accent);
+  padding:34px 36px;display:flex;flex-direction:column;
+}
+.card h3{margin:0 0 12px;font-size:31px;font-weight:700;color:var(--ink);}
+.card p{margin:0;font-size:23px;color:var(--sub);line-height:1.5;text-wrap:pretty;}
+.card .mono{margin-top:auto;padding-top:18px;font-family:var(--font-mono);font-size:20px;color:var(--accent);}
+
+/* 설명 항목 — 상단 헤어라인 방식 (좌측 띠지 제거) */
+.points{display:flex;flex-direction:column;gap:26px;}
+.point{border-top:1px solid var(--line);padding-top:18px;}
+.point h4{margin:0 0 8px;font-size:28px;font-weight:700;color:var(--ink);}
+.point p{margin:0;font-size:23px;color:var(--sub);line-height:1.5;text-wrap:pretty;}
+
+/* 표 (비교·대조 / 일반 데이터) */
+.tbl-wrap{flex:1;min-height:0;display:flex;}
+.tbl{width:100%;border-collapse:collapse;border:1px solid var(--line);align-self:start;}
+.tbl th{
+  background:var(--panel2);color:var(--ink);font-size:24px;font-weight:700;
+  text-align:left;padding:20px 28px;border-bottom:2px solid var(--line);letter-spacing:0.01em;
+}
+.tbl th.accent{color:var(--accent);}
+.tbl td{
+  font-size:24px;padding:18px 28px;border-top:1px solid var(--line);
+  color:var(--sub);line-height:1.45;vertical-align:top;
+}
+.tbl td.k{color:var(--ink);font-weight:600;}
+.tbl tbody tr:nth-child(even){background:rgba(83,184,255,0.035);}
+.tbl .mono{font-family:var(--font-mono);font-size:0.9em;color:var(--faint);}
+
+/* 이미지 캡쳐(논문·웹사이트) + 설명 */
+.figure-split{display:flex;gap:56px;flex:1;min-height:0;}
+.fig{flex:1.35;min-width:0;display:flex;flex-direction:column;
+  border:1px solid var(--line);background:var(--panel);overflow:hidden;}
+.fig-img{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
+  color:var(--sub);font-family:var(--font-mono);font-size:22px;letter-spacing:0.06em;text-align:center;
+  background:repeating-linear-gradient(135deg,
+    rgba(83,184,255,0.04) 0 16px, transparent 16px 32px);}
+.fig-cap{flex:none;padding:16px 26px;border-top:1px solid var(--line);
+  font-family:var(--font-mono);font-size:20px;color:var(--sub);
+  display:flex;justify-content:space-between;}
+.fig-exp{flex:1;min-width:0;display:flex;flex-direction:column;gap:24px;padding-top:4px;}
+
+/* 코드 + 설명 분할 */
+.code-split{display:flex;gap:60px;flex:1;min-height:0;align-items:stretch;}
+.code-split .explain{width:560px;flex:none;display:flex;flex-direction:column;gap:30px;padding-top:6px;}
+.code-panel{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);
+  display:flex;flex-direction:column;overflow:hidden;}
+.code-file{
+  display:flex;justify-content:space-between;align-items:center;
+  font-family:var(--font-mono);font-size:20px;color:var(--sub);
+  padding:20px 36px;border-bottom:1px solid var(--line);flex:none;
+}
+.code-file .tab{color:var(--ink);background:var(--bg);padding:8px 20px;border:1px solid var(--line);}
+.code-body{flex:1;min-height:0;padding:32px 40px;
+  display:flex;align-items:center;
+  font-family:var(--font-mono);font-size:22px;color:var(--c-base);
+  background:repeating-linear-gradient(135deg,
+    rgba(83,184,255,0.03) 0 14px, transparent 14px 28px);}
+
+/* 코드 단독 — 제목 밑 리드는 컴팩트하게, 코드 영역을 최대로 확보 */
+.s-body.code-tall{margin-top:22px;}
+.code-tall .code-only{flex:1;min-height:0;display:flex;}
+.code-tall .code-only .code-panel{flex:1;}
+.code-tall .code-body{font-size:25px;}
+
+/* 고밀도 중첩 불릿 — 전체폭 단일 컬럼, 최대 4단계 들여쓰기 */
+.dense{flex:1;min-height:0;}
+ul.blist,.blist ul{list-style:none;margin:0;padding:0;}
+.blist li{position:relative;text-wrap:pretty;}
+.blist li > .mk{position:absolute;left:0;}
+
+/* L1 — 그룹 헤딩 (악센트) */
+.blist > li{font-size:32px;font-weight:700;color:var(--accent);line-height:1.35;padding-left:36px;}
+.blist > li + li{margin-top:18px;}
+.blist > li > .mk{top:13px;width:13px;height:13px;background:var(--accent);}
+
+/* L2 */
+.blist > li > ul{margin:9px 0 0;}
+.blist > li > ul > li{font-size:27px;font-weight:600;color:var(--ink);line-height:1.4;padding-left:34px;margin-top:6px;}
+.blist > li > ul > li > .mk{top:1px;color:var(--accent);font-weight:700;}
+
+/* L3 */
+.blist > li > ul > li > ul{margin:5px 0 0;}
+.blist > li > ul > li > ul > li{font-size:24px;font-weight:400;color:var(--sub);line-height:1.4;padding-left:32px;margin-top:5px;}
+.blist > li > ul > li > ul > li > .mk{top:-1px;color:var(--faint);font-size:0.8em;}
+
+/* L4 */
+.blist > li > ul > li > ul > li > ul{margin:4px 0 0;}
+.blist > li > ul > li > ul > li > ul > li{font-size:22px;font-weight:400;color:#7993ab;line-height:1.4;padding-left:30px;margin-top:4px;}
+.blist > li > ul > li > ul > li > ul > li > .mk{top:-1px;color:#5f7a92;font-size:0.8em;}
+
+/* 코드 단독 (설명 없음) — 본문 전체폭 코드 패널 */
+.code-only{flex:1;min-height:0;display:flex;}
+.code-only .code-panel{flex:1;}
+
+/* 텍스트 위주 — 대형 스테이트먼트 + 보조 문장 */
+.statement{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;max-width:1560px;}
+.statement .big{
+  margin:0;font-size:64px;font-weight:750;line-height:1.32;
+  letter-spacing:-0.015em;color:var(--ink);text-wrap:pretty;
+}
+.statement .big em{font-style:normal;color:var(--accent);}
+.statement .note{
+  margin:48px 0 0;font-size:28px;color:var(--sub);line-height:1.55;
+  max-width:1280px;text-wrap:pretty;
+}
+.statement .note .mono{font-family:var(--font-mono);color:var(--faint);}
+
+/* 플로우 / 다이어그램 행 */
+.flow{display:flex;align-items:stretch;gap:0;flex:none;}
+.fnode{flex:1;background:var(--panel);border:1px solid var(--line);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:34px 24px;text-align:center;min-height:0;}
+.fnode.hl{border:2px solid var(--accent);background:rgba(83,184,255,0.08);
+  box-shadow:0 0 60px rgba(83,184,255,0.12);}
+.fnode h4{margin:0;font-size:30px;font-weight:700;color:var(--ink);}
+.fnode p{margin:10px 0 0;font-family:var(--font-mono);font-size:20px;color:var(--sub);}
+.fnode.hl p{color:var(--accent);}
+.flink{flex:none;width:60px;align-self:center;height:2px;background:var(--line);position:relative;}
+.flink::after{content:'';position:absolute;right:0;top:-4px;
+  border-left:9px solid var(--accent);border-top:5px solid transparent;border-bottom:5px solid transparent;}
+
+/* 플로우 — 단계별 설명 (노드 아래 정렬) + 하단 요약 */
+.flow-notes{display:flex;gap:60px;margin-top:36px;}
+.fn-note{flex:1;min-width:0;border-top:2px solid var(--line);padding-top:18px;}
+.fn-k{font-family:var(--font-mono);font-size:20px;color:var(--accent);letter-spacing:0.06em;margin-bottom:10px;}
+.fn-note p{margin:0;font-size:23px;color:var(--sub);line-height:1.5;text-wrap:pretty;}
+.flow-sum{margin:34px 0 0;padding-top:30px;border-top:1px solid var(--line);font-size:26px;color:var(--sub);line-height:1.5;text-wrap:pretty;}
+.flow-sum strong{color:var(--accent);font-weight:700;}
+
+/* ============================================================
+   표지 템플릿
+   ============================================================ */
+section.cover{background:var(--bg2);padding:0;justify-content:flex-start;}
+.cover-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;}
+.cover-bg.light{display:none;}
+html[data-theme="light"] .cover-bg.dark{display:none;}
+html[data-theme="light"] .cover-bg.light{display:block;}
+.cover-eyebrow,.cover-main,.cover-meta{z-index:1;}
+.cover-dots{position:absolute;right:0;top:0;bottom:0;width:560px;
+  background-image:radial-gradient(circle,rgba(83,184,255,0.26) 2px,transparent 2px);
+  background-size:34px 34px;
+  -webkit-mask-image:linear-gradient(to left,rgba(0,0,0,0.9),transparent);
+  mask-image:linear-gradient(to left,rgba(0,0,0,0.9),transparent);}
+.cover-eyebrow{position:absolute;left:120px;top:120px;
+  font-family:var(--font-mono);font-size:24px;color:var(--sub);letter-spacing:0.14em;}
+.cover-main{position:absolute;left:120px;top:300px;}
+.cover-main h1{margin:0;font-size:140px;line-height:1.08;font-weight:800;
+  color:var(--ink);letter-spacing:-0.025em;}
+.cover-main .tagline{margin-top:50px;font-family:var(--font-mono);font-size:30px;color:var(--accent);}
+.cover-meta{position:absolute;left:120px;right:120px;bottom:100px;}
+.cover-meta .rule{height:1px;background:var(--line);margin-bottom:40px;}
+.cover-meta .row{display:flex;gap:64px;font-family:var(--font-mono);font-size:24px;color:var(--sub);}
+.cover-meta .row .k{color:var(--faint);}
+
+/* ============================================================
+   섹션 구분 템플릿
+   ============================================================ */
+section.divider{background:var(--bg2);justify-content:center;padding:64px 120px;}
+.div-kicker{display:inline-block;align-self:flex-start;background:var(--accent);color:var(--bg2);
+  font-family:var(--font-mono);font-size:22px;font-weight:700;letter-spacing:0.12em;
+  padding:8px 22px;margin-bottom:40px;}
+.div-no{font-family:var(--font-mono);font-size:34px;color:var(--accent);margin-bottom:18px;}
+.div-title{margin:0;font-size:104px;font-weight:800;color:var(--ink);
+  letter-spacing:-0.02em;line-height:1.08;}
+.div-sub{margin:36px 0 0;font-size:30px;color:var(--sub);max-width:1400px;line-height:1.5;text-wrap:pretty;}
+
+/* 진입 애니메이션은 의도적으로 생략 — 템플릿은 모든 상태에서
+   콘텐츠가 즉시 보이도록 base 스타일(opacity:1)을 그대로 노출 */

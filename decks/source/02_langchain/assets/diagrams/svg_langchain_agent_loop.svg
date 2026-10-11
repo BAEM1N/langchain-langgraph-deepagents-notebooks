@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620"><rect width="1200" height="620" fill="#f7fbff"/><defs><style>.t{font-family:Arial, sans-serif;fill:#071521}.h{font-size:32px;font-weight:800}.m{font-size:22px;font-weight:700}.s{font-size:17px}.box{fill:#fff;stroke:#53b8ff;stroke-width:3;rx:18}.teal{fill:#e7f7f8;stroke:#83ced2;stroke-width:4;rx:18}.coral{fill:#fff3f1;stroke:#ed7969;stroke-width:4;rx:18}.gray{fill:#f4f6fb;stroke:#7c8aa5;stroke-width:3;rx:18}.arrow{stroke:#0b5f93;stroke-width:5;fill:none;marker-end:url(#a)}</style><marker id="a" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 Z" fill="#0b5f93"/></marker></defs><text x="54" y="70" class="t h">create_agent Runtime Loop</text>
+<rect x="75" y="150" width="230" height="100" class="teal"/><text x="118" y="208" class="t m">Messages</text>
+<rect x="405" y="150" width="230" height="100" class="coral"/><text x="462" y="208" class="t m">Model</text>
+<rect x="735" y="150" width="230" height="100" class="teal"/><text x="780" y="208" class="t m">Tool call</text>
+<rect x="405" y="385" width="230" height="100" class="gray"/><text x="455" y="443" class="t m">Finish</text>
+<path d="M305 200 H405" class="arrow"/><path d="M635 200 H735" class="arrow"/><path d="M850 250 C850 350 650 350 560 250" class="arrow"/>
+<path d="M520 250 V385" class="arrow"/><text x="795" y="335" class="t s">ToolMessage returns to context</text><text x="405" y="535" class="t s">no more tool calls → final AIMessage</text></svg>

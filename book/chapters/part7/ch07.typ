@@ -112,7 +112,7 @@ researcher = {
 
 == 3) Deep Agent 구성
 
-`create_deep_agent()`는 아래 구성을 한 번에 연결합니다.
+`create_deep_agent()`가 콘텐츠 작성 구성요소를 조립합니다.
 
 #table(
   columns: 2,
@@ -123,14 +123,16 @@ researcher = {
   text(weight: "bold")[구성],
   text(weight: "bold")[역할],
   [`memory=["/AGENTS.md"]`],
-  [브랜드 보이스를 시스템 프롬프트에 주입],
+  [브랜드 보이스를 시스템 프롬프트에 항상 주입],
   [`skills=["/skills/"]`],
-  [필요 시 `SKILL.md`를 읽어 작업 절차를 가져옴],
+  [`SKILL.md` 워크플로를 필요할 때 로드],
   [`subagents=[researcher]`],
-  [`task` 도구로 리서치 작업을 위임],
+  [`task` 도구로 리서치 위임],
   [`FilesystemBackend`],
   [`write_file`, `read_file` 등 파일 도구 제공],
 )
+
+스킬 자체가 별도 도구를 공개해야 한다면 `metadata.include_tools`와 직접 구성한 `SkillsMiddleware(tools=...)`를 사용합니다. 이 노트북은 기본 도구와 서브에이전트만으로 실행되므로 `skills=["/skills/"]` 경로를 유지합니다.
 
 #code-block(`````python
 from deepagents import create_deep_agent

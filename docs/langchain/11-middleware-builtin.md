@@ -610,6 +610,7 @@ agent = create_agent(
 - `read_file`: Read entire files or specific lines
 - `write_file`: Write new files
 - `edit_file`: Edit existing files
+- `delete`: Delete files when the backend and permissions allow it
 
 **Basic Configuration**:
 ```python
@@ -643,9 +644,17 @@ agent = create_agent(
     store=store,
     middleware=[
         FilesystemMiddleware(
-            backend=lambda rt: CompositeBackend(
-                default=StateBackend(rt),
-                routes={"/memories/": StoreBackend(rt)}
+            backend=CompositeBackend(
+                default=StateBackend(),
+                routes={
+                    "/memories/": StoreBackend(
+                        namespace=lambda rt: (
+                            "memories",
+                            rt.context.get("user_id", "anonymous"),
+                        ),
+                        store=store,
+                    )
+                },
             ),
         ),
     ],
@@ -653,6 +662,8 @@ agent = create_agent(
 ```
 
 **Architecture**: Files with `/memories/` prefix save to persistent storage; others remain ephemeral.
+
+Current Deep Agents backend configuration passes backend instances, not backend factory functions. `StoreBackend` requires `namespace=...`; a namespace callable such as `lambda rt: (...)` is still valid.
 
 ---
 

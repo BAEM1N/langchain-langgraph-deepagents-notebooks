@@ -28,8 +28,7 @@ model = ChatOpenAI(model="gpt-5.4")
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 1. 백엔드란?
 
-Deep Agents의 빌트인 파일 도구(`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`)는
-모두 _백엔드(Backend)_ 를 거쳐 동작합니다. `read_file`은 모든 백엔드에서 이미지 파일을 멀티모달 content로 반환합니다.
+Deep Agents의 빌트인 파일 도구(`ls`, `read_file`, `write_file`, `edit_file`, `delete`, `glob`, `grep`)는 모두 _백엔드(Backend)_ 를 거쳐 동작합니다. `read_file`은 모든 백엔드에서 이미지 파일을 멀티모달 content로 반환합니다.
 
 백엔드는 에이전트가 파일을 읽고 쓰는 _스토리지 계층_을 추상화합니다.
 
@@ -77,7 +76,7 @@ Deep Agents의 빌트인 파일 도구(`ls`, `read_file`, `write_file`, `edit_fi
   [격리된 셸·파일 실행],
 )
 
-#tip-box[`deepagents>=0.5.2` 부터 백엔드는 _사전 생성된 인스턴스_가 권장됩니다. 옛 factory 패턴(`lambda runtime: ...`)은 deprecated 입니다. `StoreBackend(namespace=...)` 의 namespace callable은 LangGraph `Runtime` 객체를 받습니다.]
+#tip-box[최신 예제에서는 백엔드를 _`BackendProtocol` 인스턴스_로 만들어 전달합니다. `StoreBackend`는 `namespace`를 명시하고, 실제 store는 `create_deep_agent(store=...)`로 함께 넘깁니다. `namespace=lambda rt: (...)`처럼 런타임을 받는 namespace factory는 여전히 유효합니다.]
 
 #code-block(`````python
 # 백엔드 임포트 확인
@@ -122,11 +121,13 @@ _에페메럴(ephemeral)_: 대화 스레드 내에서만 파일이 유지됩니�
 
 === 주요 옵션
 - `root_dir` — 접근 가능한 루트 디렉토리 (기본: 현재 디렉토리)
-- `virtual_mode=True` — 경로 제한 활성화 (`..`, `~`, _`root_dir` 밖의 절대 경로_를 모두 차단)
+- `virtual_mode=True` — 기본값이며 `..`, `~`, _`root_dir` 밖의 절대 경로_를 차단합니다
 - `max_file_size_mb` — 읽을 수 있는 최대 파일 크기
 
+`write_file`은 같은 경로의 기존 파일을 교체할 수 있습니다. 백엔드가 `delete`를 지원하면 `delete`도 노출되므로, 쓰기 허용 정책은 삭제 가능성까지 함께 검토해야 합니다.
+
 === ⚠️ 보안 주의사항
-#tip-box[`FilesystemBackend`는 에이전트에게 실제 파일 시스템 접근 권한을 부여합니다. 에이전트가 `.env`, API 키, 자격 증명 같은 모든 접근 가능한 파일을 읽을 수 있고, 네트워크 도구와 결합되면 _SSRF 공격으로 시크릿이 유출될 수 있습니다_. 프로덕션 환경에서는 `virtual_mode=True`를 사용하거나 _샌드박스 백엔드_를 사용하세요.]
+#tip-box[`FilesystemBackend`는 에이전트에게 실제 파일 시스템 접근 권한을 부여합니다. 에이전트가 `.env`, API 키, 자격 증명 같은 접근 가능한 파일을 읽을 수 있고, 네트워크 도구와 결합되면 시크릿이 유출될 수 있습니다. 프로덕션 환경에서는 `virtual_mode=True`와 승인 정책, 또는 샌드박스 백엔드를 함께 사용하세요.]
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 4. StoreBackend — 크로스 스레드 영속 저장소
@@ -136,18 +137,20 @@ LangGraph의 `BaseStore`를 활용하여 _대화 스레드를 넘어서_ 파일�
 === 특징
 - 다른 스레드에서도 같은 파일에 접근 가능 (Redis, PostgreSQL, 클라우드 구현 지원)
 - LangSmith 배포 시 PostgreSQL 기반 store가 자동 프로비저닝
-- `namespace` 콜러블로 멀티 유저 격리 — `deepagents>=0.5.2` 부터 LangGraph `Runtime` 객체를 받습니다
-- 사전 생성된 `StoreBackend()` 인스턴스 사용을 권장 (옛 factory 패턴은 deprecated)
+- `namespace`는 필수 격리 경계입니다. 데모처럼 고정 tuple을 쓰거나, `namespace=lambda rt: (...)`로 런타임 context를 읽습니다.
+- `StoreBackend(namespace=...)` 인스턴스와 `create_deep_agent(store=...)`를 함께 전달합니다.
 
 === namespace 패턴
 
 #code-block(`````python
-# user-scoped
-StoreBackend(namespace=lambda rt: (rt.context.user_id,))
+# fixed demo namespace
+StoreBackend(namespace=lambda rt: ("demo-user",))
 
-# assistant-scoped (server 정보가 있을 때)
-StoreBackend(namespace=lambda rt: (rt.server_info.assistant_id,))
+# user-scoped runtime context
+StoreBackend(namespace=lambda rt: (rt.context.user_id,))
 `````)
+
+제거된 backend factory 패턴과 namespace factory를 혼동하지 마세요. namespace callable은 현재 계약에서 유효합니다.
 
 #code-block(`````python
 from langgraph.store.memory import InMemoryStore
@@ -249,7 +252,7 @@ agent = create_deep_agent(
 
 `BackendProtocol`을 구현하면 나만의 백엔드를 만들 수 있습니다.
 
-=== 필수 메서드 (deepagents\\>=0.5.2)
+=== 필수 메서드
 
 #table(
   columns: 3,
@@ -262,13 +265,13 @@ agent = create_deep_agent(
   text(weight: "bold")[설명],
   [`ls(path)`],
   [`LsResult`],
-  [디렉토리 내용 목록 (`path`, `is_dir`, `size`, `modified_at`, 정렬 결정적)],
+  [디렉토리 내용 목록 (`path`, `is_dir`, `size`, `modified_at`)],
   [`read(file_path, offset=0, limit=2000)`],
   [`ReadResult`],
   [파일 읽기. 없으면 `ReadResult(error=...)`],
   [`write(file_path, content)`],
   [`WriteResult`],
-  [create-only. 충돌 시 `WriteResult(error=...)`. 외부 백엔드는 `files_update=None`],
+  [백엔드 정책에 따라 생성 또는 교체],
   [`edit(file_path, old_string, new_string, replace_all=False)`],
   [`EditResult`],
   [`old_string`의 유일성 강제, 성공 시 `occurrences` 포함],
@@ -278,13 +281,16 @@ agent = create_deep_agent(
   [`glob(pattern, path="/")`],
   [`list[FileInfo]`],
   [글로브 매치, 비어 있으면 `[]`],
+  [`delete(file_path)`],
+  [`DeleteResult`],
+  [선택 메서드. 구현한 백엔드에서만 `delete` 노출],
 )
 
-#warning-box[_버전 주의_: 이전 메서드명(`ls_info`, `grep_raw`, `glob_info`)은 deprecated. 0.5.2 이후로는 위 표의 이름으로 통일되었습니다.]
+이전 메서드명(`ls_info`, `grep_raw`, `glob_info`)은 새 교육 코드에 사용하지 않습니다. 도구 출력 문자열과 백엔드의 구조화된 반환값도 구분해서 다룹니다.
 
 #code-block(`````python
 # 간단한 커스텀 백엔드 예시: 읽기 전용 딕셔너리 기반
-# deepagents>=0.5.2 BackendProtocol 메서드명 사용
+# deepagents>=0.7 BackendProtocol 메서드명과 결과 타입 사용
 from deepagents.backends.protocol import (
     FileInfo, LsResult, ReadResult, WriteResult, EditResult, GrepResult, GrepMatch,
 )
@@ -302,7 +308,7 @@ class ReadOnlyDictBackend:
             for p, c in self._files.items()
             if p.startswith(path)
         ]
-        return LsResult(entries=sorted(entries, key=lambda e: e.path))
+        return LsResult(entries=sorted(entries, key=lambda e: e["path"]))
 
     def read(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
         content = self._files.get(file_path)
@@ -311,7 +317,13 @@ class ReadOnlyDictBackend:
         lines = content.splitlines()
         selected = lines[offset:offset + limit]
         text = "\n".join(f"{i + offset + 1}\t{line}" for i, line in enumerate(selected))
-        return ReadResult(data=text)
+        next_offset = offset + limit if offset + limit < len(lines) else None
+        return ReadResult(
+            file_data={"content": text, "encoding": "utf-8"},
+            total_lines=len(lines), start_line=offset + 1,
+            end_line=offset + len(selected), next_offset=next_offset,
+            no_lines_requested=(limit == 0),
+        )
 
     def write(self, file_path: str, content: str) -> WriteResult:
         return WriteResult(error="읽기 전용 백엔드입니다.")
@@ -333,7 +345,7 @@ class ReadOnlyDictBackend:
         return [
             FileInfo(path=p, is_dir=False, size=len(c), modified_at=None)
             for p, c in self._files.items()
-            if fnmatch.fnmatch(p, pattern)
+            if p.startswith(path) and fnmatch.fnmatch(p, pattern)
         ]
 
 
@@ -344,23 +356,13 @@ custom_backend = ReadOnlyDictBackend({
 })
 
 # 커스텀 백엔드 동작 확인
-print("파일 목록:", custom_backend.ls("/"))
+print("파일 목록:", custom_backend.ls("/docs/"))
 print()
 print("파일 내용:")
-print(custom_backend.read("/docs/guide.md"))
+print(custom_backend.read("/docs/guide.md").file_data["content"])
 print()
+print("쓰기 결과:", custom_backend.write("/docs/new.md", "초안"))
 print("검색 결과:", custom_backend.grep("설치"))
-`````)
-#output-block(`````
-파일 목록: [{'path': '/docs/guide.md', 'is_dir': False, 'size': 52, 'modified_at': None}, {'path': '/docs/faq.md', 'is_dir': False, 'size': 56, 'modified_at': None}]
-
-파일 내용:
-1	# 가이드
-2	이것은 가이드 문서입니다.
-3	## 설치 방법
-4	pip install deepagents
-
-검색 결과: [{'path': '/docs/guide.md', 'line': 3, 'text': '## 설치 방법'}]
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
@@ -385,13 +387,13 @@ print("검색 결과:", custom_backend.grep("설치"))
   [`backend` 생략 시 자동],
   [`FilesystemBackend`],
   [로컬 디스크],
-  [`root_dir`, `virtual_mode` (`..`, `~`, root 밖 절대 경로 차단)],
+  [`root_dir`, `virtual_mode=True` 기본],
   [`LocalShellBackend`],
   [디스크 + 셸 실행],
-  [`root_dir` (보안 주의)],
+  [`root_dir`, `virtual_mode`, 승인 정책],
   [`StoreBackend`],
   [크로스 스레드 영속],
-  [`namespace` (LangGraph `Runtime` 수신) + `store` + `checkpointer`],
+  [`namespace` + `create_deep_agent(store=...)`],
   [`ContextHubBackend`],
   [LangSmith Hub],
   [lazy fetch + write-through 캐시],
@@ -413,6 +415,8 @@ print("검색 결과:", custom_backend.grep("설치"))
   text(weight: "bold")[반환 타입],
   [`ls`, `read`, `write`, `edit`, `grep`, `glob`],
   [`LsResult`, `ReadResult`, `WriteResult`, `EditResult`, `GrepResult`, `list[FileInfo]`],
+  [`delete`],
+  [`DeleteResult` (선택)],
 )
 
-`deepagents>=0.5.2` 기준 사전 생성된 백엔드 인스턴스가 권장됩니다.
+새 예제는 사전 생성된 백엔드 인스턴스를 전달하고, `StoreBackend`는 namespace와 store를 함께 다룹니다.

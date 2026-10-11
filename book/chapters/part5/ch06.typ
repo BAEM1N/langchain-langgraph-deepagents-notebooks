@@ -33,7 +33,7 @@ Dialect: sqlite
 
 SQL 에이전트는 자연어 질문을 SQL 쿼리로 변환하는 _8단계_ 프로세스를 따릅니다:
 
-#code-block(`````python
+#code-block(`````
 1. 질문 수신 -> 2. 테이블 목록 -> 3. 관련 테이블 스키마
 -> 4. SQL 쿼리 생성 -> 5. 쿼리 검증 -> 6. (선택) 사람 리뷰
 -> 7. 쿼리 실행 -> 8. 결과 해석
@@ -45,7 +45,7 @@ SQL 에이전트는 자연어 질문을 SQL 쿼리로 변환하는 _8단계_ 프
 
 === 에이전트 실행 트레이스 예시
 
-#code-block(`````python
+#code-block(`````
 User: "지난달 매출 상위 5개 제품은?"
 
 Agent -> sql_db_list_tables()
@@ -300,7 +300,7 @@ LangChain `create_agent`는 빠르게 프로토타입을 만들 수 있지만, _
 
 === 그래프 구조
 
-#code-block(`````python
+#code-block(`````
 START -> list_tables -> get_schema -> generate_query
       -> check_query -> execute_query -> END
 `````)

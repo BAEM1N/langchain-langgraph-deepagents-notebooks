@@ -276,6 +276,23 @@ print("general-purpose 서브에이전트를 오버라이드한 에이전트 생
 general-purpose 서브에이전트를 오버라이드한 에이전트 생성 완료
 `````)
 
+=== 실험적 fork 모드 구성
+
+기본 서브에이전트 호출은 isolated 모드입니다. 부모 대화 문맥을 이어받아야 하는 제한적인 경우에는 `mode="fork"`를 명시합니다. fork 서브에이전트는 부모 스킬을 상속하므로 별도 `skills` 필드를 함께 두지 않습니다.
+
+#code-block(`````python
+# fork 서브에이전트 구성만 검증합니다. 모델 호출은 하지 않습니다.
+fork_reviewer = {
+    "name": "fork-reviewer",
+    "description": "부모 문맥을 이어받아 짧은 리뷰 체크리스트를 작성합니다.",
+    "system_prompt": "부모 대화의 요구사항을 기준으로 빠진 검증 항목만 요약하세요.",
+    "tools": [],
+    "mode": "fork",
+}
+fork_agent = create_deep_agent(model=model, system_prompt="리뷰를 조율합니다.", subagents=[fork_reviewer])
+print(f"fork 서브에이전트 생성 완료: {fork_reviewer['name']} / mode={fork_reviewer['mode']}")
+`````)
+
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 5. 컨텍스트 전파
 
@@ -354,22 +371,18 @@ print("멀티 서브에이전트 파이프라인 에이전트 생성 완료")
 메인 에이전트는 `description`을 보고 어떤 서브에이전트를 호출할지 결정합니다.
 서브에이전트의 역할과 사용 시기를 명확하게 기술하세요.
 
-=== 2. 최소 도구 원칙
-서브에이전트에는 _필요한 도구만_ 제공하세요. 불필요한 도구는 컨텍스트를 낭비하고 오동작을 유발합니다.
+=== 2. 기본 isolated와 실험적 fork 구분
+기본 서브에이전트 호출은 isolated 모드입니다. 호출마다 별도 문맥에서 작업하므로 필요한 입력을 한 번에 전달해야 합니다.
+`mode="fork"`는 부모의 유효 대화 문맥과 prompt-producing middleware를 이어받는 실험적 모드입니다. fork는 부모 skills를 상속하며 별도 `skills` 설정을 거부합니다. 이것을 장기 메모리나 호출 간 상태 보존으로 확대 해석하지 않습니다.
 
-=== 3. 간결한 결과 반환
-서브에이전트의 시스템 프롬프트에 _"결과를 간결하게 요약하라"_ 를 포함하세요.
+=== 3. 최소 도구 원칙
+서브에이전트에는 필요한 도구만 제공하세요. 불필요한 도구는 컨텍스트를 낭비하고 오동작을 유발합니다.
 
-=== 4. 적절한 모델 선택
-작업 복잡도에 따라 서브에이전트마다 다른 모델을 사용할 수 있습니다.
-- 단순 수집 → 가벼운 모델 (예: `openai:gpt-5.4-mini`, `anthropic:claude-haiku-4-6`)
-- 깊은 분석 → 강력한 모델 (예: `openai:gpt-5.4`, `anthropic:claude-sonnet-4-6`)
+=== 4. 간결한 결과 반환
+서브에이전트의 시스템 프롬프트에 “결과를 간결하게 요약해서 반환”하도록 명시하세요. 중간 로그 전체를 반환하면 메인 에이전트 컨텍스트가 다시 비대해집니다.
 
-=== 5. TodoList + dispatch 결합
-메인 에이전트가 `write_todos` 로 항목을 만들고, 각 항목을 `task(subagent="...")` 로 위임하면 디스패치 결정이 추적 가능해집니다.
-
-=== 6. 스트리밍 메타데이터
-스트리밍 시 `lc_agent_name` 메타데이터로 어느 서브에이전트의 출력인지 식별할 수 있습니다.
+=== 5. 상태 공유가 필요하면 파일 또는 store 사용
+서브에이전트 간 정보를 공유하려면 `write_file`로 중간 결과를 저장하거나 `StoreBackend` 기반 경로를 사용합니다. 단순히 이전 task 호출을 기억한다고 가정하지 않습니다.
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 핵심 정리
@@ -387,11 +400,13 @@ print("멀티 서브에이전트 파이프라인 에이전트 생성 완료")
   [CompiledSubAgent],
   [커스텀 LangGraph 그래프를 `runnable`로 연결],
   [General-Purpose],
-  [빌트인 기본 서브에이전트 (메인과 동일한 설정)],
+  [빌트인 기본 서브에이전트 (명시적으로 같은 이름을 정의하면 오버라이드)],
+  [기본 모드],
+  [isolated: 호출마다 독립 문맥, 필요한 입력을 한 번에 제공],
+  [fork 모드],
+  [`mode="fork"`: 부모 문맥을 이어받는 실험적 모드, 부모 skills 상속],
   [컨텍스트 전파],
-  [`context_schema` + `config["context"]`],
-  [네임스페이스 키],
-  [`"에이전트이름:키"` 형식으로 서브에이전트별 설정],
-  [파이프라인 패턴],
-  [collector → analyzer → writer],
+  [`context_schema`와 `config["context"]`로 런타임 context 전달],
+  [상태 공유],
+  [파일 또는 StoreBackend 경로로 명시적으로 공유],
 )

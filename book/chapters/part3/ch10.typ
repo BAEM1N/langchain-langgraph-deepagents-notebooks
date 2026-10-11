@@ -255,7 +255,7 @@ curl -s --request POST \
 == 10.8 관측성 — LangSmith 트레이싱
 
 _환경 변수 (`.env`):_
-#code-block(`````python
+#code-block(`````
 LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=lsv2-...
 LANGSMITH_PROJECT=my-agent-project   # 선택, 미설정 시 'default'
@@ -331,6 +331,23 @@ graph = (
 
 위 패턴은 SSN처럼 정규식으로 식별 가능한 패턴을 로깅 직전에 마스킹한 뒤 LangSmith로 전송합니다.
 
+== 노드별 trace 정책 — `trace_policy`
+
+운영 그래프에서는 모든 노드를 같은 깊이로 남기지 않습니다. `StateGraph.add_node(..., trace_policy=...)`는 특정 노드의 트레이스 수집 방식을 좁히는 지점입니다. 민감한 입력을 다루는 노드, 고빈도 라우터, 비용이 큰 모델 노드를 구분해 LangSmith trace의 노이즈와 개인정보 노출을 줄입니다.
+
+#code-block(`````python
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import TracePolicy
+
+def route(state): return {"route": "answer"}
+def answer(state): return {"result": "done"}
+
+builder = StateGraph(dict)
+builder.add_node("route", route, trace_policy=TracePolicy(process_inputs=lambda _: {"redacted": True}))
+builder.add_node("answer", answer)
+builder.add_edge(START, "route"); builder.add_edge("route", "answer"); builder.add_edge("answer", END)
+`````)
+
 == 10.9 Pregel 런타임 개요
 
 - _Pregel_은 LangGraph의 내부 실행 엔진
@@ -341,7 +358,7 @@ graph = (
 
 _LangGraph 실행 모델:_
 
-#code-block(`````python
+#code-block(`````
 [Super-step 1] Node A, Node B (병렬)
      ↓ 상태 업데이트
 [Super-step 2] Node C (A, B 결과 기반)

@@ -190,16 +190,19 @@ from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
 from langgraph.store.memory import InMemoryStore
 
-def make_backend(runtime):
-    return CompositeBackend(
-        default=StateBackend(runtime),
-        routes={"/memories/": StoreBackend(runtime)},
-    )
+backend = CompositeBackend(
+    default=StateBackend(),
+    routes={
+        "/memories/": StoreBackend(
+            namespace=lambda rt: (rt.server_info.user.identity,),
+        ),
+    },
+)
 
 agent = create_deep_agent(
     model="google_genai:gemini-3.5-flash",
     store=InMemoryStore(),
-    backend=make_backend,
+    backend=backend,
     system_prompt=(
         "When users tell you their preferences, save them to "
         "/memories/user_preferences.txt so you remember them in future conversations."

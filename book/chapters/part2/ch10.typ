@@ -68,7 +68,7 @@ print("환경 준비 완료.")
 
 로컬 dev 서버는 `http://127.0.0.1:2024` 에서 떠 있고, Studio UI 는 hosted 엔드포인트로 접속합니다.
 
-#code-block(`````python
+#code-block(`````
 https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 `````)
 

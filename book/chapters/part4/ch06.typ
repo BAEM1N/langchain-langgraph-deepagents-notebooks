@@ -230,32 +230,18 @@ print(f"임시 디렉토리 생성: {tmp_dir}")
 
 #code-block(`````yaml
 ---
-name: web-research              # 스킬 식별자 (최대 64자, 소문자+하이픈)
-description: >                  # 설명 (최대 1024자) — 매칭에 사용
+name: web-research
+description: >
   체계적인 웹 리서치를 수행하기 위한 단계별 가이드.
-  정보 수집, 검증, 정리까지의 전체 워크플로를 다룹니다.
-module: ./helpers.py            # 선택 — 인터프리터에 노출할 Python/TypeScript 모듈
-license: MIT
-compatibility: Python 3.8+
 metadata:
   category: research
-allowed-tools: ls read_file write_file
+  include_tools: web_search summarize_page
 ---
-
-# Web Research 스킬
-
-## 사용 시기
-- 사용자가 특정 주제에 대한 조사를 요청할 때
-- 최신 정보가 필요한 질문이 들어올 때
-
-## 워크플로
-1. 검색 쿼리 설계
-2. 다양한 소스에서 정보 수집
-3. 정보 교차 검증
-4. 구조화된 보고서 작성
 `````)
 
-#tip-box[`module` 필드는 interpreter 기반 스킬에서 사용합니다. QuickJS 인터프리터 (`deepagents>=0.6`) 또는 샌드박스 스크립트 실행과 결합하면, 결정론적 헬퍼(파싱·검증·점수화)와 의존성/CLI 가 필요한 스크립트를 분리할 수 있습니다.]
+`metadata.include_tools`는 _공백으로 구분한 문자열_입니다. YAML 리스트가 아니며, Agent Skills 표준의 `allowed-tools`와도 의미가 다릅니다. `allowed-tools`는 승인 정책에 가깝고, `include_tools`는 skill을 읽거나 pin했을 때 모델에게 추가로 공개할 도구 이름입니다.
+
+스킬 도구를 사용하려면 `create_deep_agent(skills=[...])`만으로 끝나지 않습니다. `SkillsMiddleware(backend=..., sources=[...], tools=[...])` 또는 resolver를 직접 구성해 skill이 요청한 도구를 연결합니다. 도구는 skill을 읽은 뒤 또는 입력 state의 `pinned_skills`로 pin된 동안에만 공개됩니다.
 
 === 스킬을 지원하는 백엔드
 
@@ -276,6 +262,44 @@ allowed-tools: ls read_file write_file
   [`CompositeBackend`],
   [스킬 파일은 `StoreBackend`, 실행은 샌드박스로 분리],
 )
+
+=== SkillsMiddleware로 도구와 pinned skill 연결
+
+`metadata.include_tools`에 적은 이름은 실제 파이썬 함수와 자동으로 연결되지 않습니다. `SkillsMiddleware`에 도구 목록을 넘기거나, 스킬 이름과 런타임을 받아 도구를 반환하는 resolver를 제공합니다. 특정 스킬을 항상 열어 두고 싶으면 생성자 옵션이 아니라 입력 state의 `pinned_skills`에 넣습니다.
+
+#code-block(`````python
+from pathlib import Path
+
+skill_dir = Path(tmp_dir) / "skills" / "review-style"
+skill_dir.mkdir(parents=True, exist_ok=True)
+skill_text = "---\nname: review-style\ndescription: 코드 리뷰 톤과 체크리스트를 제공합니다.\nmetadata:\n  include_tools: summarize_code\n---\n보안, 정확성, 테스트를 우선 확인하세요.\n"
+skill_dir.joinpath("SKILL.md").write_text(skill_text, encoding="utf-8")
+print(skill_dir.joinpath("SKILL.md").read_text().split("---", 2)[1].strip())
+`````)
+
+#code-block(`````python
+from deepagents.middleware import SkillsMiddleware
+
+def summarize_code(code: str) -> str:
+    """코드 길이를 짧게 요약합니다."""
+    return f"검토 대상 코드 길이: {len(code)}자"
+skills_backend = FilesystemBackend(root_dir=tmp_dir, virtual_mode=True)
+list_mw = SkillsMiddleware(backend=skills_backend, sources=["/skills/"], tools=[summarize_code])
+skilled_agent = create_deep_agent(model=model, backend=skills_backend, middleware=[list_mw])
+print("도구 목록 기반 SkillsMiddleware 생성 완료")
+`````)
+
+#code-block(`````python
+def skill_tool_resolver(skill_name, runtime):
+    return [summarize_code] if skill_name == "review-style" else []
+
+resolver_mw = SkillsMiddleware(backend=skills_backend, sources=["/skills/"], tools=skill_tool_resolver)
+skill_run_input = {
+    "messages": [{"role": "user", "content": "이 코드를 review-style로 검토해 주세요."}],
+    "pinned_skills": ["review-style"],
+}
+print(skill_run_input["pinned_skills"])
+`````)
 
 #code-block(`````python
 # 스킬을 사용하는 에이전트 생성
@@ -354,16 +378,16 @@ subagent = {
   [Progressive disclosure (on-demand)],
   [_형식_],
   [`AGENTS.md`],
-  [`SKILL.md` + frontmatter (`name`, `description`, optional `module`)],
+  [`SKILL.md` + frontmatter (`name`, `description`, optional `metadata.include_tools`)],
   [_레이어링_],
   [사용자 + 프로젝트 결합],
   [마지막 소스 우선 (last wins)],
   [_적합 용도_],
   [항상 적용되는 컨벤션],
-  [대용량 task-specific 컨텍스트],
+  [대용량 task-specific 컨텍스트와 gated tools],
   [_토큰 효율_],
   [항상 소비],
-  [절약 (필요 시 로드)],
+  [필요 시 로드],
   [_업데이트_],
   [에이전트가 `edit_file`로 수정 가능],
   [보통 정적],
@@ -380,7 +404,7 @@ subagent = {
   text(weight: "bold")[항목],
   text(weight: "bold")[내용],
   [장기 메모리],
-  [`CompositeBackend` + `StoreBackend`로 `/memories/` 영속화],
+  [`CompositeBackend` + `StoreBackend(namespace=...)`로 `/memories/` 영속화],
   [프로덕션 store],
   [`from langgraph.store.postgres import PostgresStore`],
   [namespace 패턴],
@@ -388,11 +412,11 @@ subagent = {
   [AGENTS.md],
   [`memory=["/path/AGENTS.md"]` → 항상 시스템 프롬프트에 주입],
   [Skills],
-  [`skills=["/skills/"]` → SKILL.md 기반 progressive disclosure],
-  [스킬 `module`],
-  [인터프리터 노출 Python/TS 파일 — 결정론적 헬퍼],
-  [스킬 우선순위],
-  [나중 소스가 우선 (last wins)],
+  [`skills=["/skills/"]` 또는 직접 구성한 `SkillsMiddleware`],
+  [skill tools],
+  [`metadata.include_tools: tool_a tool_b` + `SkillsMiddleware(tools=...)`],
+  [pinned skills],
+  [`agent.invoke({"messages": [...], "pinned_skills": ["skill-name"]}, config)` 입력 state로 전달],
   [정보 유형],
   [Episodic (checkpointer) / Procedural (skills) / Semantic (store)],
 )

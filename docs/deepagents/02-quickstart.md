@@ -1,7 +1,7 @@
 # Deep Agents Quickstart
 
 ## Overview
-This guide enables developers to build their first deep agent with planning, file system tools, and subagent capabilities — specifically a research agent capable of conducting research and writing reports.
+This guide enables developers to build their first deep agent with file system tools, subagent capabilities, and optional planning middleware — specifically a research agent capable of conducting research and writing reports.
 
 ## Key Requirements
 - API key from a model provider (Anthropic, OpenAI, etc.)
@@ -62,8 +62,8 @@ Model IDs follow the `provider:model-name` format. Common values:
 - `ollama:devstral-2`
 
 ## Functional Capabilities
-The agent automatically:
-- Plans approaches via built-in `write_todos` tool
+The agent can:
+- Plan approaches via `TodoListMiddleware` when the example opts into `write_todos`
 - Conducts research through internet search
 - Manages context using file system tools (`write_file`, `read_file`)
 - Spawns specialized subagents for complex tasks

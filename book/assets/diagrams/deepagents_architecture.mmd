@@ -1,8 +1,8 @@
 graph TB
     subgraph Agent["Deep Agent"]
-        Planning["Planning<br/><i>write_todos</i>"]
-        Tools["Tools<br/><i>ls, read, write, edit ...</i>"]
-        Middleware["Middleware<br/><i>Todo, FS, SubAgent, Summary ...</i>"]
+        Planning["Planning (opt-in)<br/><i>TodoListMiddleware</i>"]
+        Tools["Tools<br/><i>ls, read_file, write_file ...</i>"]
+        Middleware["Middleware<br/><i>FS, SubAgent, Summary ...<br/>Todo: opt-in</i>"]
         Backend["Backend<br/><i>State / FS / Store / Composite</i>"]
         SubA["SubAgent A"]
         SubB["SubAgent B"]

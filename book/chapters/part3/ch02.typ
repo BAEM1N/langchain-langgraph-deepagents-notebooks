@@ -29,7 +29,7 @@ StateGraph를 사용하는 기본 흐름입니다:
 + `compile()` — 실행 가능한 그래프 생성
 + `invoke()` — 그래프 실행
 
-#code-block(`````python
+#code-block(`````
 StateGraph(State) → add_node() → add_edge() → compile() → invoke()
 `````)
 
@@ -51,7 +51,7 @@ StateGraph(State) → add_node() → add_edge() → compile() → invoke()
 - `add_conditional_edges(source, routing_function)` — 라우팅 함수의 반환값이 다음 노드 이름
 - 라우팅 함수는 `Literal` 타입 힌트를 사용하면 시각화에 도움
 
-#code-block(`````python
+#code-block(`````
 START → classify → [route] → weather → END
                            → math    → END
                            → general → END

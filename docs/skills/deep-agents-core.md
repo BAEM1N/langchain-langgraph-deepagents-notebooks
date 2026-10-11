@@ -4,11 +4,11 @@
 
 ## 아키텍처
 
-Deep Agents 는 내장 미들웨어 묶음 위에서 작동한다. 기본 스택은 다음과 같다.
+Deep Agents 는 미들웨어 묶음 위에서 작동한다. 0.7 계열에서는 모든 기능이 항상 기본 내장되는 것이 아니므로, 예제에서 필요한 기능은 명시적으로 구성한다.
 
 | 미들웨어 | 기능 |
 |----------|------|
-| `TodoListMiddleware` | 계획 수립 (`write_todos`) |
+| `TodoListMiddleware` | 계획 수립 (`write_todos`) — 계획이 필요한 예제에서 opt-in |
 | `FilesystemMiddleware` | 파일 I/O (`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`) |
 | `SubAgentMiddleware` | 서브에이전트 위임 (`task`) — 동기 서브에이전트가 있으면 자동 부착, 제거 불가 |
 | `SummarizationMiddleware` | 컨텍스트 압축 |
@@ -20,7 +20,7 @@ Deep Agents 는 내장 미들웨어 묶음 위에서 작동한다. 기본 스택
 
 ## 에이전트 생성
 
-`create_deep_agent()` 의 17 파라미터 시그니처:
+`create_deep_agent()` 의 주요 파라미터:
 
 ```python
 create_deep_agent(
@@ -33,7 +33,7 @@ create_deep_agent(
     skills: list[str] | None = None,
     memory: list[str] | None = None,
     permissions: list[FilesystemPermission] | None = None,
-    backend: BackendProtocol | BackendFactory | None = None,
+    backend: BackendProtocol | None = None,
     interrupt_on: dict[str, bool | InterruptOnConfig] | None = None,
     response_format: ResponseFormat[ResponseT] | type[ResponseT] | dict[str, Any] | None = None,
     context_schema: type[ContextT] | None = None,
@@ -45,7 +45,7 @@ create_deep_agent(
 ) -> CompiledStateGraph
 ```
 
-기본 모델은 `claude-sonnet-4-6`. 모델 ID 는 `provider:model-name` 형식을 따른다 (`anthropic:claude-sonnet-4-6`, `openai:gpt-5.4`, `google_genai:gemini-3.5-flash` 등).
+모델 ID 는 `provider:model-name` 형식을 따른다. 이 저장소의 교육 소스 기본값은 별도 정책으로 관리하며, 새 공식 문서의 예시 모델명을 임의로 일괄 치환하지 않는다.
 
 예시:
 
@@ -80,11 +80,13 @@ Detailed instructions loaded when the agent needs this skill.
 
 YAML frontmatter 의 `description` 이 항상 노출되고, 본문은 `SkillsMiddleware` 가 필요 시 로드한다.
 
+`metadata.include_tools`를 사용하면 skill 본문을 읽은 뒤 관련 도구 schema를 공개할 수 있다. 값은 공백으로 구분한 도구 이름 문자열이며 YAML 리스트나 `allowed-tools`와 다르다. `pinned_skills`는 생성자 인자가 아니라 호출 입력 state에 전달하는 표면으로 다룬다.
+
 ## 내장 도구
 
 | 도구 | 기능 |
 |------|------|
-| `write_todos` | 작업 계획 저장 |
+| `write_todos` | 작업 계획 저장 (`TodoListMiddleware` 구성 시) |
 | `ls` | 디렉토리 목록 |
 | `read_file` | 파일 읽기 (이미지·오디오·비디오·PDF 멀티모달) |
 | `write_file` | 파일 쓰기 |
@@ -101,15 +103,16 @@ YAML frontmatter 의 `description` 이 항상 노출되고, 본문은 `SkillsMid
 | 메서드 | 반환 | 비고 |
 |--------|------|------|
 | `ls(path)` | `LsResult` | entries 는 결정적으로 정렬 |
-| `read(file_path, offset=0, limit=2000)` | `ReadResult` | 누락 파일은 `ReadResult(error=...)` |
+| `read(file_path, offset=0, limit=2000)` | `ReadResult` | 정상 결과는 `file_data`, 누락 파일은 `ReadResult(error=...)` |
 | `grep(pattern, path=None, glob=None)` | `GrepResult` | 오류 시 raise 대신 `error=` 반환 |
 | `glob(pattern, path="/")` | `list[FileInfo]` | 무매칭은 빈 리스트 |
-| `write(file_path, content)` | `WriteResult` | create-only, 충돌 시 `error=` |
+| `write(file_path, content)` | `WriteResult` | 현재 파일 도구는 기존 파일을 덮어쓸 수 있으므로 권한 범위와 함께 설명 |
 | `edit(file_path, old_string, new_string, replace_all=False)` | `EditResult` | `replace_all=False` 면 unique 매칭 강제, `occurrences` 포함 |
+| `delete(file_path)` | `DeleteResult` | backend가 지원할 때만 삭제 도구 노출 |
 
 ## TodoList + Dispatch 패턴
 
-`TodoListMiddleware` 가 제공하는 `write_todos` 로 계획을 세우고, `SubAgentMiddleware` 의 `task` 도구로 항목별 위임한다. 스트리밍/도구 추적 시 `lc_agent_name` 메타데이터로 어떤 서브에이전트의 호출인지 구분할 수 있다.
+계획이 필요한 예제에서는 `TodoListMiddleware` 가 제공하는 `write_todos` 로 계획을 세우고, `SubAgentMiddleware` 의 `task` 도구로 항목별 위임한다. 부모 agent와 subagent의 middleware 구성은 별개로 확인한다. 스트리밍/도구 추적 시 `lc_agent_name` 메타데이터로 어떤 서브에이전트의 호출인지 구분할 수 있다.
 
 ## 설정 경계
 

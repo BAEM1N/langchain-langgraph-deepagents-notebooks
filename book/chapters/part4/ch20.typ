@@ -39,7 +39,9 @@ rubric[0]["name"]
 
 == 16.2 deterministic rubric evaluator
 
-실제 `RubricMiddleware` 적용 전에도 criterion별 실패를 보여줄 수 있습니다.
+실제 `RubricMiddleware`는 criterion별 평가 커버리지를 요구하고, grader hook과 runtime self-revision loop에 연결됩니다. 이 셀의 evaluator는 SDK middleware가 아니라 수업용 결정적 축소판입니다.
+
+이 구분이 중요합니다. 수업용 evaluator는 LLM 호출 없이 구조를 이해하기 위한 장치이고, `RubricMiddleware`는 실행 중 결과 품질을 검사하는 runtime middleware입니다.
 
 #code-block(`````python
 def evaluate(text: str) -> dict:
@@ -60,14 +62,16 @@ evaluate("요약: 완료. 다음: 테스트 실행")
   text(weight: "bold")[항목],
   text(weight: "bold")[역할],
   [profile],
-  [모델/provider별 harness 기본값],
+  [모델/provider별 harness 기본값, 도구 설명, 제외 도구, 추가 middleware 조정],
   [rubric],
   [결과물이 만족해야 할 품질 기준],
   [eval],
   [batch/offline 회귀 평가],
   [middleware],
-  [runtime self-revision loop],
+  [runtime self-revision loop와 grader hook],
 )
+
+Profile은 실행 환경을 바꾸고, rubric은 완료 기준을 바꿉니다. 같은 품질 문제를 다루더라도 두 레이어를 섞지 않아야 회귀 원인을 추적할 수 있습니다.
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 
@@ -82,9 +86,11 @@ evaluate("요약: 완료. 다음: 테스트 실행")
   text(weight: "bold")[항목],
   text(weight: "bold")[내용],
   [_다룬 기술_],
-  [`HarnessProfile`, rubric criteria, deterministic evaluator],
+  [`HarnessProfile`, rubric criteria, deterministic evaluator, `RubricMiddleware` 계약],
   [_핵심 개념_],
   [profile은 실행 환경, rubric은 완료 기준을 관리합니다.],
+  [_주의_],
+  [수업용 결정적 evaluator와 SDK `RubricMiddleware`를 같은 것으로 설명하지 않습니다.],
 )
 
 #references-box[

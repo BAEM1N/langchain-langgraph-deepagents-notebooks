@@ -37,7 +37,7 @@ _What is Deep Agents?_
 
 Deep Agents is a framework designed to simplify agent development. It works like an _agent harness_: internally it is built on top of LangChain agent components and uses LangGraph to manage execution.
 
-_Core built-in capabilities:_
+_Core capabilities in the current SDK:_
 
 #table(
   columns: 2,
@@ -48,7 +48,7 @@ _Core built-in capabilities:_
   text(weight: "bold")[Capability],
   text(weight: "bold")[Description],
   [_Task planning_],
-  [Uses the `write_todos` tool to break down complex tasks into manageable steps],
+  [Add `TodoListMiddleware` when a lesson needs the `write_todos` planning tool],
   [_Context management_],
   [Uses file system tools such as `write_file` and `read_file` to handle larger amounts of information without overflowing the token budget],
   [_Flexible storage_],
@@ -83,7 +83,7 @@ A custom tool is just a normal Python function, and Deep Agents automatically co
 - _Docstring_ → tool description (used by the agent to understand what the tool does)
 - _Type hints_ → parameter schema (used by the agent to pass the correct arguments)
 
-If you pass a list of functions to the `tools` parameter of `create_deep_agent()`, those functions are added to the tool list alongside the built-in capabilities such as file operations and todo planning. You can also guide the agent's behavior with the `system_prompt` parameter.
+If you pass a list of functions to the `tools` parameter of `create_deep_agent()`, those functions are added to the tool list alongside harness tools such as file operations. Planning is now an explicit middleware choice, so add `TodoListMiddleware` in examples that rely on `write_todos`. You can also guide the agent's behavior with the `system_prompt` parameter.
 
 
 == Summary

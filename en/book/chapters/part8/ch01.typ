@@ -112,7 +112,66 @@ Provider Middleware wraps features that are activated _on the provider's servers
   [Pre- / post-check via OpenAI Moderation API],
 )
 
-== 1.4 Common pattern
+
+== 1.4 New integration surfaces: UI · Code · resilience
+
+As of 2026, integration scope does not stop at provider middleware. These surfaces do not change the thirteen-category count in this Part; treat them as _connection styles_ layered on top of the existing categories.
+
+#table(
+  columns: 3,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Surface],
+  text(weight: "bold")[Core idea],
+  text(weight: "bold")[Where it connects in this book],
+  [Generative UI / AG-UI],
+  [controlled · declarative · open-ended UI generation and the frontend/server event boundary],
+  [Parts 2/3 agent state and streaming; Part 8 provider/runtime integration],
+  [Deep Agents Code],
+  [`/oss/deepagents/code` configuration · approval · extensions · plugins · MCP tools],
+  [Part 4 permissions/skills/subagents/backends, specialized for coding-agent runtime],
+  [RAG · fault tolerance · multimodal],
+  [retrieval, checkpointer/retry/resume, and multimodal `read_file` combined with the Deep Agents filesystem],
+  [Parts 4/5/7 core agent, advanced patterns, and examples],
+)
+
+Generative UI splits by how much control the model has over the UI: controlled, declarative, and open-ended. AG-UI connects that flow through an event protocol between a frontend and an agent server. This chapter therefore marks it as a frontend integration track after state, streaming, and hosted runtime concepts, without inventing a new notebook or setup path.
+
+Deep Agents Code covers production surfaces for coding agents: `configuration`, `approval`, `extensions`, `plugins`, and `MCP tools`. Those are the same conceptual families as permissions, skills, subagents, and backends from Part 4, narrowed to a coding-agent runtime. No new credential or environment variable is assumed here.
+
+RAG, fault tolerance, and multimodal are combinations of existing axes, not new categories. RAG combines Retriever/Vector Store components with Deep Agents file context. Fault tolerance connects LangGraph checkpointers, retries, and resumability to production operations. Multimodal is the question of passing image/PDF/audio/video files through `read_file` within each provider's limits.
+
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Official reference],
+  text(weight: "bold")[What to check],
+  [#link("https://docs.langchain.com/oss/python/langchain/frontend/generative-ui")[LangChain Generative UI]],
+  [controlled/declarative/open-ended UI patterns],
+  [#link("https://docs.langchain.com/oss/python/deepagents/ag-ui")[Deep Agents AG-UI]],
+  [frontend/server integration event boundary],
+  [#link("https://docs.langchain.com/oss/deepagents/code/configuration")[Deep Agents Code configuration]],
+  [coding-agent runtime configuration],
+  [#link("https://docs.langchain.com/oss/deepagents/code/approval-modes")[Code approval modes]],
+  [pre-execution approval policy and permission boundaries],
+  [#link("https://docs.langchain.com/oss/deepagents/code/extensions")[Code extensions]],
+  [runtime feature extension and skill/memory wiring],
+  [#link("https://docs.langchain.com/oss/deepagents/code/plugins")[Code plugins]],
+  [external tool bundles and deployment units],
+  [#link("https://docs.langchain.com/oss/python/deepagents/fault-tolerance")[Deep Agents fault tolerance]],
+  [retry, resume, checkpointer, and operational resilience],
+  [#link("https://docs.langchain.com/oss/python/deepagents/multimodal")[Deep Agents multimodal]],
+  [file backends and multimodal input handling],
+  [#link("https://docs.langchain.com/oss/python/deepagents/rag")[Deep Agents RAG]],
+  [retrieval, file context, and subagent composition],
+)
+
+== 1.5 Common pattern
 
 Every chapter in this Part shares the same three-step loop.
 
@@ -122,7 +181,7 @@ Every chapter in this Part shares the same three-step loop.
 
 #tip-box[Provider-specific middleware needs _a matching model_. If you attach Anthropic middleware to an OpenAI model, behavior is governed by `unsupported_model_behavior` — either a warning or an exception. In multi-provider pipelines, watch the order when combining with `ModelFallbackMiddleware`.]
 
-== 1.5 Observability env-var standardization
+== 1.6 Observability env-var standardization
 
 From LangChain 1.1, tracing-related environment variables were standardized from `LANGCHAIN_*` to `LANGSMITH_*`. The old names continue to work for a while for compatibility, but _new code uses the new names exclusively_.
 
@@ -151,7 +210,8 @@ From LangChain 1.1, tracing-related environment variables were standardized from
 
 == Key Takeaways
 
-- Integrations are organized into twelve categories, each sharing the "provider plugin + common interface" structure
+- Integrations are organized into thirteen categories, each sharing the "provider plugin + common interface" structure
 - Provider Middleware is the category that wraps provider _server-side_ features as LangChain middleware
 - Chapters 2–8 cover the seven Provider Middleware with runnable code, one per chapter
+- Generative UI/AG-UI, Deep Agents Code, and RAG/fault tolerance/multimodal are not new notebook categories here; read them as extensions of state, streaming, backend, retrieval, and operations concepts
 - Duplicate-instance constraints, model matching, and multi-provider fallback are the common concerns of Provider Middleware

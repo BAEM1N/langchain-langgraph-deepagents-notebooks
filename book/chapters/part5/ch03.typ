@@ -281,7 +281,7 @@ def step_middleware(
 에이전트 생성 시 모든 도구를 등록하되, `state_schema=SupportState`와 미들웨어를 지정합니다. 미들웨어가 런타임에 `current_step`에 따라 도구를 필터링하므로, 각 단계에서는 해당 단계의 도구만 LLM에 노출됩니다.
 
 _실행 흐름 예시:_
-#code-block(`````python
+#code-block(`````
 [identify_customer] User: "로그인이 안 돼요. 이메일: alice@example.com"
   → lookup_customer("alice@example.com")
   ← Command(update={customer: {...}, current_step: "diagnose_issue"})

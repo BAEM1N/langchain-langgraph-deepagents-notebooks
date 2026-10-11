@@ -6,13 +6,13 @@
 
 ```bash
 # 모든 스킬 한번에 설치 (권장)
-npx skills add langchain-ai/langchain-skills --skill '*' --yes
+pnpm dlx skills add langchain-ai/langchain-skills --skill '*' --yes
 
 # 글로벌 설치 (모든 프로젝트에서 사용)
-npx skills add langchain-ai/langchain-skills --skill '*' --yes --global
+pnpm dlx skills add langchain-ai/langchain-skills --skill '*' --yes --global
 ```
 
-## 포함된 스킬 (11개)
+## 포함된 스킬
 
 | 카테고리 | 스킬 | 설명 |
 |----------|------|------|
@@ -32,7 +32,9 @@ npx skills add langchain-ai/langchain-skills --skill '*' --yes --global
 
 ## 로컬 참조 문서
 
-스킬 내용은 `docs/skills/` 디렉토리에도 마크다운으로 저장되어 있어 오프라인에서도 참조할 수 있습니다. `npx skills add` 명령으로 설치하면 `.deepagents/skills/`에 SKILL.md 파일이 배치되어 Deep Agents Code가 자동으로 인식합니다.
+스킬 내용은 `docs/skills/` 디렉토리에도 마크다운으로 저장되어 있어 오프라인에서도 참조할 수 있습니다. 설치 명령을 실행하면 `.deepagents/skills/`에 SKILL.md 파일이 배치되어 Deep Agents Code가 자동으로 인식합니다.
+
+현재 repo-local 스킬 문서는 Deep Agents 0.7.23 / LangChain 1.4.4 / LangGraph 1.2.14 / LangSmith 0.14.7 조사 결과를 반영한다. 특히 Deep Agents 계획 도구 opt-in, `StoreBackend(namespace=...)`, skill `metadata.include_tools`, state 입력의 `pinned_skills`, LangChain `MCPAdapter`, LangGraph `interrupt(response_schema=...)`, SmithDB `runs.query()`를 기준으로 작성한다.
 
 ## langchain-ecosystem-skills (문서 기반 스킬)
 

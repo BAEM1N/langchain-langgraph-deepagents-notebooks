@@ -141,22 +141,25 @@ with ls.tracing_context(enabled=True, project_name="langsmith-quickstart"):
 
 == 1.5 트레이스를 코드에서 다시 조회
 
-`langsmith.Client`로 UI 없이도 트레이스를 프로그램적으로 꺼냅니다. 회귀 테스트 입력, 야간 배치 리포트 원천, 데이터셋 시드로 씁니다.
+`langsmith.Client`로 UI 없이도 트레이스를 프로그램적으로 꺼냅니다. SmithDB 기반 SDK에서는 `runs.query()`가 비동기 API이고, 프로젝트 이름을 직접 받지 않으므로 먼저 프로젝트 UUID를 조회합니다. 기간을 생략하면 최근 하루로 좁혀지기 때문에 예제처럼 명시적으로 시간 범위를 둡니다. `selects`를 생략하면 기본으로 `ID`만 내려오므로, `name`, `start_time`, `inputs`, `outputs`처럼 코드에서 읽을 필드는 모두 명시합니다.
 
 #code-block(`````python
 from langsmith import Client
+from datetime import datetime, timedelta, timezone
 
 client = Client()
+project = client.read_project(project_name="langsmith-quickstart")
+window_end = datetime.now(timezone.utc)
+since = window_end - timedelta(days=7)
 
-runs = list(
-    client.list_runs(
-        project_name="langsmith-quickstart",
+async for r in client.runs.query(
+        project_ids=[str(project.id)],
         filter='and(has(tags, "env:dev"), eq(is_root, true))',
-        limit=10,
-    )
-)
-
-for r in runs:
+        min_start_time=since,
+        max_start_time=window_end,
+        page_size=10,
+        selects=["ID", "NAME", "START_TIME", "TOTAL_TOKENS", "TOTAL_COST"],
+):
     print(r.id, r.name, r.total_tokens, r.total_cost)
 `````)
 
@@ -175,7 +178,7 @@ UI 프로젝트 페이지 우상단의 _Analytics_ 탭에서 프로젝트 단위
 == 핵심 정리
 
 - 환경변수 세 줄(`LANGSMITH_API_KEY`, `LANGSMITH_TRACING=true`, `LANGSMITH_PROJECT`)로 기존 에이전트가 자동 트레이싱된다 — 미설정 시 `default` 프로젝트로 기록
-- `run_name` · `tags` · `metadata`로 UI 필터와 `client.list_runs(filter=...)` 질의에 걸리게 한다
+- `run_name` · `tags` · `metadata`로 UI 필터와 SmithDB `client.runs.query(filter=...)` 질의에 걸리게 한다
 - `@traceable`로 LangChain 외부 함수도 같은 트레이스 트리에 편입한다
 - `import langsmith as ls` + `ls.tracing_context(enabled=...)`로 환경 변수 없이 블록 단위 토글
 - `langsmith.Client`로 UI 없이 프로그램적으로 트레이스를 꺼내 평가·회귀 테스트의 시드로 쓴다

@@ -8,8 +8,10 @@ compatibility: Python 3.12+
 metadata:
   category: sql
   difficulty: intermediate
-allowed-tools: sql_db_list_tables sql_db_schema sql_db_query sql_db_query_checker
+  include_tools: sql_db_list_tables sql_db_schema sql_db_query sql_db_query_checker
 ---
+
+> Skill tools note: `metadata.include_tools` is a space-separated Deep Agents field. The tools become visible only after this skill is read or pinned, and the agent or `SkillsMiddleware` must provide matching tool implementations.
 
 # SQL Agent 스킬
 

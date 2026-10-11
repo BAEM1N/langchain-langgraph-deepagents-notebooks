@@ -3,10 +3,10 @@
 #import "../../template.typ": *
 #import "../../metadata.typ": *
 
-#chapter(3, "데이터 분석 에이전트", subtitle: "`@tool` + pandas + 멀티턴")
+#chapter(3, "데이터 분석 에이전트", subtitle: "코드 실행과 멀티턴 분석")
 
 == 학습 목표
-#learning-objectives([`@tool` 데코레이터로 pandas 코드 실행 도구(`run_pandas`)를 정의한다], [`LocalShellBackend` 와 커스텀 도구를 조합해 데이터 분석 워크플로를 구성한다], [스트리밍과 멀티턴 대화로 반복 분석을 수행한다], [v1 미들웨어(`SummarizationMiddleware`, `ModelCallLimitMiddleware`)를 적용한다], [대안으로 _`CodeInterpreterMiddleware` (QuickJS)_ 패턴을 안내한다])
+#learning-objectives([`LocalShellBackend`로 코드 실행 환경을 구성한다], [`execute`와 파일 도구를 데이터 분석 흐름에 연결한다], [계획이 필요한 분석에서는 `TodoListMiddleware`로 `write_todos`를 명시적으로 켠다], [스트리밍과 멀티턴 대화로 반복 분석을 수행한다], [v1 미들웨어(`SummarizationMiddleware`, `ModelCallLimitMiddleware`)를 적용한다])
 
 == 개요
 
@@ -24,8 +24,10 @@
   [`\@tool` 로 정의한 `get_csv_path`, `run_pandas`],
   [_백엔드_],
   [`LocalShellBackend(virtual_mode=True)`],
-  [_빌트인 도구_],
-  [`execute`, `write_todos`, `ls`, `read_file` 등],
+  [_기본 도구_],
+  [`execute`, `ls`, `read_file` 등 파일/실행 도구],
+  [_계획 도구_],
+  [`TodoListMiddleware`를 추가한 경우 `write_todos` 사용],
   [_패턴_],
   [스트리밍 (`stream(subgraphs=True)`) + 멀티턴 대화],
   [_스킬_],
@@ -220,7 +222,7 @@ Prompt 'deep-research-agent-label:production' not found during refresh, evicting
 
 에이전트에게 분석을 요청하면, `get_csv_path`로 파일 경로를 확인한 뒤 `run_pandas`로 pandas 코드를 직접 작성하고 실행합니다.
 
-#code-block(`````python
+#code-block(`````
 에이전트 실행 흐름:
 1. get_csv_path() → CSV 파일 경로 확인
 2. run_pandas("import pandas as pd; ...") → pandas 코드 실행
@@ -232,7 +234,7 @@ Prompt 'deep-research-agent-label:production' not found during refresh, evicting
 같은 `thread_id`를 쓰면 이전 대화의 맥락을 유지한 채 후속 질문을 할 수 있습니다. 에이전트는 이전 분석 결과를 기억합니다.
 
 
-== 빌트인 도구 정리
+#chapter-summary-header()
 
 #table(
   columns: 3,
@@ -248,93 +250,41 @@ Prompt 'deep-research-agent-label:production' not found during refresh, evicting
   [파일 읽기 (이미지 포함)],
   [`write_file`],
   [모든 백엔드],
-  [파일 쓰기],
+  [파일 쓰기 또는 기존 파일 교체],
   [`edit_file`],
   [모든 백엔드],
-  [파일 편집 (find-and-replace)],
+  [파일 내용 치환],
+  [`delete`],
+  [delete 지원 백엔드],
+  [파일 또는 prefix 삭제],
   [`ls`],
   [모든 백엔드],
   [디렉토리 목록],
   [`glob`],
   [모든 백엔드],
-  [패턴 기반 파일 검색],
+  [패턴으로 파일 검색],
   [`grep`],
   [모든 백엔드],
   [파일 내용 검색],
   [`execute`],
   [LocalShell, Sandbox],
-  [셸 명령 실행],
+  [명령 실행],
   [`write_todos`],
-  [모든 백엔드],
-  [작업 계획 작성/업데이트],
+  [TodoListMiddleware],
+  [명시적으로 추가한 경우 작업 계획 관리],
 )
-
 
 == 데이터 분석 실행 흐름
 
-#code-block(`````python
-1. [Planning]    write_todos — 분석 계획 작성
-2. [Reading]     read_file — CSV 구조 파악
-3. [Execution]   execute — pandas 코드 실행
-4. [Iteration]   추가 분석, 후속 질문
-5. [Delivery]    결과 정리 및 보고
+#code-block(`````
+1. [Planning]    TodoListMiddleware를 추가한 경우 write_todos로 분석 계획 작성
+2. [Reading]     read_file로 CSV 구조 확인
+3. [Execution]   execute로 pandas 코드 실행
+4. [Iteration]   후속 질문으로 분석 심화
+5. [Delivery]    결과 요약과 근거 보고
 `````)
 
-
-== 대안 패턴: `CodeInterpreterMiddleware` (QuickJS Interpreter)
-
-`@tool` + `exec` 패턴은 학습용으로 명료하지만, _에이전트 루프 내부_에서 변수 공간을 유지하며 도구 호출을 조합하고 싶을 때는 `CodeInterpreterMiddleware`(QuickJS 기반)가 더 적합합니다. 인터프리터는 호스트 파일시스템·네트워크·셸을 기본적으로 노출하지 않으며, allowlist된 도구만 `tools.*` 네임스페이스로 호출할 수 있습니다.
-
-#code-block(`````python
-# pip install -U "deepagents[quickjs]"
-from deepagents import create_deep_agent
-from langchain_quickjs import CodeInterpreterMiddleware
-
-agent = create_deep_agent(
-    model=model,
-    middleware=[
-        CodeInterpreterMiddleware(
-            ptc=["get_csv_path", "run_pandas"],  # programmatic tool calling allowlist
-            snapshot_between_turns=True,         # turn 간 변수 보존
-            timeout=5.0,
-        ),
-    ],
-)
-`````)
-
-QuickJS interpreter 안에서는 다음과 같이 호출합니다.
-
-#code-block(`````javascript
-const csvPath = await tools.getCsvPath();
-const result  = await tools.runPandas(
-  `import pandas as pd\nprint(pd.read_csv(${JSON.stringify(csvPath)}).head())`
-);
-`````)
-
-#table(
-  columns: 3,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[구분],
-  text(weight: "bold")[`\@tool` + `exec`],
-  text(weight: "bold")[`CodeInterpreterMiddleware`],
-  [실행 위치],
-  [호스트 Python],
-  [에이전트 루프 내 QuickJS],
-  [변수 공간],
-  [호출마다 새로 생성],
-  [turn 간 snapshot 으로 보존],
-  [권한 경계],
-  [파이썬 전역 = 매우 넓음],
-  [PTC allowlist = 최소 권한],
-  [부적합한 경우],
-  [운영 환경],
-  [패키지 설치·셸 실행이 필요한 분석],
-)
-
-자세한 내용은 `docs/deepagents/17-interpreters.md` 를 참고하세요.
+이 노트북의 핵심 실행 경로는 `LocalShellBackend(virtual_mode=True)`와 제한된 코드 실행입니다. 계획 도구는 복잡한 요청에서만 켭니다.
 
 #chapter-summary-header()
 
@@ -345,26 +295,23 @@ const result  = await tools.runPandas(
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[항목],
-  text(weight: "bold")[핵심],
-  [_커스텀 도구_],
-  [`\@tool` + pandas — `get_csv_path`, `run_pandas`],
-  [_백엔드_],
-  [`LocalShellBackend(virtual_mode=True)` — 코드 실행 가능],
+  text(weight: "bold")[핵심 포인트],
+  [_Backend_],
+  [`LocalShellBackend(virtual_mode=True)` — 코드 실행 지원],
   [_빌트인 도구_],
-  [`execute`, `write_todos`, `ls`, `read_file` 등],
-  [_스트리밍_],
-  [`stream(subgraphs=True)` — 실행 과정 실시간 관찰],
-  [_멀티턴_],
-  [`InMemorySaver` + 동일 `thread_id` — 대화 맥락 유지],
-  [_대안 패턴_],
-  [`CodeInterpreterMiddleware` (QuickJS) — turn 간 변수 보존 + PTC allowlist],
+  [`execute` + 파일 도구, 삭제는 권한 정책과 함께 검토],
+  [_계획_],
+  [`write_todos`는 `TodoListMiddleware`를 추가한 경우 사용],
+  [_Streaming_],
+  [`stream(subgraphs=True)` — 실행 과정을 실시간 관찰],
+  [_Multi-turn_],
+  [`InMemorySaver` + 같은 `thread_id` — 대화 맥락 유지],
 )
 
 
 #references-box[
 - `docs/deepagents/tutorials/data-analysis.md`
 - `docs/deepagents/06-backends.md`
-- `docs/deepagents/17-interpreters.md` — `CodeInterpreterMiddleware` (QuickJS)
 _다음 단계:_ → #link("./04_ml_agent.ipynb")[04_ml_agent.ipynb]: 머신러닝 에이전트를 구축합니다.
 ]
 #chapter-end()

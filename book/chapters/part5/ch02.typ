@@ -201,7 +201,7 @@ supervisor = create_agent(
 
 == 2.7 실행 테스트
 
-#code-block(`````python
+#code-block(`````
 User: "내일 2시 Sarah 미팅 잡고 초대 이메일 보내줘"
 Supervisor → call_calendar → create_calendar_event
 Supervisor → call_email → send_email
@@ -236,15 +236,27 @@ Supervisor: "미팅과 초대 이메일 완료"
 
 HITL은 상태를 변경하는 작업(send_email, create_calendar_event 등)에만 적용하는 것이 권장됩니다. 읽기 전용 작업에는 불필요한 마찰을 줄이기 위해 적용하지 않습니다.
 
-#code-block(`````python
-from langchain.agents.middleware import HumanInTheLoopMiddleware
-from langgraph.checkpoint.memory import InMemorySaver
+== Subagent Design Best Practices
 
-hitl = HumanInTheLoopMiddleware(interrupt_on={
-    "schedule_event": {"allowed_decisions": ["approve", "edit", "reject"]},
-    "manage_email": {"allowed_decisions": ["approve", "reject"]},
-})
-`````)
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[원칙],
+  text(weight: "bold")[설명],
+  [_명확한 설명_],
+  [메인 에이전트가 언제 위임할지 알 수 있도록 구체적인 `description` 작성],
+  [_전문화된 프롬프트_],
+  [출력 형식, 제약, 금지 사항을 서브에이전트별로 분리],
+  [_완전한 지시_],
+  [기본 isolated 모드는 호출마다 새 문맥이므로 필요한 입력·파일 경로·완료 기준을 한 번에 전달],
+  [_fork 신중 사용_],
+  [`mode="fork"`는 부모 문맥을 이어받는 실험적 모드이며, 부모 skills를 상속하고 별도 skills를 받지 않음],
+  [_상태 공유 명시_],
+  [공유가 필요하면 파일이나 StoreBackend 경로를 사용하고, task 호출 간 기억을 가정하지 않음],
+)
 
 #code-block(`````python
 supervisor_hitl = create_agent(

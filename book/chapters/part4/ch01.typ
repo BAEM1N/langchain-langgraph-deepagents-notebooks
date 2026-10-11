@@ -12,23 +12,23 @@
 == 1. Deep Agents란?
 
 _Deep Agents_는 LangChain 팀이 만든 _에이전트 하네스(Agent Harness)_ 프레임워크입니다.
-복잡한 멀티 스텝 작업을 수행하는 자율 에이전트를 쉽게 구축할 수 있도록, 아래 기능들을 내장하고 있습니다:
+복잡한 멀티 스텝 작업을 수행하는 자율 에이전트를 쉽게 구축할 수 있도록, 아래 기능들을 조립합니다:
 
-- _태스크 플래닝_ — 복잡한 문제를 단계별로 분해 (`write_todos`)
-- _컨텍스트 관리_ — 파일 시스템 도구(`ls`, `read_file`, `write_file`, `edit_file`)
-- _셸 실행_ — 샌드박스 백엔드 격리
+- _컨텍스트 관리_ — 파일 시스템 도구(`ls`, `read_file`, `write_file`, `edit_file`, `delete`)와 요약 압축
+- _셸 실행_ — 샌드박스 백엔드 격리 또는 제한된 로컬 실행
 - _JavaScript 인터프리터_ — QuickJS 런타임으로 가벼운 도구 조합 (셸/네트워크 차단)
 - _플러거블 백엔드_ — in-memory state, local disk, LangGraph store, ContextHub, sandbox
 - _서브에이전트 위임_ — 컨텍스트 격리와 병렬 작업
+- _태스크 플래닝(선택)_ — `TodoListMiddleware`를 추가해 `write_todos` 노출
 - _장기 메모리_ — LangGraph Memory Store 기반 스레드 간 지식 유지
-- _파일 시스템 권한_ — 선언적 read/write 규칙
+- _파일 시스템 권한_ — 선언적 read/write/delete 규칙
 - _Human-in-the-Loop_ — `interrupt_on` 승인 워크플로
-- _재사용 가능한 스킬_ — 특화 워크플로
+- _재사용 가능한 스킬_ — 특화 워크플로와 gated skill tools
 - _시스템 프롬프트 커스터마이징 훅_
 
 LangChain의 기본 에이전트 컴포넌트 위에 구축되었으며, _LangGraph_를 실행 엔진(durable execution + streaming)으로 사용합니다.
 
-#tip-box[_이 교육 자료의 모델 설정_: 본 과정에서는 _OpenAI `gpt-5.4`_ 모델을 사용합니다. `OPENAI_API_KEY` 환경 변수를 설정하고, `ChatOpenAI(model="gpt-5.4")`를 사용합니다. Deep Agents의 표준 기본 모델은 `anthropic:claude-sonnet-4-6` 입니다.]
+#tip-box[_이 교육 자료의 모델 설정_: 본 과정에서는 _OpenAI `gpt-5.4`_ 모델을 사용합니다. `OPENAI_API_KEY` 환경 변수를 설정하고, `ChatOpenAI(model="gpt-5.4")`를 사용합니다. Deep Agents의 모델은 예제에서 명시적으로 지정합니다.]
 
 === 아키텍처 개요
 
@@ -84,7 +84,7 @@ Deep Agents 생태계는 세 가지 형태로 제공됩니다:
 == 3. 핵심 개념 6가지
 
 === 3.1 Planning (태스크 플래닝)
-에이전트는 `write_todos` 도구로 복잡한 작업을 _구조화된 태스크 리스트_로 분해합니다.
+계획은 opt-in입니다. LangChain의 `TodoListMiddleware`를 추가하면 에이전트가 `write_todos` 도구로 복잡한 작업을 _구조화된 태스크 리스트_로 분해합니다.
 각 태스크는 `pending` → `in_progress` → `completed` 상태로 추적됩니다.
 
 === 3.2 Context Management (컨텍스트 관리)
@@ -95,24 +95,23 @@ Deep Agents 생태계는 세 가지 형태로 제공됩니다:
 === 3.3 Backends (스토리지 백엔드)
 에이전트의 파일 시스템은 _플러거블 백엔드_로 구현됩니다:
 - `StateBackend` — 에이전트 상태에 파일 저장 (스레드 한정, 기본값)
-- `FilesystemBackend` — 로컬 디스크 접근
-- `StoreBackend` — 크로스 스레드 영속 저장소 (`langgraph.store`)
+- `FilesystemBackend` — 로컬 디스크 접근 (`virtual_mode=True` 기본)
+- `StoreBackend` — 크로스 스레드 영속 저장소 (`namespace` 필수)
 - `ContextHubBackend` — LangSmith Hub 저장소
 - `CompositeBackend` — 경로별 라우팅
 - _샌드박스_ — Modal / Daytona / Deno / local VFS
 
 === 3.4 Subagents (서브에이전트)
 메인 에이전트가 전문 서브에이전트에게 작업을 위임합니다.
-`SubAgentMiddleware`가 `task` 도구를 자동 주입하며, _컨텍스트 블로트_ 문제를 해결합니다.
+기본 isolated 모드는 호출마다 독립 문맥을 사용하고, 실험적 `mode="fork"`는 부모 문맥을 이어받습니다.
 
 === 3.5 Memory & Skills (장기 메모리·스킬)
 - _Memory_ — `StoreBackend` + `AGENTS.md`로 항상 주입되는 컨벤션
-- _Skills_ — `SKILL.md` 기반 progressive disclosure로 필요 시 로드
+- _Skills_ — `SKILL.md` 기반 progressive disclosure와 `metadata.include_tools`
 - _JavaScript Interpreter_ — QuickJS로 도구 조합/중간 상태 유지 (`deepagents>=0.6`)
 
 === 3.6 Quality Gates (런타임 평가)
-`RubricMiddleware`는 에이전트 실행 결과를 LLM-as-a-judge 방식으로 점검하고, 필요하면 같은 실행 안에서 수정을 유도합니다.
-프로덕션 전에는 `agentevals`/LangSmith 평가로 회귀 테스트를 만들고, 실행 중에는 rubric으로 품질 기준을 한 번 더 확인합니다.
+`RubricMiddleware`는 criterion별 평가와 grader hook을 사용해 실행 결과를 점검하고, 필요하면 같은 실행 안에서 수정을 유도합니다.
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 4. 다른 프레임워크와의 비교
@@ -260,17 +259,19 @@ create_deep_agent() 파라미터:
   [실행 엔진],
   [LangGraph (`CompiledStateGraph` 반환)],
   [모델 표준],
-  [Deep Agents 기본 `anthropic:claude-sonnet-4-6`, 본 교재 OpenAI `gpt-5.4`],
+  [본 교재는 OpenAI `gpt-5.4`를 명시적으로 지정],
   [모델 접근],
   [`ChatOpenAI(model="gpt-5.4")` 또는 `provider:model-name` 문자열],
   [핵심 개념],
-  [Planning, Context Management, Backends, Subagents, Memory & Skills, Quality Gates],
-  [빌트인 도구],
-  [`write_todos`, `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `task`],
+  [Context Management, Backends, Subagents, Memory & Skills, opt-in Planning, Quality Gates],
+  [기본 도구],
+  [`ls`, `read_file`, `write_file`, `edit_file`, `delete`, `glob`, `grep`, `task`],
+  [계획 도구],
+  [`TodoListMiddleware()`를 추가하면 `write_todos` 사용 가능],
   [인터프리터],
   [QuickJS 기반 JavaScript runtime (`deepagents\>=0.6`, 셸·네트워크 불가)],
   [품질 게이트],
-  [`RubricMiddleware`로 런타임 LLM-as-a-judge 평가와 재시도 제어],
+  [`RubricMiddleware`로 runtime 평가와 재시도 제어],
   [CLI],
   [Deep Agents Code(`dcode`) — `deepagents-code` 패키지 기반 터미널 에이전트],
 )

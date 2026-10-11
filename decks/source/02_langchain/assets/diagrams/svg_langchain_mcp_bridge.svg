@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620"><rect width="1200" height="620" fill="#f7fbff"/><defs><style>.t{font-family:Arial, sans-serif;fill:#071521}.h{font-size:32px;font-weight:800}.m{font-size:22px;font-weight:700}.s{font-size:17px}.box{fill:#fff;stroke:#53b8ff;stroke-width:3;rx:18}.teal{fill:#e7f7f8;stroke:#83ced2;stroke-width:4;rx:18}.coral{fill:#fff3f1;stroke:#ed7969;stroke-width:4;rx:18}.gray{fill:#f4f6fb;stroke:#7c8aa5;stroke-width:3;rx:18}.arrow{stroke:#0b5f93;stroke-width:5;fill:none;marker-end:url(#a)}</style><marker id="a" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 Z" fill="#0b5f93"/></marker></defs><text x="54" y="70" class="t h">MCP Client Server Bridge</text>
+<rect x="70" y="150" width="240" height="115" class="teal"/><text x="125" y="206" class="t m">Agent</text><text x="108" y="236" class="t s">create_agent tools</text>
+<rect x="420" y="150" width="290" height="115" class="gray"/><text x="472" y="206" class="t m">MCP Client</text><text x="455" y="236" class="t s">get_tools / sessions</text>
+<rect x="820" y="150" width="290" height="115" class="coral"/><text x="872" y="206" class="t m">MCP Server</text><text x="860" y="236" class="t s">resources · tools · prompts</text>
+<path d="M310 207 H420" class="arrow"/><path d="M710 207 H820" class="arrow"/>
+<rect x="220" y="390" width="250" height="95" class="box"/><text x="270" y="445" class="t m">stdio</text>
+<rect x="650" y="390" width="300" height="95" class="box"/><text x="715" y="445" class="t m">streamable-http</text>
+<path d="M565 265 C500 335 420 365 345 390" class="arrow"/><path d="M565 265 C640 335 735 365 800 390" class="arrow"/></svg>

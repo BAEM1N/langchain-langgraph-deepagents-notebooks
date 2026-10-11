@@ -26,14 +26,21 @@ Subagents solve the context bloat problem. When agents use tools producing large
 |-------|------|-------------|
 | `name` | `str` | Required unique identifier |
 | `description` | `str` | Required; what the subagent does |
-| `system_prompt` | `str` | Required; custom instructions (does not inherit from parent) |
-| `tools` | `list[Callable]` | Required; overrides parent tools when specified |
+| `system_prompt` | `str` | Required for default `mode="isolated"`; omit or use as an addendum for `mode="fork"` |
+| `mode` | `"isolated"` \| `"fork"` | Optional; `isolated` sees only the delegated task, `fork` inherits the parent conversation and system prompt |
+| `tools` | `list[Callable]` | Optional; inherits main agent tools by default and overrides entirely when specified |
 | `model` | `str` \| `BaseChatModel` | Optional; overrides main agent model |
 | `middleware` | `list[Middleware]` | Optional; custom behavior/logging (no inheritance) |
 | `interrupt_on` | `dict[str, bool]` | Optional; human-in-the-loop config that overrides main agent settings |
-| `skills` | `list[str]` | Optional; isolated skill directories per subagent |
+| `skills` | `list[str]` | Optional for isolated subagents; not allowed with forked subagents |
 | `response_format` | `ResponseFormat` | Optional; structured output schema (requires deepagents ≥ 0.5.3) |
 | `permissions` | `list[FilesystemPermission]` | Optional; replaces parent rules entirely |
+
+### Isolated vs. Forked Context
+
+The default `mode="isolated"` keeps the delegated task separate from the parent conversation. Use it for context quarantine and for subagents with their own instructions and skills.
+
+`mode="fork"` inherits the parent's current conversation and system prompt. It is useful when the subagent needs the same conversational context, but it does not provide long-term memory by itself and it rejects a separate `skills` setting.
 
 ### CompiledSubAgent
 
@@ -49,7 +56,7 @@ For complex workflows using pre-built LangGraph graphs:
 
 The main agent uses the `task()` tool — injected by `SubAgentMiddleware` — to delegate work by subagent name and receives isolated results back. `SubAgentMiddleware` is required scaffolding that attaches automatically whenever synchronous subagents exist; it cannot be removed via `excluded_middleware` and raises `ValueError` if forced out.
 
-Pair the dispatch tool with a planning step. The built-in `TodoList` (see `04-todos.md`) lets the supervisor break a request into ordered items before delegating each item to a subagent — this keeps the dispatch decisions explicit and reviewable.
+Pair the dispatch tool with a planning step when the workflow benefits from explicit task tracking. In Deep Agents 0.7 examples, configure `TodoListMiddleware` explicitly when you want the supervisor to use `write_todos` before delegating each item to a subagent.
 
 During streaming or tool execution, agents are differentiated by the `lc_agent_name` metadata, which makes it possible to attribute tool calls and messages back to the correct subagent.
 

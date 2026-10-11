@@ -30,10 +30,9 @@ permission_matrix = {
     "read_file": "allow",
     "write_file": "approve",
     "edit_file": "approve",
-    "execute_shell": "sandbox-only",
-    "delete_file": "deny",
+    "delete": "approve-high-risk",
+    "execute": "sandbox-only",
 }
-
 permission_matrix
 `````)
 
@@ -46,7 +45,7 @@ A policy evaluator turns the matrix into a repeatable decision. Even a small det
 def decide(tool_name: str) -> str:
     return permission_matrix.get(tool_name, "deny")
 
-for tool in ["read_file", "write_file", "delete_file", "unknown"]:
+for tool in ["read_file", "write_file", "delete", "execute", "unknown"]:
     print(tool, "=>", decide(tool))
 `````)
 

@@ -4,7 +4,7 @@
 
 #chapter(15, "Permissions", subtitle: "FilesystemPermission · first-match-wins")
 
-Apply declarative allow/deny rules to Deep Agents' built-in filesystem tools (`ls`, `read_file`, `glob`, `grep`, `write_file`, `edit_file`) to enforce _path-based access control_. Use this chapter when you are defending against prompt injection, building a read-only agent, or carving out a workspace-scoped sandbox.
+Apply declarative allow/deny/interrupt rules to Deep Agents' built-in filesystem tools (`ls`, `read_file`, `glob`, `grep`, `write_file`, `edit_file`, `delete`) to enforce _path-based access control_. Use this chapter when you are defending against prompt injection, building a read-only agent, or carving out a workspace-scoped sandbox.
 
 #learning-header()
 #learning-objectives(
@@ -44,14 +44,16 @@ Every `FilesystemPermission` has three fields.
   text(weight: "bold")[Description],
   [`operations`],
   [`list["read" | "write"]`],
-  [`read` = `ls` / `read_file` / `glob` / `grep`, `write` = `write_file` / `edit_file`],
+  [`read` = `ls` / `read_file` / `glob` / `grep`, `write` = `write_file` / `edit_file` / `delete`],
   [`paths`],
   [`list[str]`],
   [Glob patterns with `**` recursion and `{a,b}` selectors],
   [`mode`],
-  [`"allow" | "deny"`],
+  [`"allow" | "deny" | "interrupt"`],
   [Defaults to `"allow"`],
 )
+
+`mode="interrupt"` pauses matching built-in write calls for human approval before execution. File deletes follow exact path matching, while directory deletes conservatively require write permission for the target and every descendant.
 
 == 15.4 Pattern 1: read-only agent
 
@@ -163,10 +165,15 @@ Update memories and policies only from application code; let the agent read.
 Default behavior: a parent agent's permissions are _inherited by subagents as-is_. If a subagent spec defines its own `permissions`, that _fully replaces_ the parent rules (not a partial override). When overriding, include the catch-all deny yourself to stay safe.
 
 #code-block(`````python
+parent_rules = [
+    FilesystemPermission(operations=["read"], paths=["/workspace/**"], mode="allow"),
+    FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
+]
+
 agent = create_deep_agent(
     model=model,
     backend=backend,
-    permissions=[...parent_rules...],
+    permissions=parent_rules,
     subagents=[
         {
             "name": "auditor",

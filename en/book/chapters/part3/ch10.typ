@@ -242,6 +242,27 @@ _Automatically tracked items:_
 - State changes
 - Errors and retries
 
+=== Node trace policy
+
+When a node handles large or sensitive state, configure tracing at the node boundary instead of turning off tracing for the whole graph. `trace_policy` lets the graph record the span while omitting or transforming payloads.
+
+#code-block(`````python
+from langchain.agents.middleware import TracePolicy, omit_payload
+from langgraph.graph import StateGraph
+
+builder = StateGraph(TestState)
+builder.add_node(
+    "process_private_payload",
+    process,
+    trace_policy=TracePolicy(
+        process_inputs=omit_payload,
+        process_outputs=omit_payload,
+    ),
+)
+`````)
+
+Use this for payload minimization: the trace still shows that the node ran, but the raw state does not get copied into LangSmith.
+
 === Selective tracing --- `tracing_context`
 
 Use the `langsmith.tracing_context` context manager to toggle tracing for specific operations and to attach project / tags / metadata dynamically.

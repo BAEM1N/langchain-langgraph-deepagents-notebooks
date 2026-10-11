@@ -219,6 +219,7 @@ from langchain.agents.middleware import (
     ModelCallLimitMiddleware,
     ModelFallbackMiddleware,
 )
+from deepagents.middleware import TodoListMiddleware
 
 research_agent = create_deep_agent(
     model=model,
@@ -229,6 +230,7 @@ research_agent = create_deep_agent(
     skills=["/skills/"],
     checkpointer=InMemorySaver(),
     middleware=[
+        TodoListMiddleware(),
         SummarizationMiddleware(model=model, trigger=("messages", 15)),
         ModelCallLimitMiddleware(run_limit=30),
         ModelFallbackMiddleware("gpt-5.4-mini"),

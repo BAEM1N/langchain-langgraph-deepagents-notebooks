@@ -58,7 +58,7 @@ Subagent support is implemented by _`SubAgentMiddleware`_. `create_deep_agent()`
 
 === TodoList + `task` dispatch pattern
 
-The canonical loop looks like this:
+When you opt into `TodoListMiddleware`, the canonical loop looks like this:
 
 + The main agent calls `write_todos` to break the work into a _structured list_, for example `[research, analyze, write]`
 + For each TODO the main agent calls the _`task` tool_ to dispatch the item to the right subagent
@@ -117,6 +117,9 @@ A `SubAgent` is defined as a dictionary.
   [`tools`],
   [`list`],
   [Tools available to the subagent],
+  [`mode`],
+  [`"isolated" | "fork"`],
+  [Context mode. Defaults to `"isolated"`],
 )
 
 === Optional Fields
@@ -148,6 +151,23 @@ A `SubAgent` is defined as a dictionary.
   [`Permissions`],
   [Per-path ACL — restrict the subagent's filesystem access],
 )
+
+=== Context mode: isolated vs fork
+
+The default `mode="isolated"` gives the subagent only the delegated task. It does not inherit the parent conversation, system prompt, or custom subagent skills. Use it for specialist work where the parent wants a compact final result.
+
+`mode="fork"` is a continuation mode. The subagent inherits the parent's conversation and system prompt prefix, with the trailing delegation call removed. Use it when the worker should continue a diagnosis or draft with all prior context already visible. Forked subagents reject `skills`; if you add a `system_prompt`, it is appended as a fork-only addendum and may break prompt-cache reuse.
+
+#code-block(`````python
+fixer = {
+    "name": "fixer",
+    "description": "Continue the parent diagnosis and implement the focused fix.",
+    "mode": "fork",
+    "tools": [read_file, edit_file],
+}
+`````)
+
+#tip-box[Do not treat fork mode as long-term memory. It passes the current conversation prefix to one delegated run; durable memory still belongs in checkpointers, stores, or explicit backend routes.]
 
 
 #code-block(`````python

@@ -28,6 +28,24 @@ def approval_node(state: State):
     return {"approved": approved}
 ```
 
+LangGraph 1.2.12+ also supports a keyword-only `response_schema` for structured human responses. Keep the plain `interrupt(value)` form for simple values; add a schema when approval/edit payloads need a stable shape.
+
+```python
+from pydantic import BaseModel
+from langgraph.types import interrupt
+
+class ReviewDecision(BaseModel):
+    action: str
+    edited_text: str
+
+def review_node(state: State):
+    decision = interrupt(
+        {"instruction": "Review this draft", "content": state["draft"]},
+        response_schema=ReviewDecision,
+    )
+    return {"draft": decision.edited_text, "status": decision.action}
+```
+
 ### Resuming Execution
 
 Resume using `Command(resume=...)` with the same thread ID. resume 값은 interrupt payload의 응답으로 노드에 다시 전달된다.

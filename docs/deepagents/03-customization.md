@@ -8,7 +8,7 @@ This guide covers customizing deep agents through `create_deep_agent()` with cor
 The `create_deep_agent()` function accepts:
 
 - **Model**: Defaults to Claude Sonnet 4.6; supports multiple providers
-- **Tools**: Built-in planning, file management, and subagent tools; custom tools supported
+- **Tools**: File management, subagent tools, optional planning tools, and custom tools
 - **System Prompt**: Custom instructions for agent behavior
 - **Middleware**: Extensible hooks for functionality enhancement
 - **Subagents**: Specialized agents for task delegation
@@ -30,7 +30,7 @@ create_deep_agent(
     skills: list[str] | None = None,
     memory: list[str] | None = None,
     permissions: list[FilesystemPermission] | None = None,
-    backend: BackendProtocol | BackendFactory | None = None,
+    backend: BackendProtocol | None = None,
     interrupt_on: dict[str, bool | InterruptOnConfig] | None = None,
     response_format: ResponseFormat[ResponseT] | type[ResponseT] | dict[str, Any] | None = None,
     context_schema: type[ContextT] | None = None,
@@ -67,16 +67,17 @@ The framework assembles the final prompt in a fixed precedence: **USER** (your p
 
 ## Middleware Architecture
 
-Default middleware includes:
+The core middleware stack includes:
 
-- **TodoListMiddleware** (task organization)
 - **FilesystemMiddleware** (file operations)
 - **SubAgentMiddleware** (delegation)
 - **SummarizationMiddleware** (context management)
 - **AnthropicPromptCachingMiddleware** (token optimization)
 - **PatchToolCallsMiddleware** (error recovery)
 
-Additional middleware: MemoryMiddleware, SkillsMiddleware, HumanInTheLoopMiddleware.
+Additional or opt-in middleware: TodoListMiddleware, MemoryMiddleware, SkillsMiddleware, HumanInTheLoopMiddleware.
+
+When a user-provided middleware instance has the same `.name` as a default middleware, it replaces that default instance in the Deep Agents stack. Treat that as a Deep Agents harness rule, distinct from generic LangChain middleware composition.
 
 **Critical**: Use graph state for tracking values across invocations, not mutable object attributes, to prevent race conditions in concurrent execution.
 

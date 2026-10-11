@@ -63,17 +63,16 @@ store = InMemoryStore()          # Development only (production: PostgresStore)
 checkpointer = MemorySaver()     # Preserve agent state
 
 
-# 2. Composite backend factory — persist only /memories/, keep the rest ephemeral
+# 2. Composite backend — persist only /memories/, keep the rest ephemeral.
 #    StoreBackend uses a namespace lambda to declare the memory scope explicitly.
-def memory_backend_factory(runtime):
-    return CompositeBackend(
-        default=StateBackend(runtime),
-        routes={
-            "/memories/": StoreBackend(
-                namespace=lambda rt: (rt.context.user_id,),
-            ),
-        },
-    )
+memory_backend = CompositeBackend(
+    default=StateBackend(),
+    routes={
+        "/memories/": StoreBackend(
+            namespace=lambda rt: (rt.context.user_id,),
+        ),
+    },
+)
 
 
 # 3. Create the agent
@@ -83,7 +82,7 @@ memory_agent = create_deep_agent(
 Save information the user wants to remember under /memories/.
 If there is previously saved memory, use it when responding.
 Respond in English.""",
-    backend=memory_backend_factory,
+    backend=memory_backend,
     store=store,
     checkpointer=checkpointer,
 )
@@ -184,7 +183,7 @@ compatibility: Python 3.8+
 module: ./web_research.js    # (optional) interpreter skills only
 metadata:
   category: research
-allowed-tools: ls read_file write_file
+  include_tools: list_issues create_issue
 ---
 
 # Web Research Skill
@@ -213,6 +212,43 @@ skilled_agent = create_deep_agent(
 print("Skill-enabled agent created")
 
 `````)
+
+=== Skill-specific tools
+
+Skill frontmatter can expose tools only after the skill is read. Put space-separated tool names under `metadata.include_tools`; a YAML list does not match any tool. To attach these tools, create `SkillsMiddleware` yourself and pass the tool list or resolver there, instead of passing those tools directly to `create_deep_agent`.
+
+#code-block(`````python
+from deepagents.backends import FilesystemBackend
+from deepagents.middleware import SkillsMiddleware
+
+backend = FilesystemBackend(root_dir=tmp_dir, virtual_mode=True)
+skills = SkillsMiddleware(
+    sources=["/skills/"],
+    backend=backend,
+    tools=[list_issues, create_issue],
+)
+
+agent = create_deep_agent(
+    model=model,
+    middleware=[skills],
+    backend=backend,
+)
+`````)
+
+If MCP or generated tool names are unstable, pass a resolver function as the middleware's `tools`. The resolver receives each `include_tools` name and returns the matching runtime tools.
+
+=== Pinning skills from input state
+
+`pinned_skills` is not a `create_deep_agent(...)` constructor argument. It is part of the run input state. Use it when the application has already chosen a skill and you want the instructions and any `include_tools` tools loaded before the model decides.
+
+#code-block(`````python
+result = agent.invoke({
+    "messages": [{"role": "user", "content": "Use the LangGraph docs skill."}],
+    "pinned_skills": ["langgraph-docs"],
+})
+`````)
+
+Unknown pins are skipped, and skill tools become available the same way they do after the agent reads the matching `SKILL.md`.
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 5. Skill Source Priority
@@ -244,7 +280,7 @@ If the same skill name exists in multiple locations, the version from the last s
   [Built-in general-purpose subagent],
   [_Automatically inherits_ the main agent's skills],
   [Custom `SubAgent`],
-  [Requires an explicit `skills` parameter],
+  [Does not inherit by default; requires an explicit `skills` parameter],
 )
 
 #code-block(`````python
@@ -258,6 +294,8 @@ subagent = {
 `````)
 
 #tip-box[Follow _least privilege_ when assigning skills to subagents. Handing a review-focused subagent unrelated deployment skills wastes tokens and invites confusion. Give each subagent only the skills that match its role.]
+
+When a custom subagent has skills, it gets its own `SkillsMiddleware` instance. Skill state is isolated in both directions: skills loaded by the subagent are not visible to the parent, and parent skills are not visible to the custom subagent.
 
 === Skills backend support matrix
 

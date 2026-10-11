@@ -9,6 +9,7 @@
 `interrupt()`로 실행을 중단하고, `Command(resume=...)`로 재개합니다. 타임 트래블로 이전 상태로 돌아갑니다.
 
 - Human-in-the-loop 패턴을 구현할 수 있습니다
+- 승인 응답에 `response_schema`를 붙여 resume 입력 형식을 명확히 한다
 - Functional API에서도 interrupt를 사용할 수 있습니다
 - 체크포인트 히스토리를 활용한 타임 트래블을 수행할 수 있습니다
 - `update_state()`로 외부에서 상태를 수정할 수 있습니다
@@ -28,6 +29,7 @@ print("모델 준비 완료")
 == 8.2 interrupt() — 실행을 중단하고 사람의 입력을 기다립니다
 
 - `interrupt(value)`: 현재 상태를 체크포인트에 저장하고 실행을 중단합니다
+- `interrupt(value, response_schema=...)`: 사람이 돌려줄 값의 스키마를 함께 제시합니다
 - `Command(resume=value)`: 중단된 지점에서 값을 전달하며 재개합니다
 
 민감한 작업 전 사람의 승인을 받거나, 추가 정보를 입력받을 때 사용합니다.
@@ -173,6 +175,23 @@ v2에서는 _`GraphOutput` 객체_가 반환됩니다.
 
 LangGraph 1.1은 _인터럽트 + 서브그래프 타임트래블_에서 과거 `RESUME` 값을 재사용하던 버그도 함께 수정했습니다. 서브그래프를 쓰며 타임트래블하는 코드가 있다면 1.1로 올리고, 가능하면 `version="v2"`도 함께 적용하길 권장합니다.
 
+=== 8.8b 승인 응답 스키마 — `response_schema`
+
+승인 UI가 여러 필드를 받아야 할 때는 `interrupt(..., response_schema=...)`로 사람이 돌려줄 값의 구조를 함께 전달합니다. 기존 `interrupt(value)` 호출은 그대로 유효하며, 스키마는 검토 UI와 resume payload의 계약을 분명히 하기 위한 보강입니다. Pydantic 모델을 스키마로 쓰면 resume dict가 모델 객체로 변환되므로 노드에서는 `decision.approved`처럼 속성으로 읽습니다.
+
+#code-block(`````python
+from pydantic import BaseModel
+from langgraph.types import interrupt, Command
+class ApprovalResponse(BaseModel):
+    approved: bool
+    comment: str
+
+def schema_review_node(state: dict) -> dict:
+    decision = interrupt({"draft": state["draft"]}, response_schema=ApprovalResponse)
+    return {"approved": decision.approved, "comment": decision.comment}
+print(Command(resume={"approved": True, "comment": "검토 완료"}))
+`````)
+
 #chapter-summary-header()
 
 #table(
@@ -184,9 +203,9 @@ LangGraph 1.1은 _인터럽트 + 서브그래프 타임트래블_에서 과거 `
   text(weight: "bold")[기능],
   text(weight: "bold")[API],
   text(weight: "bold")[비고],
-  [`interrupt(value)`],
+  [`interrupt(value, response_schema=...)`],
   [`langgraph.types`],
-  [실행 중단, JSON-serializable value 전달],
+  [실행 중단, JSON-serializable value와 선택적 응답 스키마 전달],
   [`Command(resume=value)`],
   [`langgraph.types`],
   [중단 지점에서 재개 — `True/False`, `str`, `dict`, `{id: 응답}` map 모두 가능],

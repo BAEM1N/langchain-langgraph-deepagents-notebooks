@@ -2,7 +2,7 @@
 
 백엔드 시스템, StoreBackend, FilesystemMiddleware.
 
-> **deepagents 0.5+ 기준.** 이전 factory 패턴은 deprecated.
+> **deepagents 0.7.23 조사 기준.** 이전 backend factory 패턴은 제거되었고, `StoreBackend`에는 keyword-only `namespace=`가 필요하다.
 
 ## 백엔드 종류
 
@@ -13,9 +13,9 @@
 | `CompositeBackend` | 하이브리드 라우팅 | 경로별 저장소 분리 |
 | `FilesystemBackend` | 파일시스템 기반 | 로컬 개발 |
 
-## 직접 인스턴스화 (0.5+)
+## 직접 인스턴스화
 
-`StateBackend()`, `StoreBackend()`는 **직접 생성**한다. 0.4까지 쓰이던 factory 함수 기반 패턴은 deprecated.
+`StateBackend()`, `StoreBackend(namespace=...)`는 **직접 생성**한다. `create_deep_agent(backend=...)`에는 backend factory가 아니라 `BackendProtocol` 인스턴스를 전달한다. 단, `namespace=lambda rt: ...`처럼 namespace를 계산하는 factory는 현재에도 유효하다.
 
 ```python
 from deepagents.backends import StateBackend, StoreBackend
@@ -26,7 +26,10 @@ state_backend = StateBackend()
 
 # 영구(프로덕션)
 store = InMemoryStore()  # 프로덕션에선 PostgresStore
-store_backend = StoreBackend(store=store)
+store_backend = StoreBackend(
+    namespace=lambda rt: ("memories", rt.context.get("user_id", "anonymous")),
+    store=store,
+)
 ```
 
 ### 바이너리 파일 (0.5+)
@@ -42,11 +45,11 @@ from deepagents.backends import FilesystemBackend
 
 backend = FilesystemBackend(
     root_dir="./output",
-    virtual_mode=True,  # 보안: 실제 파일 시스템 접근 차단
+    virtual_mode=True,  # 경로를 root_dir 아래로 제한하는 보조 장치
 )
 ```
 
-**`virtual_mode=True` 필수** — 웹 서버에 `FilesystemBackend`를 절대 직접 배포하지 말 것.
+`virtual_mode=True`는 기본값이지만 보안 격리와 같지 않다. 웹 서버나 공유 환경에서는 sandbox backend, 권한 규칙, secret 경로 분리를 별도로 설계한다. `LocalShellBackend`의 `virtual_mode=True`는 셸 실행을 격리하지 않는다.
 
 ## FilesystemMiddleware 도구
 
@@ -54,8 +57,9 @@ backend = FilesystemBackend(
 |------|------|------|
 | `ls` | 디렉토리 목록 | |
 | `read_file` | 파일 읽기 | 0.5+ PDF/오디오/비디오 지원 |
-| `write_file` | 파일 쓰기 | |
+| `write_file` | 파일 쓰기 | 기존 파일을 교체할 수 있으므로 권한 설명과 함께 사용 |
 | `edit_file` | 파일 수정 | |
+| `delete` | 파일 삭제 | backend와 permissions가 허용할 때만 노출 |
 | `glob` | 패턴 매칭 | |
 | `grep` | 내용 검색 | |
 
@@ -69,7 +73,10 @@ from deepagents.backends import StateBackend, StoreBackend, CompositeBackend
 backend = CompositeBackend(
     backends={
         "/tmp/": StateBackend(),
-        "/data/": StoreBackend(store=store),
+        "/data/": StoreBackend(
+            namespace=lambda rt: ("data", rt.context.get("user_id", "anonymous")),
+            store=store,
+        ),
     }
 )
 ```
@@ -100,7 +107,7 @@ agent = create_deep_agent(
 
 ## 보안 원칙
 
-1. `FilesystemBackend`는 `virtual_mode=True` 사용
+1. `FilesystemBackend`는 `virtual_mode=True`를 유지하되 이것만으로 격리됐다고 설명하지 않음
 2. 웹 서버에 직접 배포 금지
 3. 프로덕션에서는 `PostgresStore` 사용
 4. 규제 환경에선 `store=False` + 암호화된 reasoning 포함 옵션 검토

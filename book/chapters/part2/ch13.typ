@@ -73,7 +73,7 @@ _가드레일(Guardrails)_은 에이전트 실행 과정에서 콘텐츠를 검�
 
 === 가드레일 적용 시점
 
-#code-block(`````python
+#code-block(`````
 사용자 입력 → [입력 가드레일] → 에이전트 실행 → [출력 가드레일] → 응답
                   ↑                                    ↑
             before_agent                          after_agent

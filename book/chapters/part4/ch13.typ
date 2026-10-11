@@ -75,6 +75,46 @@ agent = create_deep_agent(
 
 스킬 수십 개를 등록해도 초기 토큰 비용은 frontmatter 분량뿐입니다.
 
+=== Skill tools와 pinned skills
+
+스킬은 본문만이 아니라 _그 스킬을 읽은 뒤 노출할 도구_까지 선언할 수 있습니다. frontmatter의 `metadata.include_tools`에 공백으로 구분한 도구 이름을 둡니다. YAML 리스트나 `allowed-tools`와는 의미가 다르며, 실제 도구 목록이나 resolver는 `SkillsMiddleware`에 연결합니다.
+
+#code-block(`````yaml
+---
+name: issue-triage
+description: GitHub 이슈 분류와 응답 초안 작성
+metadata:
+  include_tools: list_issues create_issue
+---
+`````)
+
+#code-block(`````python
+from deepagents.backends import StateBackend
+from deepagents.middleware import SkillsMiddleware
+
+backend = StateBackend()
+skills = SkillsMiddleware(
+    sources=["/skills/"],
+    backend=backend,
+    tools=[list_issues, create_issue],
+)
+
+agent = create_deep_agent(
+    model="google_genai:gemini-3.5-flash",
+    middleware=[skills],
+    backend=backend,
+)
+`````)
+
+앱이 이미 사용할 스킬을 알고 있다면 `pinned_skills`를 _생성자 인자_가 아니라 실행 입력 state에 넣습니다. 이렇게 하면 모델이 스킬을 고르기 전에 해당 스킬 본문과 연결 도구가 먼저 열립니다.
+
+#code-block(`````python
+agent.invoke({
+    "messages": [{"role": "user", "content": "LangGraph 문서를 기준으로 답해줘"}],
+    "pinned_skills": ["langgraph-docs"],
+})
+`````)
+
 == 13.5 Runtime context propagation
 
 `context_schema`로 선언된 컨텍스트는 에이전트뿐 아니라 _모든 서브에이전트·도구_에 자동 전달됩니다.
@@ -151,7 +191,7 @@ from deepagents import create_deep_agent
 from deepagents.backends import StateBackend
 from deepagents.middleware.summarization import create_summarization_tool_middleware
 
-backend = StateBackend
+backend = StateBackend()
 model = "google_genai:gemini-3.5-flash"
 
 agent = create_deep_agent(
@@ -181,6 +221,21 @@ research_subagent = {
 
 서브에이전트 프롬프트에 "최종 요약만 반환해라"를 명시하는 것이 컨텍스트 오염 방지의 첫 방어선입니다.
 
+=== `mode="fork"` — 부모 대화 이어받기
+
+기본값인 `mode="isolated"`는 위임된 task 설명만 서브에이전트에 전달합니다. 반대로 `mode="fork"`는 부모의 대화 히스토리와 시스템 프롬프트 prefix를 이어받아, 이미 진단한 버그를 다른 worker가 이어 고치거나 사고 분석 초안을 계속 작성할 때 씁니다.
+
+#code-block(`````python
+fixer = {
+    "name": "fixer",
+    "description": "부모가 이미 진단한 수정 작업을 이어서 처리",
+    "mode": "fork",
+    "tools": [read_file, edit_file],
+}
+`````)
+
+fork는 장기 메모리가 아닙니다. 현재 대화 prefix를 한 번 이어받는 실행 모드일 뿐이며, `skills` 설정은 fork 서브에이전트에서 거부됩니다. 별도 지시가 꼭 필요할 때만 `system_prompt`를 addendum으로 붙이고, 일반적으로는 prompt cache 재사용을 위해 비워 둡니다.
+
 == 13.9 CompositeBackend로 `/memories/` 라우팅
 
 일부 경로만 영속 스토어, 나머지는 휘발성 상태입니다. 에이전트는 같은 `write_file` / `read_file`로 접근하지만 내부적으로는 다른 백엔드가 처리합니다.
@@ -190,16 +245,19 @@ from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
 from langgraph.store.memory import InMemoryStore
 
-def make_backend(runtime):
-    return CompositeBackend(
-        default=StateBackend(runtime),
-        routes={"/memories/": StoreBackend(runtime)},
-    )
+backend = CompositeBackend(
+    default=StateBackend(),
+    routes={
+        "/memories/": StoreBackend(
+            namespace=lambda rt: (rt.server_info.user.identity,),
+        ),
+    },
+)
 
 agent = create_deep_agent(
     model="google_genai:gemini-3.5-flash",
     store=InMemoryStore(),
-    backend=make_backend,
+    backend=backend,
     system_prompt=(
         "When users tell you their preferences, save them to "
         "/memories/user_preferences.txt so you remember them in future conversations."

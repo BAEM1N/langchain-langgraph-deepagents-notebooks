@@ -398,19 +398,30 @@ print("recommended path:", fallback_pattern)
 
 `RubricMiddleware` evaluates an agent response against a rubric during the same invocation. Use it as a selective runtime quality gate for high-risk outputs, final deliverables, or external-send steps. Keep offline regression checks in LangSmith/AgentEvals, and use runtime rubrics only where the extra latency and cost are justified.
 
+Write rubrics as criterion coverage, not as a vague score. Each criterion should name an observable requirement, and the grader should be separate from the work model when cost or bias matters. Current Deep Agents rubric hooks also expose per-iteration evaluation events, so production demos can log or stream the grader result without replacing offline evaluation datasets.
+
 #code-block(`````python
 # RubricMiddleware configuration example — reference only
 rubric_example = r'''
 from deepagents import RubricMiddleware, create_deep_agent
+from deepagents.middleware.rubric import RubricEvaluation
 from langgraph.checkpoint.memory import MemorySaver
+
+
+def log_evaluation(event: RubricEvaluation) -> None:
+    print(f"rubric iteration {event['iteration']}: {event['result']}")
 
 agent = create_deep_agent(
     model="openai:gpt-5.4",
     checkpointer=MemorySaver(),
     middleware=[RubricMiddleware(
         model="openai:gpt-5.4-mini",
-        system_prompt="Judge accuracy, grounding, and safety from 1 to 5; request revision if weak.",
+        system_prompt=(
+            "Check all criteria: factual accuracy, cited evidence, "
+            "actionable next step, and no unsafe external side effect."
+        ),
         max_iterations=3,
+        on_evaluation=log_evaluation,
     )],
 )
 '''

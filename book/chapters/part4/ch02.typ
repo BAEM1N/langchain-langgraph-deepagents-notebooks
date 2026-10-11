@@ -6,7 +6,7 @@
 #chapter(2, "첫 번째 에이전트 만들기")
 
 == 학습 목표
-#learning-objectives([`.env` 파일에서 API 키를 로드하는 방법을 익힌다], [`create_deep_agent()`로 기본 에이전트를 생성한다], [`agent.invoke()`와 `agent.stream()`으로 에이전트를 실행한다], [Tavily 검색 도구를 연동하는 리서치 에이전트를 만든다], [빌트인 도구의 종류와 역할을 이해한다])
+#learning-objectives([`.env` 파일에서 API 키를 로드하는 방법을 익힌다], [`create_deep_agent()`로 기본 에이전트를 생성한다], [`agent.invoke()`와 `agent.stream()`으로 에이전트를 실행한다], [Tavily 검색 도구를 연동하는 리서치 에이전트를 만든다], [기본 파일/위임 도구와 opt-in 계획 도구의 역할을 이해한다])
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 == 1. 설치 & API 키 설정
@@ -63,7 +63,7 @@ API 키가 정상적으로 로드되었습니다.
 == 2. 가장 간단한 에이전트 만들기
 
 `create_deep_agent()`는 Deep Agents의 핵심 함수입니다.
-인자 없이 호출하면 기본 모델(`anthropic:claude-sonnet-4-6`)과 빌트인 도구가 자동으로 구성됩니다.
+모델을 명시하고 호출하면 파일 도구와 기본 하네스가 구성됩니다. 계획 도구가 필요한 예제에서는 `TodoListMiddleware()`를 `middleware`에 추가합니다.
 
 본 노트북은 OpenAI `gpt-5.4`를 사용합니다. 모델은 `ChatOpenAI` 객체로 넘기거나, `"provider:model-name"` 문자열로 전달할 수 있습니다.
 
@@ -155,9 +155,9 @@ print("리서치 에이전트가 생성되었습니다!")
 `````)
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
-== 5. 빌트인 도구 확인
+== 5. 도구 확인
 
-`create_deep_agent()`가 자동으로 추가하는 빌트인 도구들입니다:
+`create_deep_agent()`가 제공하는 기본 도구와 opt-in 계획 도구입니다:
 
 #table(
   columns: 2,
@@ -167,22 +167,24 @@ print("리서치 에이전트가 생성되었습니다!")
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
   text(weight: "bold")[도구],
   text(weight: "bold")[설명],
-  [`write_todos`],
-  [구조화된 태스크 리스트 관리 (pending → in_progress → completed)],
   [`ls`],
   [디렉토리 내용 목록 (메타데이터 포함)],
   [`read_file`],
   [파일 읽기 (줄 번호 포함, 이미지 지원)],
   [`write_file`],
-  [새 파일 생성],
+  [파일 쓰기 또는 기존 파일 교체],
   [`edit_file`],
   [파일 내 텍스트 교체 (`old_string` → `new_string`)],
+  [`delete`],
+  [delete 지원 백엔드에서 파일 또는 prefix 삭제],
   [`glob`],
   [패턴 기반 파일 검색 (예: `**/*.py`)],
   [`grep`],
   [파일 내용 검색 (정규식 지원)],
   [`task`],
-  [서브에이전트 호출 (서브에이전트 설정 시 자동 추가)],
+  [서브에이전트 호출],
+  [`write_todos`],
+  [`TodoListMiddleware()`를 추가한 경우 구조화된 태스크 리스트 관리],
 )
 
 #tip-box[이 도구들은 모두 _백엔드_(Backend)를 통해 동작합니다. 기본값은 `StateBackend`로, 에이전트 상태에 파일이 저장됩니다.]

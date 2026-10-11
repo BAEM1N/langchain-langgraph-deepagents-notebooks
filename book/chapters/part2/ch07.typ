@@ -41,7 +41,7 @@ print("모델 준비 완료:", model.model_name)
 
 === 워크플로
 
-#code-block(`````python
+#code-block(`````
 에이전트 → 도구 호출 제안 → [중단(interrupt)] → 사람 승인/거부 → 도구 실행 → 결과 반환
 `````)
 
@@ -55,7 +55,7 @@ LangChain v1에서는 `HumanInTheLoopMiddleware`와 `InMemorySaver`(체크포인
 
 내부적으로 `after_model` 훅에서 `HITLRequest` 를 생성합니다.
 
-#code-block(`````python
+#code-block(`````
 모델이 tool_call 생성 → after_model 훅 발동 → HITLRequest
 {
   "action_requests": [...],     # 어떤 도구를 어떤 인자로 호출하려는지
@@ -202,18 +202,14 @@ LangGraph Platform / Server 환경에서 실행될 때 `runtime.server_info` 가
 
 `dynamic_prompt` 미들웨어를 쓰면 매 요청마다 프롬프트를 커스터마이즈할 수 있습니다.
 
-== 7.7 MCP (Model Context Protocol) 연동 개요
+== 7.7 MCP(Model Context Protocol) 연동 개요
 
-_MCP_는 도구 서버를 표준 프로토콜로 연결하는 방식입니다.
-
-=== MCP의 핵심 개념
-- _MCP 서버_: 도구(Tool)를 제공하는 서버. HTTP/SSE 또는 stdio로 통신합니다.
-- _MCP 클라이언트_: 에이전트가 MCP 서버에 연결하여 도구를 발견하고 호출합니다.
-- _표준화_: 어떤 언어/프레임워크로 만든 도구든 MCP 프로토콜을 따르면 연결 가능합니다.
+_MCP_는 도구 서버를 표준 프로토콜로 연결하는 방식입니다. LangChain 1.4의 새 표면은 베타 `langchain.mcp.MCPAdapter`입니다.
 
 === LangChain v1에서의 MCP 지원
-- `mcp.client.stdio.stdio_client()`와 `ClientSession`으로 로컬 MCP 서버에 연결할 수 있습니다.
-- `langchain-mcp-adapters`의 `load_mcp_tools(session)`로 MCP 세션의 도구를 LangChain Tool로 변환할 수 있습니다.
+- `MCPAdapter`는 URL, 로컬 `Path`, FastMCP `Client`, `MCPConfig`를 target으로 받습니다.
+- `async with MCPAdapter(...)` 블록 안에서 `await adapter.list_tools()`로 도구를 가져오고 에이전트 호출까지 수행합니다.
+- 서버의 elicitation 요청은 콜백이 아니라 LangGraph interrupt로 멈추고 `Command(resume={"responses": {...}})`로 재개합니다.
 
 #chapter-summary-header()
 
@@ -254,7 +250,7 @@ _MCP_는 도구 서버를 표준 프로토콜로 연결하는 방식입니다.
   [`dynamic_prompt` 미들웨어],
   [_MCP_],
   [표준화된 도구 프로토콜],
-  [`ClientSession + load_mcp_tools()`],
+  [`MCPAdapter + list_tools()`],
 )
 
 _핵심 포인트:_

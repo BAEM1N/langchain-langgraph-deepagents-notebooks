@@ -233,7 +233,7 @@ def cluster_customers(path: str, k: int = 3) -> str:
 For free-form analysis that does not fit a fixed `@tool` signature — "draw a boxplot of this column", for example — `CodeInterpreterMiddleware` lets the agent execute arbitrary code in its own sandbox. Repeatable procedures, on the other hand, are best captured in a `skills/` directory as markdown + code snippets and loaded as _Skills_ the agent can invoke by name.
 
 #code-block(`````python
-from deepagents.middleware import CodeInterpreterMiddleware
+from deepagents.middleware import CodeInterpreterMiddleware, TodoListMiddleware
 from deepagents.skills import load_skills
 
 skills = load_skills("./skills/data-analysis")  # markdown + snippets
@@ -241,7 +241,10 @@ skills = load_skills("./skills/data-analysis")  # markdown + snippets
 agent = create_deep_agent(
     model="gpt-5.4",
     tools=[summarize_csv, cluster_customers, slack_send_message],
-    middleware=[CodeInterpreterMiddleware(backend=backend)],
+    middleware=[
+        TodoListMiddleware(),
+        CodeInterpreterMiddleware(backend=backend),
+    ],
     skills=skills,
     backend=backend,
     checkpointer=checkpointer,
@@ -296,6 +299,7 @@ agent = create_deep_agent(
     tools=[tavily_search, slack_send_message],
     backend=backend,
     checkpointer=checkpointer,
+    middleware=[TodoListMiddleware()],
     system_prompt="You are a data analyst.",
 )
 `````)
@@ -360,7 +364,7 @@ A subagent goes through three stages:
 
 == 7.9 Utilizing built-in tool
 
-Deep Agents automatically provides the following built-ins to agents through the backend: The agent autonomously selects and uses these tool during the analysis process.
+Deep Agents provides file tools through the backend, and this chapter opts into planning with `TodoListMiddleware`. The agent autonomously selects and uses these tools during the analysis process.
 
 #table(
   columns: 3,
@@ -372,16 +376,16 @@ Deep Agents automatically provides the following built-ins to agents through the
   text(weight: "bold")[Description],
   text(weight: "bold")[Example usage],
   [`write_todos`],
-  [Create and track structured work plans],
+  [Create and track structured work plans when `TodoListMiddleware` is enabled],
   [Creation of TODO list for each stage of analysis],
   [`ls`],
-  [List directory contents (`ls_info()`)],
+  [List directory contents],
   [Check CSV file existence],
   [`read_file`],
   [Read file (image multimodal support)],
   [Understand CSV structure, check chart image],
   [`write_file`],
-  [Creating a new file (create-only)],
+  [Write a file, replacing existing content at that path],
   [Analysis script, save result file],
   [`edit_file`],
   [Modifying existing files (find-and-replace)],
@@ -392,6 +396,9 @@ Deep Agents automatically provides the following built-ins to agents through the
   [`grep`],
   [Pattern matching search],
   [Search for specific column name or value],
+  [`delete`],
+  [Remove a file or directory when the backend exposes deletion and permissions allow it],
+  [Clean generated scratch outputs],
 )
 
 === Multimodal support in `read_file`
@@ -401,11 +408,11 @@ Deep Agents automatically provides the following built-ins to agents through the
 === Custom backend implementation
 
 You can implement `BackendProtocol` yourself depending on your needs. Required methods:
-- `ls_info()` -- List directory contents
+- `ls()` -- List directory contents
 - `read()` -- Read file with line numbers
-- `grep_raw()` -- Pattern matching that returns structured matches.
-- `glob_info()` -- glob-based file matching
-- `write()` -- Create file (create-only)
+- `grep()` -- Pattern matching that returns structured matches.
+- `glob()` -- glob-based file matching
+- `write()` -- Write file content, replacing an existing file at that path
 - `edit()` -- find-and-replace that guarantees uniqueness
 
 == 7.10 Maintain conversation with checkpointer

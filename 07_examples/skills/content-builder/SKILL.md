@@ -10,8 +10,10 @@ compatibility: Python 3.12+
 metadata:
   category: content
   difficulty: intermediate
-allowed-tools: topic_brief task write_file read_file
+  include_tools: topic_brief task write_file read_file
 ---
+
+> Skill tools note: `metadata.include_tools` is a space-separated Deep Agents field. The tools become visible only after this skill is read or pinned, and the agent or `SkillsMiddleware` must provide matching tool implementations.
 
 # Content Builder 스킬
 

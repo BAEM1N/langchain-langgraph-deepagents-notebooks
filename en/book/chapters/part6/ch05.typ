@@ -72,25 +72,35 @@ The UI project page has three main tabs:
   [Alert on drop in specific key scores],
 )
 
-If you want to build your own dashboard, you can group custom charts in `Dashboards`. You can also extract the same metrics with `client.list_runs` and connect them to internal systems like Grafana.
+If you want to build your own dashboard, you can group custom charts in `Dashboards`. You can also extract the same metrics with SmithDB `client.runs.query` and connect them to internal systems like Grafana.
 
 \<!-- phase-c:embed --\>
 #image("../../assets/images/langsmith/05_production_monitoring/01_monitoring_dashboards_list.png")
 
 _Monitoring \> Dashboards — 6 tabs (Traces / LLM Calls / Cost & Tokens / Tools / Run Types / Feedback Scores) × period (default: Last 7 days). In the image above, the Fri 17 spike is a pattern caused by running this curriculum all at once. Trace Count / Latency / Error Rate / LLM Count / LLM Latency are all displayed as time-series._
 
+SmithDB projections are explicit: without `selects`, only `ID` is populated. This dashboard query reads timestamps, so it selects `START_TIME` and `END_TIME`.
+
 #code-block(`````python
-# The single request limit for /runs/query is capped at 100 on the server side.
-# list_runs is a generator, so use itertools.islice for automatic pagination up to N items.
-from itertools import islice
 from langsmith import Client
+from datetime import datetime, timedelta, timezone
 import statistics
 
 client = Client()
-runs = list(islice(
-    client.list_runs(project_name=os.environ["LANGSMITH_PROJECT"]),
-    500,   # Automatically collect up to 500, exceeding the server cap of 100
-))
+project = client.read_project(project_name=os.environ["LANGSMITH_PROJECT"])
+window_end = datetime.now(timezone.utc)
+since = window_end - timedelta(days=7)
+runs = []
+async for run in client.runs.query(
+    project_ids=[str(project.id)],
+    min_start_time=since,
+    max_start_time=window_end,
+    page_size=500,
+    selects=["START_TIME", "END_TIME"],
+):
+    runs.append(run)
+    if len(runs) >= 500:
+        break
 
 durations = [
     (r.end_time - r.start_time).total_seconds()

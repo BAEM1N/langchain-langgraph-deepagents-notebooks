@@ -228,7 +228,7 @@ print("도서 추천 에이전트 생성 완료")
 
 === 시스템 프롬프트 조립 순서
 
-#code-block(`````python
+#code-block(`````
 USER (사용자가 넘긴 system_prompt)
   → BASE/CUSTOM (SDK 기본 또는 profile)
   → SUFFIX (모델별 튜닝)
@@ -236,22 +236,7 @@ USER (사용자가 넘긴 system_prompt)
 
 호출자(USER)의 의도가 항상 프레임워크 가이드보다 앞에 옵니다.
 
-=== 기본 미들웨어 스택 (실행 순서)
-
-#code-block(`````python
-1. TodoListMiddleware              — 태스크 관리 (write_todos 도구)
-2. MemoryMiddleware                — AGENTS.md 로딩 (memory 파라미터 사용 시)
-3. SkillsMiddleware                — SKILL.md 로딩 (skills 파라미터 사용 시)
-4. FilesystemMiddleware            — 파일 도구 (ls, read, write, edit, glob, grep)
-5. SubAgentMiddleware              — 서브에이전트 (task 도구, 동기 서브에이전트가 있으면 자동 부착)
-6. SummarizationMiddleware         — 컨텍스트 압축
-7. AnthropicPromptCachingMiddleware — 프롬프트 캐싱 (Anthropic 모델)
-8. PatchToolCallsMiddleware        — 잘못된 도구 호출 보정
-9. [사용자 커스텀 미들웨어]           — middleware 파라미터
-10. HumanInTheLoopMiddleware        — 승인 워크플로 (interrupt_on 사용 시)
-`````)
-
-=== 각 미들웨어의 역할
+=== 기본 미들웨어 스택
 
 #table(
   columns: 3,
@@ -259,30 +244,38 @@ USER (사용자가 넘긴 system_prompt)
   stroke: 0.5pt + luma(200),
   inset: 8pt,
   fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[위치],
   text(weight: "bold")[미들웨어],
-  text(weight: "bold")[추가하는 도구],
-  text(weight: "bold")[역할],
-  [`TodoListMiddleware`],
-  [`write_todos`],
-  [구조화된 태스크 목록 관리],
+  text(weight: "bold")[조건],
+  [base],
   [`FilesystemMiddleware`],
-  [`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`],
-  [파일 시스템 접근],
+  [항상 파일 도구 제공],
+  [base],
   [`SubAgentMiddleware`],
-  [`task`],
-  [서브에이전트 생성 및 호출 (제거 불가)],
+  [inline subagent가 있을 때 `task` 제공],
+  [base],
   [`SummarizationMiddleware`],
-  [(없음)],
-  [컨텍스트가 한도에 도달하면 자동 요약],
-  [`MemoryMiddleware`],
-  [(없음)],
-  [AGENTS.md 파일을 시스템 프롬프트에 주입],
+  [컨텍스트 압축],
+  [base],
+  [`PatchToolCallsMiddleware`],
+  [잘못된 도구 호출 보정],
+  [user],
+  [사용자가 넘긴 `middleware=[...]`],
+  [base 뒤, tail 앞에 삽입],
+  [tail],
   [`SkillsMiddleware`],
-  [(없음)],
-  [관련 SKILL.md를 점진적으로 로드],
+  [`skills=[...]` 또는 같은 이름 middleware 제공 시],
+  [tail],
+  [`MemoryMiddleware`],
+  [`memory=[...]` 사용 시],
+  [tail],
+  [`HumanInTheLoopMiddleware`],
+  [`interrupt_on` 사용 시],
 )
 
-#warning-box[_주의_: 그래프 state를 통해 값을 추적하세요. 미들웨어 객체의 변경 가능 속성을 직접 쓰면 동시 실행 시 race condition이 발생합니다.]
+`write_todos`는 0.7 계열에서 기본 주입이 아닙니다. 계획 도구를 수업에 포함하려면 LangChain의 `TodoListMiddleware()`를 `middleware`에 명시적으로 추가합니다.
+
+같은 `name`을 가진 사용자 미들웨어를 넘기면 해당 기본 슬롯을 대체할 수 있습니다. 예를 들어 `SkillsMiddleware`라는 이름의 미들웨어는 tail의 자동 Skills 슬롯을 교체합니다. 이 규칙은 LangChain 일반 미들웨어 중복 처리와 구분해서 이해해야 합니다.
 
 #code-block(`````python
 # 미들웨어 임포트 확인
@@ -323,7 +316,7 @@ for mw in [FilesystemMiddleware, MemoryMiddleware, SubAgentMiddleware, SkillsMid
   [모델 선택],
   [`model="provider:model-name"` 또는 `ChatOpenAI(model="gpt-5.4")`],
   [Deep Agents 기본 모델],
-  [`anthropic:claude-sonnet-4-6` (미지정 시)],
+  [모델 미지정은 deprecated이므로 수업 예제에서는 명시],
   [시스템 프롬프트],
   [`system_prompt="역할과 규칙을 정의"` (USER → BASE → SUFFIX 순으로 조립)],
   [커스텀 도구],
@@ -331,7 +324,9 @@ for mw in [FilesystemMiddleware, MemoryMiddleware, SubAgentMiddleware, SkillsMid
   [구조화된 출력],
   [`response_format=PydanticModel` → `result["structured_response"]`],
   [미들웨어],
-  [자동 구성 (TodoList, Filesystem, SubAgent, Summarization, ...)],
+  [파일·서브에이전트·요약은 하네스가 조립, 계획은 `TodoListMiddleware()`로 opt-in],
+  [같은 이름 미들웨어],
+  [기본 슬롯을 대체할 수 있음 (`SkillsMiddleware` 등)],
   [풀 시그니처],
-  [17개 파라미터 (model, tools, system_prompt, middleware, subagents, skills, memory, permissions, backend, interrupt_on, response_format, context_schema, checkpointer, store, debug, name, cache)],
+  [`model`, `tools`, `system_prompt`, `middleware`, `subagents`, `skills`, `memory`, `permissions`, `backend`, `interrupt_on`, `response_format`, `state_schema`, `context_schema`, `checkpointer`, `store`, `debug`, `name`, `cache`],
 )

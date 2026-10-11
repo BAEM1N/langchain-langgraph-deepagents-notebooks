@@ -62,7 +62,7 @@ for t in [add, multiply]:
 `create_agent()`는 모델과 도구를 결합해 에이전트를 만듭니다.
 에이전트는 내부적으로 _ReAct(Reasoning + Acting) 루프_를 실행합니다:
 
-#code-block(`````python
+#code-block(`````
 질문 → 모델이 도구 호출 결정 → 도구 실행 → 결과 관찰 → 반복 또는 최종 응답 생성
 `````)
 

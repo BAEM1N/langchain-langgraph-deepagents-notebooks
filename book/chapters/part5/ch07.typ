@@ -16,7 +16,7 @@ Deep Agents SDK의 `create_deep_agent`, 백엔드 시스템, 빌트인 도구, �
 + _커스텀 도구 정의_ — `@tool` 데코레이터로 Slack 연동 등 외부 서비스 도구를 만들 수 있다
 + _에이전트 생성_ — `create_deep_agent()`로 모델, 도구, 백엔드, 체크포인터를 조합한 에이전트를 구성할 수 있다
 + _스트리밍 관찰_ — 에이전트의 분석 과정을 실시간으로 모니터링할 수 있다
-+ _빌트인 도구 활용_ — `write_todos`, `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep` 도구의 역할을 이해할 수 있다
++ _도구 활용_ — `ls`, `read_file`, `write_file`, `edit_file`, `delete`, `glob`, `grep`, `execute`와 opt-in `write_todos`의 역할을 이해할 수 있다
 + _체크포인터_ — `InMemorySaver`로 대화 상태를 유지하고 이어서 분석을 수행할 수 있다
 + _하네스 해부_ — `create_agent()` + 미들웨어 관점으로 `create_deep_agent()`를 이해할 수 있다
 
@@ -35,10 +35,10 @@ True
 
 == 7.2 데이터 분석 에이전트 개요
 
-Deep Agents의 데이터 분석 에이전트는 다음 파이프라인을 _자율적으로_ 실행합니다:
+Deep Agents의 데이터 분석 에이전트는 다음 파이프라인을 실행합니다:
 
-#code-block(`````python
-CSV 입력 → 계획 수립(write_todos) → 파일 읽기(read_file) → 코드 생성 & 실행 → 반복 분석 → 결과 전달(Slack)
+#code-block(`````
+CSV 입력 → 계획 수립(선택: TodoListMiddleware) → 파일 읽기(read_file) → 코드 생성 & 실행 → 반복 분석 → 결과 전달(Slack)
 `````)
 
 === 실행 흐름 상세
@@ -53,10 +53,10 @@ CSV 입력 → 계획 수립(write_todos) → 파일 읽기(read_file) → 코�
   text(weight: "bold")[설명],
   text(weight: "bold")[사용 도구],
   [_Planning_],
-  [`write_todos`로 구조화된 작업 계획을 수립하고, 분석 진행에 따라 TODO를 업데이트],
+  [복잡한 분석이면 `TodoListMiddleware`를 추가해 `write_todos`로 계획을 관리],
   [`write_todos`],
   [_File Reading_],
-  [CSV의 구조, 컬럼명, 데이터 타입, 행 수를 파악. 이미지 파일도 멀티모달로 읽기 가능],
+  [CSV 구조, 컬럼명, 데이터 타입, 행 수를 파악. 이미지 파일도 멀티모달로 읽기 가능],
   [`read_file`],
   [_Code Execution_],
   [pandas, matplotlib 등 Python 코드를 작성하여 백엔드에서 격리 실행],
@@ -71,12 +71,10 @@ CSV 입력 → 계획 수립(write_todos) → 파일 읽기(read_file) → 코�
 
 === 자율 에이전트의 핵심 특성
 
-Deep Agents의 에이전트는 단순한 도구 호출을 넘어 _자율적 계획 수립_ 능력을 갖추고 있습니다:
-
-+ _계획 수립_: `write_todos`로 분석 작업을 세분화하고 진행 상황을 추적합니다
-+ _적응적 실행_: 분석 중 오류가 발생하면 코드를 수정(`edit_file`)하고 재실행합니다
-+ _서브에이전트 위임_: 복잡한 작업은 전문 서브에이전트를 생성하여 병렬 처리합니다
-+ _컨텍스트 관리_: 파일 시스템 도구로 중간 결과를 저장하고 필요할 때 다시 참조합니다
++ _계획 수립(선택)_: `TodoListMiddleware`가 있을 때 `write_todos`로 분석 작업을 세분화합니다.
++ _적응적 실행_: 분석 중 오류가 발생하면 코드를 수정(`edit_file`)하고 재실행합니다.
++ _서브에이전트 위임_: 복잡한 작업은 전문 서브에이전트를 생성하여 병렬 처리합니다.
++ _컨텍스트 관리_: 파일 시스템 도구로 중간 결과를 저장하고 필요할 때 다시 참조합니다.
 
 == 7.3 백엔드 선택
 
@@ -241,6 +239,7 @@ def tavily_search(query: str) -> str:
 from deepagents import create_deep_agent
 from deepagents.backends import LocalShellBackend
 from langgraph.checkpoint.memory import InMemorySaver
+from langchain.agents.middleware import TodoListMiddleware
 
 backend = LocalShellBackend(virtual_mode=True)
 checkpointer = InMemorySaver()
@@ -252,13 +251,14 @@ agent = create_deep_agent(
     tools=[tavily_search, slack_send_message],
     backend=backend,
     checkpointer=checkpointer,
+    middleware=[TodoListMiddleware()],
     system_prompt="당신은 데이터 분석가입니다.",
 )
 `````)
 
 === 7.6.5 `create_agent()`로 해부해 보기
 
-`create_deep_agent()`는 교육과 실무에서 바로 쓰기 좋은 shortcut입니다. 내부 관점에서는 LangChain `create_agent()`에 planning, filesystem, subagent, memory 계열 미들웨어를 조합한 하네스라고 이해하면 됩니다.
+`create_deep_agent()`는 교육과 실무에서 바로 쓰기 좋은 shortcut입니다. 내부 관점에서는 LangChain `create_agent()`에 filesystem, subagent, skills/memory, 선택적 planning 미들웨어를 조합한 하네스라고 이해하면 됩니다.
 
 #table(
   columns: 3,
@@ -273,8 +273,11 @@ agent = create_deep_agent(
   [Deep Agent 기본 하네스 빠른 구성],
   [필요한 정책만 직접 조립],
   [장점],
-  [파일 도구·계획·서브에이전트 기본 제공],
+  [파일 도구·서브에이전트·skills/memory 기본 제공],
   [최소 구성, 세밀한 제어],
+  [계획],
+  [`TodoListMiddleware()`를 명시적으로 추가],
+  [같은 미들웨어를 직접 추가],
   [교육 포인트],
   [“완성형 하네스 사용”],
   [“하네스 내부 구조 해부”],
@@ -354,9 +357,9 @@ for namespace, chunk in agent.stream(
 + _Running_ -- `tools:UUID` 네임스페이스에서 이벤트가 발생할 때 시작
 + _Complete_ -- 메인 에이전트의 `tools` 노드가 결과를 반환할 때 완료
 
-== 7.9 빌트인 도구 활용
+== 7.9 도구 활용
 
-Deep Agents는 백엔드를 통해 다음 빌트인 도구를 자동으로 에이전트에게 제공합니다. 에이전트는 분석 과정에서 이 도구들을 자율적으로 선택하여 사용합니다.
+Deep Agents는 백엔드를 통해 파일 도구를 제공하고, 계획 도구는 `TodoListMiddleware`로 명시적으로 추가합니다.
 
 #table(
   columns: 3,
@@ -368,20 +371,23 @@ Deep Agents는 백엔드를 통해 다음 빌트인 도구를 자동으로 에�
   text(weight: "bold")[설명],
   text(weight: "bold")[사용 예시],
   [`write_todos`],
-  [구조화된 작업 계획 수립 및 추적],
+  [구조화된 작업 계획 수립 및 추적 (`TodoListMiddleware` 필요)],
   [분석 단계별 TODO 리스트 생성],
   [`ls`],
-  [디렉터리 내용 나열 (`ls_info()`)],
+  [디렉터리 내용 나열],
   [CSV 파일 존재 여부 확인],
   [`read_file`],
   [파일 읽기 (이미지 멀티모달 지원)],
   [CSV 구조 파악, 차트 이미지 확인],
   [`write_file`],
-  [새 파일 생성 (create-only)],
+  [파일 쓰기 또는 기존 파일 교체],
   [분석 스크립트, 결과 파일 저장],
   [`edit_file`],
   [기존 파일 수정 (find-and-replace)],
   [코드 수정, 설정 파일 업데이트],
+  [`delete`],
+  [delete 지원 백엔드에서 파일 삭제],
+  [임시 산출물 정리],
   [`glob`],
   [glob 패턴 기반 파일 탐색],
   [`*.csv` 패턴으로 데이터 파일 검색],
@@ -390,99 +396,22 @@ Deep Agents는 백엔드를 통해 다음 빌트인 도구를 자동으로 에�
   [특정 컬럼명이나 값 검색],
 )
 
-=== `read_file`의 멀티모달 지원
-
-`read_file`은 모든 백엔드에서 이미지 파일을 멀티모달 콘텐츠로 지원합니다. 에이전트가 matplotlib으로 차트를 생성한 후, `read_file`로 해당 이미지를 읽으면 차트의 내용을 _시각적으로 해석_할 수 있습니다. "차트가 올바르게 생성되었는지", "추가적으로 어떤 시각화가 필요한지" 등을 자율적으로 판단하는 데 활용됩니다.
-
 === 커스텀 백엔드 구현
 
-필요에 따라 `BackendProtocol`을 직접 구현할 수 있습니다. 필수 메서드:
-- `ls_info()` -- 디렉터리 내용 나열
-- `read()` -- 줄 번호와 함께 파일 읽기
-- `grep_raw()` -- 구조화된 매치를 반환하는 패턴 매칭
-- `glob_info()` -- glob 기반 파일 매칭
-- `write()` -- 파일 생성 (create-only)
-- `edit()` -- 유일성을 보장하는 find-and-replace
+새 교육 코드에서는 `BackendProtocol`의 `ls`, `read`, `write`, `edit`, `grep`, `glob` 메서드를 구현합니다. `delete`는 선택 메서드이며 구현한 백엔드에서만 `delete`이 노출됩니다.
 
 === Skills 패턴 — 도메인 지식을 진보적 공개로 분리
 
-복잡한 데이터 분석은 도메인별 컨텍스트가 비대해지기 쉽습니다. _Skills_ 는 `SKILL.md` 와 `module` 프론트매터로 도메인 지식을 분리하여, 에이전트가 필요할 때만 로드합니다.
+복잡한 데이터 분석은 도메인별 컨텍스트가 비대해지기 쉽습니다. _Skills_ 는 `SKILL.md`와 선택적 `metadata.include_tools`로 도메인 지식을 분리하여, 에이전트가 필요할 때만 로드합니다.
 
 #code-block(`````text
 skills/
 └── pandas_eda/
-    ├── SKILL.md       # name, description, module, allowed-tools (frontmatter)
-    └── helpers.py     # module 로 노출되는 결정적 헬퍼
+    ├── SKILL.md       # name, description, metadata.include_tools
+    └── helpers.py     # 결정적 헬퍼
 `````)
 
-`SKILL.md` 프론트매터의 핵심 키:
-
-#table(
-  columns: 2,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[키],
-  text(weight: "bold")[용도],
-  [`name`],
-  [스킬 식별자],
-  [`description`],
-  [작업 매칭용 설명 (최대 1024자)],
-  [`module`],
-  [(인터프리터 스킬 한정) Python/TypeScript 파일 경로. interpreter 에 노출],
-  [`allowed-tools`],
-  [스킬 실행 시 허용 도구 목록],
-)
-
-#code-block(`````python
-from deepagents import create_deep_agent
-
-agent = create_deep_agent(
-    skills=["./skills/"],     # 디렉터리 단위 로드
-    checkpointer=checkpointer,
-)
-`````)
-
-=== CodeInterpreterMiddleware (QuickJS) — Backend execute 의 대안
-
-Deep Agents 0.6+ 는 `CodeInterpreterMiddleware` 로 _에이전트 루프 내부 QuickJS 런타임_을 제공합니다. `LocalShellBackend.execute` 와 비교:
-
-#table(
-  columns: 3,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[구분],
-  text(weight: "bold")[Backend `execute` (sandbox)],
-  text(weight: "bold")[`CodeInterpreterMiddleware` (interpreter)],
-  [실행 위치],
-  [격리 외부 런타임/컨테이너],
-  [에이전트 루프 내부 QuickJS],
-  [주 용도],
-  [파일·패키지·셸·pandas/matplotlib 분석 환경],
-  [도구 조합·중간 상태·구조화 데이터 가공],
-  [컨텍스트 절약],
-  [실행 결과만 반환],
-  [interpreter 메모리에 변수 유지],
-  [보안 경계],
-  [provider sandbox 정책],
-  [QuickJS + allowlist bridge],
-)
-
-#code-block(`````python
-from deepagents import create_deep_agent
-from langchain_quickjs import CodeInterpreterMiddleware
-
-agent = create_deep_agent(
-    model="openai:gpt-5.4",
-    middleware=[CodeInterpreterMiddleware(subagents=True, mode="thread")]
-)
-`````)
-
-`pip install -U "deepagents[quickjs]"` 로 설치합니다. 큰 후보군을 변수로 유지하면서 일부만 모델 컨텍스트로 돌려보내거나, top-level `task(...)`로 여러 서브에이전트 결과를 코드에서 병합할 때 적합합니다.
-
+`metadata.include_tools`는 공백으로 구분한 도구 이름 문자열입니다. 도구 구현은 agent tools 또는 `SkillsMiddleware(tools=...)`로 따로 제공해야 합니다.
 
 == 7.10 체크포인터로 대화 유지
 
@@ -549,13 +478,13 @@ agent_with_memory = create_deep_agent(
   [_커스텀 도구_],
   [`\@tool` 데코레이터 + docstring으로 정의, 에이전트가 자율 호출],
   [_에이전트 생성_],
-  [`create_deep_agent(model, tools, backend, checkpointer, system_prompt)`],
-  [_하네스 해부_],
-  [`create_agent()` + middleware 관점으로 Deep Agent shortcut 이해],
+  [`create_deep_agent(model, tools, backend, checkpointer, middleware, system_prompt)`],
+  [_계획_],
+  [`TodoListMiddleware()`를 명시적으로 추가하면 `write_todos` 사용 가능],
   [_스트리밍_],
   [`agent.stream(stream_mode="updates", subgraphs=True)`로 실시간 관찰],
-  [_빌트인 도구_],
-  [`write_todos`, `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`],
+  [_파일 도구_],
+  [`ls`, `read_file`, `write_file`, `edit_file`, `delete`, `glob`, `grep`],
   [_체크포인터_],
   [`InMemorySaver`(개발) → `SQLiteSaver` → `PostgresSaver`(프로덕션)],
 )

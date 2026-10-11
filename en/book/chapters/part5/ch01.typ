@@ -463,6 +463,30 @@ def add_cache_marker(
     return handler(cached)
 `````)
 
+For tool-level state updates, use `state_schema=` on `@wrap_tool_call` and return a `Command`. This is useful for audit trails that must survive after the tool response is returned.
+
+#code-block(`````python
+from typing_extensions import NotRequired, TypedDict
+from langchain.messages import ToolMessage
+from langgraph.types import Command
+
+class AuditState(TypedDict):
+    tool_calls_log: NotRequired[list[str]]
+
+@wrap_tool_call(state_schema=AuditState)
+def track_tool_name(request: ToolCallRequest, handler):
+    response: ToolMessage | Command = handler(request)
+    prior = request.state.get("tool_calls_log", [])
+    if isinstance(response, Command):
+        return response
+    return Command(
+        update={
+            "messages": [response],
+            "tool_calls_log": prior + [request.tool_call["name"]],
+        },
+    )
+`````)
+
 === `request.override(...)`
 `ModelRequest.override(...)` returns a modified copy without mutating shared state, so multiple middleware can cooperate safely. `messages`, `tools`, `model`, `system_message`, `system_prompt`, `response_format` are all overridable.
 

@@ -13,7 +13,7 @@
   [Deep Agents 동기 서브에이전트와 비동기 서브에이전트(`async_tasks` 채널) 트레이스 차이를 구분한다],
   [`thread_id` / `session_id`로 여러 실행을 세션 뷰에 묶는다],
   [`client.create_feedback(run_id, key, score)`로 런에 평가 점수를 부착한다],
-  [`client.list_runs(filter=...)`로 태그·메타데이터 기반 프로그램 필터링을 한다],
+  [SmithDB `client.runs.query(filter=...)`로 태그·메타데이터 기반 프로그램 필터링을 한다],
   [400일 보존 한계를 넘기기 위해 주요 트레이스를 _데이터셋으로 영구화_한다],
 )
 
@@ -119,14 +119,24 @@ client.create_feedback(
 
 == 2.6 태그·메타데이터 기반 필터 쿼리
 
-UI 필터와 똑같은 표현식을 `client.list_runs(filter=...)`로 코드에서 씁니다. 회귀 테스트, 야간 배치, 대시보드 피딩에 두루 씁니다.
+UI 필터와 똑같은 표현식을 SmithDB `client.runs.query(filter=...)`로 코드에서 씁니다. `runs.query()`는 비동기 API이고, 프로젝트 이름 대신 프로젝트 UUID와 명시적인 시간 범위를 넘깁니다. `selects`를 생략하면 `ID`만 채워지므로, 아래처럼 출력이나 변환에 쓰는 필드를 직접 고릅니다.
 
 #code-block(`````python
-runs = client.list_runs(
-    project_name="langsmith-tracing-agents",
+from datetime import datetime, timedelta, timezone
+
+project = client.read_project(project_name="langsmith-tracing-agents")
+window_end = datetime.now(timezone.utc)
+since = window_end - timedelta(days=7)
+
+async for run in client.runs.query(
+    project_ids=[str(project.id)],
     filter='and(has(tags, "env:prod"), eq(run_type, "chain"))',
-    limit=50,
-)
+    min_start_time=since,
+    max_start_time=window_end,
+    page_size=50,
+    selects=["ID", "NAME", "RUN_TYPE", "START_TIME", "TAGS"],
+):
+    print(run.id, run.name, run.tags)
 `````)
 
 #figure(image("../../../assets/images/langsmith/02_tracing_agents/06_add_filter_menu.png", width: 95%), caption: [Add filter 메뉴: Tag·Metadata가 별도 필드로 존재 — `tags contains env:dev` 같은 조건 쿼리 가능])
@@ -226,7 +236,21 @@ SaaS LangSmith는 _ingestion 시점부터 400일_ 후 trace가 삭제됩니다. 
 #code-block(`````python
 # langsmith 0.7+에서는 add_runs_to_dataset이 제거되었으므로
 # create_examples로 run의 inputs/outputs를 직접 example로 변환한다.
-golden_runs = [r for r in runs if r.feedback.get("user_thumbs") == 1]
+from datetime import datetime, timedelta, timezone
+
+project = client.read_project(project_name="langsmith-tracing-agents")
+since = datetime.now(timezone.utc) - timedelta(days=30)
+golden_runs = [
+    r
+    async for r in client.runs.query(
+        project_ids=[str(project.id)],
+        min_start_time=since,
+        max_start_time=window_end,
+        page_size=100,
+        selects=["ID", "INPUTS", "OUTPUTS", "FEEDBACK_STATS"],
+    )
+    if is_human_approved(r.feedback_stats)
+]
 ds = client.create_dataset("agent-golden-traces",
                            description="사람이 승인한 황금 trace")
 client.create_examples(
@@ -246,7 +270,7 @@ client.create_examples(
 - LangGraph 서브그래프는 네임스페이스가 run 이름에 박히므로 필터 가능
 - Deep Agents 동기 서브에이전트는 단일 trace, 비동기는 별개 trace — `async_tasks` 채널로 추적
 - `thread_id`/`session_id` 메타데이터가 Threads 뷰 묶음을 트리거
-- Feedback API + `list_runs(filter=...)`로 평가 루프의 프로그램적 연결
+- Feedback API + SmithDB `runs.query(filter=...)`로 평가 루프의 프로그램적 연결
 - `@traceable`의 `run_type`(`chain`/`llm`/`tool`/`retriever`/`embedding`/`parser`)이 UI 아이콘과 필터 카테고리를 결정
 - PII는 `create_anonymizer` + `Client(anonymizer=...)` + `LangChainTracer` 조합으로 트레이스 전송 직전 마스킹
 - Selective tracing은 `ls.tracing_context(enabled=...)`로 블록 단위 on/off — thread-local

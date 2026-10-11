@@ -1,6 +1,6 @@
 # Deep Agents Overview
 
-Deep Agents is a framework that streamlines agent development with built-in capabilities. It functions as an "agent harness" — a tool calling loop bundled with planning, filesystem management, subagent orchestration, and persistent memory.
+Deep Agents is a framework that streamlines agent development with harness capabilities. It functions as a tool calling loop bundled with filesystem management, subagent orchestration, persistent memory, and optional planning middleware.
 
 ## Key Components
 
@@ -12,12 +12,12 @@ The `deepagents` ecosystem ships three offerings:
 
 ## Core Capabilities
 
-- **Planning & task decomposition** via the built-in `write_todos` tool
+- **Planning & task decomposition** via `TodoListMiddleware` when a course example opts into the `write_todos` tool
 - **Context management** through filesystem tools (`ls`, `read_file`, `write_file`, `edit_file`)
 - **Shell execution** with sandbox backend isolation
 - **JavaScript interpreters** via a QuickJS runtime for lightweight tool composition (no shell or network)
 - **Runtime grading rubrics** via `RubricMiddleware` for LLM-as-a-judge self-evaluation loops
-- **Pluggable filesystem backends** — in-memory state, local disk, LangGraph store, ContextHub, sandboxes
+- **Pluggable filesystem backends** — in-memory state, local disk, LangGraph store, ContextHub, sandboxes. Current examples pass backend instances and use `StoreBackend(namespace=...)`
 - **Subagent spawning** for context isolation and parallel work
 - **Long-term memory** across threads via the LangGraph Memory Store
 - **Filesystem permissions** with declarative read/write rules

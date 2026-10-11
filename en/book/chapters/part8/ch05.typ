@@ -163,7 +163,7 @@ with PostgresStore.from_conn_string(DB) as store:
 
 == 5.7 Relationship with Deep Agents' `StoreBackend`
 
-Deep Agents 0.5 ships a separate `StoreBackend` for persistent memory. The two have _similar roles but different scope_.
+Deep Agents ships a separate `StoreBackend` for persistent memory. Current code passes `StoreBackend(namespace=...)` with an explicit namespace; the two memory surfaces have _similar roles but different scope_.
 
 #table(
   columns: 3,
@@ -185,7 +185,7 @@ Deep Agents 0.5 ships a separate `StoreBackend` for persistent memory. The two h
   [`(namespace, key) → dict`],
   [Retrieval],
   [File list + content read],
-  [Embedding vector search supported],
+  [File reads/writes under an explicit namespace],
   [Typical uses],
   [Claude freely managing memos],
   [Structured profiles / facts],
@@ -198,4 +198,4 @@ Deep Agents 0.5 ships a separate `StoreBackend` for persistent memory. The two h
 - The Claude native memory tool enforces "check first, update when needed" via the `/memories/*` path contract and an auto-injected system prompt
 - The State variant restores on thread resume via a checkpointer; the Filesystem variant persists on disk permanently
 - `max_file_size_mb` prevents the model from dumping everything into a single memo
-- Deep Agents' `StoreBackend` complements via vector search and cross-provider sharing
+- Deep Agents' `StoreBackend` complements when explicit namespaces and cross-provider sharing matter

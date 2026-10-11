@@ -2,136 +2,163 @@
 
 ## Overview
 
-The documentation explains how to use Model Context Protocol with LangChain agents. MCP is an open protocol that standardizes how applications provide tools and context to LLMs.
+LangChain 1.4 introduced the beta `langchain.mcp` namespace. The current teaching surface should use `MCPAdapter`, which is built on FastMCP and adapts MCP server tools into LangChain tools for `create_agent`.
+
+The older `langchain_mcp_adapters.MultiServerMCPClient` API remains useful only as migration context. Do not write new examples that depend on it unless the section is explicitly labeled historical.
 
 ## Installation
 
-Install the adapter library using either pip or uv:
+Use the `mcp` extra on LangChain:
 
 ```bash
-pip install langchain-mcp-adapters
-# or
-uv add langchain-mcp-adapters
+uv add "langchain[mcp]"
 ```
 
-## Key Components
+Migration from the standalone adapter package is:
 
-**MultiServerMCPClient** manages connections to MCP servers. By default it's "stateless" — each tool invocation creates a fresh session and cleans up afterward.
+```bash
+uv remove langchain-mcp-adapters
+uv add "langchain[mcp]"
+```
 
-> **Note on stdio transport:** stdio connections are inherently stateful (the subprocess persists across calls), but the client still wraps each tool invocation in a fresh session unless you explicitly hold one open via `client.session(...)`.
+`langchain.mcp` is beta and emits `LangChainBetaWarning` when imported.
 
-### Supported Transports
+## Core API
 
-- **HTTP/streamable-http**: Web-based communication with optional custom headers and authentication
-- **stdio**: Local subprocess communication for development and testing
-
-### Core Features
-
-**Tools**: MCP servers expose executable functions that agents can invoke. Load them via `client.get_tools()` and pass to agents. For session-scoped loading, use `load_mcp_tools(session)`.
-
-**Resources**: MCP servers can expose data (files, database records) converted to LangChain Blob objects for unified text/binary handling. Use `client.get_resources(server_name)` or `load_mcp_resources(session, uris=[...])` for direct session-based loading.
-
-**Prompts**: Reusable prompt templates retrieved from servers and converted to messages for chat workflows. Fetch them with `client.get_prompt(server_name, prompt_name, arguments={...})`.
-
-## Quickstart Example
+`MCPAdapter` is an async context manager. It infers the transport from the target and exposes `list_tools()`.
 
 ```python
-import asyncio
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain.agents import create_agent
+from langchain.mcp import MCPAdapter
 
-async def main():
-    client = MultiServerMCPClient(
-        {
-            "math": {
-                "transport": "stdio",
-                "command": "python",
-                "args": ["/path/to/math_server.py"],
-            },
-            "weather": {
-                "transport": "http",
-                "url": "http://localhost:8000/mcp",
-            },
-        }
-    )
+config = {
+    "mcpServers": {
+        "math": {"command": "python", "args": ["/path/to/math_server.py"]},
+        "weather": {"url": "https://example.com/mcp"},
+    }
+}
 
-    tools = await client.get_tools()
-    agent = create_agent("claude-sonnet-4-6", tools)
-
-    response = await agent.ainvoke(
-        {"messages": [{"role": "user", "content": "what's (3 + 5) x 12?"}]}
-    )
-    print(response)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+async with MCPAdapter(config) as adapter:
+    tools = await adapter.list_tools()
+    agent = create_agent("openai:gpt-5.4", tools)
 ```
+
+Targets can be:
+
+- an `http` or `https` URL,
+- a `Path` to a local script launched over stdio,
+- an in-process FastMCP server,
+- an `MCPConfig` dict with `mcpServers`,
+- a prebuilt `fastmcp.Client` or `ClientGroup`.
+
+For `str` targets, use URLs. Local scripts should be passed as `Path` objects to avoid ambiguous execution.
+
+## Migration Map
+
+| Previous `langchain-mcp-adapters` | Current `langchain.mcp` |
+|---|---|
+| `MultiServerMCPClient(...)` | `MCPAdapter(target)` |
+| `client.get_tools()` | `await adapter.list_tools()` |
+| per-server `transport` fields | standard `MCPConfig` shape; transport inferred |
+| `tool_interceptors` | LangChain `@wrap_tool_call` middleware |
+| `callbacks=Callbacks(...)` | FastMCP `Client(..., progress_handler=..., log_handler=...)`; elicitation handled by interrupt |
+| `auth` / `headers` on adapter config | prebuilt FastMCP client/transport with auth or headers |
+| `convert_mcp_tool_to_langchain_tool` | `await as_langchain_tool(tool, client)` |
+| `MCPToolArtifact` | still exported from `langchain.mcp` |
+
+Unsupported or not directly wrapped after migration:
+
+- `get_prompt`
+- `get_resources`
+- direct `session(...)` management
+- WebSocket transport
+- client-side sampling/roots
+- converting LangChain tools to FastMCP tools with `to_fastmcp`
+
+If existing code relies on one of those surfaces, document the gap instead of inventing a replacement.
+
+## Connection Lifecycle
+
+`MCPAdapter` opens the configured client inside `async with`. `list_tools()` discovers tools; the returned tools retain enough client context to be used by the agent after the context exits. Session-scoped prompt/resource APIs from `MultiServerMCPClient` do not have a direct `langchain.mcp` wrapper.
+
+Multi-server configs automatically prefix tools where needed, usually as `{server}_{tool}`.
 
 ## Authentication
 
-HTTP transports support two approaches:
-
-1. **Custom headers**: pass a `headers` field directly in the connection config.
-2. **`httpx.Auth` interface**: implement custom authentication mechanisms. The library also leverages the official MCP Python SDK, which ships a built-in OAuth2 flow via `mcp.client.auth.oauth2`.
-
-## Advanced Capabilities
-
-**Tool Interceptors** act as middleware, allowing you to access runtime context (user data, store information, agent state), modify requests/responses, implement retry logic, and control execution flow. Interceptors can return a `Command` object to update agent state or redirect graph execution:
+Authentication lives on FastMCP clients or transports:
 
 ```python
-from langchain_mcp_adapters.interceptors import MCPToolCallRequest
-from langchain.messages import ToolMessage
-from langgraph.types import Command
+from fastmcp.client import Client
+from langchain.mcp import MCPAdapter
 
-async def handle_task_completion(request: MCPToolCallRequest, handler):
-    """Route execution based on tool result."""
-    result = await handler(request)
-    if request.name == "submit_order":
-        return Command(
-            update={
-                "messages": [result] if isinstance(result, ToolMessage) else [],
-                "task_status": "completed",
-            },
-            goto="summary_agent",
-        )
-    return result
+client = Client("https://example.com/mcp", auth="oauth")
 
-client = MultiServerMCPClient({...}, tool_interceptors=[handle_task_completion])
+async with MCPAdapter(client) as adapter:
+    tools = await adapter.list_tools()
 ```
 
-**Stateful Sessions**: For servers requiring persistent connections, use `async with client.session("server_name") as session:` and then call `load_mcp_tools(session)` to keep context across multiple tool calls.
+Common patterns:
 
-**Progress Notifications**: Subscribe to updates for long-running operations via callbacks.
+- `Client(url, auth=token)` for simple bearer-token authentication,
+- `Client(url, auth="oauth")` for FastMCP's built-in OAuth 2.1 flow,
+- a prebuilt FastMCP auth object when you need persisted tokens or provider-specific behavior,
+- `ClientGroup` for per-server credentials,
+- graph factory/runtime identity for per-user credentials.
 
-**Elicitation**: Servers can request user input interactively during tool execution rather than requiring all inputs upfront. The handler responds with an `ElicitResult` whose `action` is one of:
+Custom auth belongs on the FastMCP client or transport. In FastMCP 4.1 the `Client` annotation is `httpx2.Auth | Literal["oauth"] | str | None`, so examples that pass a custom auth class should be verified against the installed FastMCP/httpx2 type rather than copied from an older plain-`httpx.Auth` snippet. Headers belong on the underlying FastMCP transport, not as a legacy adapter connection field.
 
-- `accept` — user provided valid input (return data via the `content` field)
-- `decline` — user chose not to provide information
-- `cancel` — user aborted the operation entirely
+## Elicitation
+
+Elicitation is now handled through LangGraph interrupts and is enabled by the adapter. When a modern MCP server returns an `InputRequiredResult`, the run pauses and resumes with a `Command` that carries the answer:
 
 ```python
-from langchain_mcp_adapters.callbacks import Callbacks, CallbackContext
-from mcp.shared.context import RequestContext
-from mcp.types import ElicitRequestParams, ElicitResult
+from langgraph.types import Command
 
-async def on_elicitation(
-    mcp_context: RequestContext,
-    params: ElicitRequestParams,
-    context: CallbackContext,
-) -> ElicitResult:
-    return ElicitResult(
-        action="accept",
-        content={"email": "user@example.com", "age": 25},
-    )
-
-client = MultiServerMCPClient(
-    {"profile": {"url": "http://localhost:8000/mcp", "transport": "http"}},
-    callbacks=Callbacks(on_elicitation=on_elicitation),
+resume = Command(
+    resume={
+        "responses": {
+            request_key: {"action": "accept", "content": form_values}
+        }
+    }
 )
 ```
 
-## Custom Server Creation
+Each response action is `accept`, `decline`, or `cancel`; accepted structured input goes in `content` and must match the server's requested schema. A server that only pushes elicitation over a legacy handshake session cannot be answered through this interrupt/resume path. A prebuilt FastMCP client with its own elicitation handler is honored. Sampling and roots are not answered by `langchain.mcp`; a tool that requires them raises `NotImplementedError`.
 
-Use FastMCP library to build custom servers with decorated functions that expose tools via stdio or HTTP transports.
+## Tool Wrappers
 
-The documentation includes extensive code examples for each feature, authentication patterns, error handling, and composition techniques.
+The old MCP-specific interceptor API is gone. Wrap tool execution at the LangChain agent layer:
+
+```python
+from collections.abc import Callable
+
+from langchain.agents.middleware import wrap_tool_call
+from langchain.messages import ToolMessage
+from langchain.tools.tool_node import ToolCallRequest
+
+
+@wrap_tool_call
+def log_mcp_calls(
+    request: ToolCallRequest,
+    handler: Callable[[ToolCallRequest], ToolMessage],
+) -> ToolMessage:
+    metadata = request.tool.metadata or {}
+    if "mcp" in metadata:
+        print(f"calling MCP tool {request.tool_call['name']}")
+    return handler(request)
+```
+
+MCP provenance is stored under `request.tool.metadata["mcp"]`.
+
+## Local Teaching Guidance
+
+- Use `MCPAdapter` for new examples.
+- Keep `MultiServerMCPClient` snippets only in migration comparisons.
+- Update notebooks together with HITL/runtime material because MCP elicitation now uses interrupts.
+- Treat MCP as an integration topic: external servers, auth, and protocol gaps usually belong in `08_integration/` or an explicitly gated notebook.
+
+## Local Reference Notes
+
+- Canonical slug note: [`mcp.md`](mcp.md)
+- Migration research: [`../verification/2026-10-11-update-research.md`](../verification/2026-10-11-update-research.md)
+- Matrix item: `L01` in [`../verification/2026-10-11-update-research-matrix.csv`](../verification/2026-10-11-update-research-matrix.csv)

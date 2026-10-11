@@ -43,10 +43,11 @@ rubric = [
 rubric[0]["name"]
 `````)
 
-== 16.2 Deterministic rubric Evaluator
+== 16.2 Deterministic rubric evaluator
 
-Not every quality check needs an LLM judge. Deterministic checks are fast, cheap, and useful for structural requirements such as sources, next steps, or verification evidence.
+`RubricMiddleware` requires criterion-level evaluation coverage and connects to grader hooks and a runtime self-revision loop. The evaluator in this cell is a deterministic teaching miniature, not the SDK middleware itself.
 
+That boundary matters: the teaching evaluator shows the contract without an LLM call, while `RubricMiddleware` checks output quality during runtime.
 
 #code-block(`````python
 def evaluate(text: str) -> dict:
@@ -58,8 +59,25 @@ evaluate("summary: done. next: run tests")
 
 == 16.3 Profile versus rubric
 
-A profile configures how the agent runs; a rubric evaluates whether the result meets expectations. Keeping the two separate makes tuning safer.
+#table(
+  columns: 2,
+  align: left,
+  stroke: 0.5pt + luma(200),
+  inset: 8pt,
+  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
+  text(weight: "bold")[Item],
+  text(weight: "bold")[Role],
+  [profile],
+  [Tunes model/provider harness defaults, tool descriptions, excluded tools, and extra middleware],
+  [rubric],
+  [Defines quality criteria the final result must satisfy],
+  [eval],
+  [Runs batch/offline regression checks],
+  [middleware],
+  [Runs runtime self-revision and grader hooks],
+)
 
+A profile changes the runtime environment; a rubric changes the completion contract. Keeping them separate makes regressions easier to diagnose.
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
 
@@ -74,11 +92,11 @@ A profile configures how the agent runs; a rubric evaluates whether the result m
   text(weight: "bold")[Item],
   text(weight: "bold")[Content],
   [_Covered_],
-  [HarnessProfile configuration, rubric criteria, and deterministic grading before LLM judges],
+  [`HarnessProfile`, rubric criteria, deterministic evaluator, and the `RubricMiddleware` contract],
   [_Core idea_],
-  [Start from a small deterministic contract before adding model calls or external services.],
-  [_Next step_],
-  [Follow the linked course notebooks and official reference notes listed in this chapter.],
+  [Profiles configure runtime behavior; rubrics define completion criteria.],
+  [_Caution_],
+  [Do not describe a deterministic teaching evaluator as if it were SDK `RubricMiddleware`.],
 )
 
 == Reference docs

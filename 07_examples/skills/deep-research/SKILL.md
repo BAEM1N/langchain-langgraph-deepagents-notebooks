@@ -8,8 +8,10 @@ compatibility: Python 3.12+
 metadata:
   category: research
   difficulty: advanced
-allowed-tools: web_search think_tool write_todos task
+  include_tools: web_search think_tool write_todos task
 ---
+
+> Skill tools note: `metadata.include_tools` is a space-separated Deep Agents field. The tools become visible only after this skill is read or pinned, and the agent or `SkillsMiddleware` must provide matching tool implementations.
 
 # Deep Research 스킬
 

@@ -8,8 +8,10 @@ compatibility: Python 3.12+
 metadata:
   category: rag
   difficulty: intermediate
-allowed-tools: retrieve
+  include_tools: retrieve
 ---
+
+> Skill tools note: `metadata.include_tools` is a space-separated Deep Agents field. The tools become visible only after this skill is read or pinned, and the agent or `SkillsMiddleware` must provide matching tool implementations.
 
 # RAG Agent 스킬
 

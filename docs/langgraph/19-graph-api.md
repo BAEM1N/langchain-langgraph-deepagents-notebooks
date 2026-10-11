@@ -140,6 +140,18 @@ def my_node(state: State) -> dict:
 builder.add_node("my_node", my_node)
 ```
 
+For operational tracing control, current LangGraph versions also expose `trace_policy` on `StateGraph.add_node`. Use it when a production graph needs node-level trace behavior rather than a global tracing switch.
+
+```python
+builder.add_node(
+    "my_node",
+    my_node,
+    trace_policy={"name": "my_node"},
+)
+```
+
+Treat `trace_policy` as an observability setting; it does not replace checkpointers, stores, or LangSmith project configuration.
+
 Inject runtime context (typed deps) via the `Runtime` argument:
 
 ```python

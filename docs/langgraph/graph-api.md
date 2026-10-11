@@ -1,8 +1,8 @@
 # Graph API overview — Official Canonical Reference
 
 > 공식 원문: https://docs.langchain.com/oss/python/langgraph/graph-api
-> 로컬 원문 스냅샷: `local/official_langchain_docs_2026-06-19/pages/oss__python__langgraph__graph-api.md`
-> 수집일: 2026-06-19
+> 로컬 원문 스냅샷: `local/official_langchain_docs_2026-06-19/pages/oss__python__langgraph__graph-api.md` + `.local/update-research-2026-10-11/langgraph-api-diff.json`
+> 갱신 기준: 2026-10-11 조사
 > 문서 성격: LangGraph canonical reference
 
 ## 왜 추가했나
@@ -21,6 +21,7 @@
 - Nodes
 - Re-execution and idempotency
 - Using tasks in nodes
+- Node-level `trace_policy`
 - START node
 - END node
 
@@ -34,7 +35,7 @@
 
 ## 유지보수 규칙
 
-- 원문 전체가 필요하면 공식 URL 또는 `local/official_langchain_docs_2026-06-19/pages/` 스냅샷을 확인한다.
+- 원문 전체가 필요하면 공식 URL과 `.local/update-research-2026-10-11/langgraph-api-diff.json`을 함께 확인한다.
 - 실행 가능한 노트북으로 승격할 때는 셀 ID 순서, 기본 모델 정책, 외부 서비스 키 게이트, smoke test 포함 여부를 함께 결정한다.
 - frontend, CLI, server, cloud/provider 의존 예제는 기본 코스보다 `08_integration/` 후보로 먼저 분류한다.
 

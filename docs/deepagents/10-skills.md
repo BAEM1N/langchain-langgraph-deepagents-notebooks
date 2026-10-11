@@ -21,6 +21,7 @@ The agent uses **progressive disclosure**: it reads skill descriptions in frontm
 - `description`: Task-matching criteria (max 1024 characters)
 - `module`: Optional path to a Python/TypeScript file exposed to the interpreter (interpreter skills only)
 - `license`, `compatibility`, `metadata`, `allowed-tools`: Optional metadata
+- `metadata.include_tools`: Optional space-separated tool names. After the agent reads the skill, these related tools can become visible. This is not a YAML list and is not the same as `allowed-tools`.
 - File size limit: 10 MB per skill (oversized files are skipped during loading)
 
 ## Usage Patterns
@@ -53,6 +54,8 @@ Skills support two complementary code-execution shapes.
 
 - General-purpose subagents inherit main agent skills automatically
 - Custom subagents require explicit `skills` parameters and remain isolated from parent agent skills
+- Forked subagents inherit parent conversational context but cannot set a separate `skills` list.
+- `pinned_skills` is passed through invocation state to make selected skills available up front; do not document it as a `create_deep_agent()` constructor keyword.
 
 ## Skills vs. Memory
 

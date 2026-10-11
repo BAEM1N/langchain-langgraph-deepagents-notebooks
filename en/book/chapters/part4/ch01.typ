@@ -19,7 +19,7 @@
 _Deep Agents_ is an _Agent Harness_ framework created by the LangChain team.
 It makes it easier to build autonomous agents for complex multi-step tasks by including the following _11 core capabilities_ out of the box:
 
-- _Task planning_ — `write_todos` breaks complex problems into a structured task list
+- _Task planning_ — add `TodoListMiddleware` when an agent needs the `write_todos` planning tool
 - _Filesystem management_ — read, write, and search files (`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`)
 - _Filesystem permissions_ — per-path ACL with `allow_read` / `allow_write` / `deny_read` etc.
 - _Subagent delegation_ — distribute work via the `task` tool
@@ -89,7 +89,7 @@ Deep Agents ships _three interfaces_ on top of the same `AgentHarness` engine:
 == 3. Five Core Concepts (Planning · Context Management · Backends · Subagents · Memory & Skills)
 
 === 3.1 Planning
-The agent uses the `write_todos` tool to break complex work into a _structured task list_.
+Planning is explicit in current Deep Agents examples: add `TodoListMiddleware` when the agent should use the `write_todos` tool to break complex work into a _structured task list_.
 Each task moves through states such as `pending` → `in_progress` → `completed`.
 
 === 3.2 Context Management

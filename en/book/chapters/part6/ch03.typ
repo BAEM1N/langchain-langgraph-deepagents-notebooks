@@ -10,7 +10,7 @@ A trace shows "how things are currently running," while evaluation answers "did 
 == Learning Objectives
 
 - Create a dataset and add examples using `client.create_dataset` + `client.create_examples`
-- Transfer production traces to a dataset using `client.add_runs_to_dataset`
+- Transfer production traces to a dataset with `client.create_examples(..., examples=[...])`
 - Write a code evaluator in the form `def my_eval(inputs, outputs, reference_outputs) -> dict`
 - Run an LLM-as-judge evaluator to get structured scores
 - Use pairwise/summary evaluators to compare two experiments and get dataset-level metrics
@@ -80,7 +80,7 @@ print(f"Dataset ready: {dataset.name} ({dataset.id})")
 
 == 6.03.2 Transferring Production Traces to a Dataset
 
-Manual creation is only for the initial seed; real scale comes from _production traces_. With `client.add_runs_to_dataset`, the run's `inputs`/`outputs` are copied directly as examples. In actual operations, it's common to only upload runs reviewed by humans via the Annotation Queue.
+Manual creation is only for the initial seed; real scale comes from _production traces_. Since `add_runs_to_dataset` is removed in current LangSmith, query runs with `client.runs.query(...)` and convert each run's `inputs`/`outputs` into a `create_examples(..., examples=[...])` payload. SmithDB queries return only `ID` when `selects` is omitted, so this example explicitly selects `ID`, `INPUTS`, and `OUTPUTS`. In actual operations, it's common to only upload runs reviewed by humans via the Annotation Queue.
 
 \<!-- phase-c:embed --\>
 #image("../../assets/images/langsmith/03_datasets_and_evaluation/03_dataset_examples_tab.png")
@@ -90,11 +90,21 @@ _Examples tab of `weather-bot-qa` — 3 examples uploaded via `client.create_exa
 #code-block(`````python
 # Select a few root runs from the current project and transfer them to the dataset
 # Since langsmith 0.7.x, add_runs_to_dataset has been removed. Convert to create_examples instead.
-root_runs = list(client.list_runs(
-    project_name=os.environ["LANGSMITH_PROJECT"],
+from datetime import datetime, timedelta, timezone
+
+project = client.read_project(project_name=os.environ["LANGSMITH_PROJECT"])
+since = datetime.now(timezone.utc) - timedelta(days=30)
+root_runs = []
+async for run in client.runs.query(
+    project_ids=[str(project.id)],
     is_root=True,
-    limit=5,
-))
+    min_start_time=since,
+    page_size=5,
+    selects=["ID", "INPUTS", "OUTPUTS"],
+):
+    root_runs.append(run)
+    if len(root_runs) >= 5:
+        break
 
 examples = [
     {"inputs": r.inputs, "outputs": r.outputs, "metadata": {"source_run_id": str(r.id)}}
@@ -181,10 +191,13 @@ results = evaluate(
     experiment_prefix="city-extractor:gpt-5.4",
     description="Baseline — temperature 0, single prompt",
     max_concurrency=4,
+    disable_evaluator_tracing=True,
     metadata={"model": "gpt-5.4", "temperature": 0},
 )
 print("Experiment URL ->", results)
 `````)
+
+`disable_evaluator_tracing=True` keeps evaluator internals from creating extra traces. Leave it off when you are debugging evaluator prompts; turn it on when the experiment output is what matters and evaluator trace volume would add noise or cost.
 
 == 6.03.6 Pairwise + Summary Evaluator
 

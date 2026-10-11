@@ -48,7 +48,7 @@ agent = create_agent(
 
 ### Prompt Parameter Changes
 
-The `prompt` parameter is now `system_prompt`. "If using [`SystemMessage`](reference...) objects in the system prompt, extract the string content."
+The `prompt` parameter is now `system_prompt`. If using `SystemMessage` objects in the system prompt, extract the string content.
 
 ### Dynamic Prompts via Middleware
 
@@ -113,7 +113,7 @@ Tools accept:
 - Callable functions with type hints
 - Dictionary representations of built-in provider tools
 
-"The argument will no longer accept [`ToolNode`](reference...) instances."
+The argument no longer accepts `ToolNode` instances.
 
 ### Tool Error Handling
 
@@ -214,7 +214,7 @@ message = HumanMessage(content_blocks=[
 "All LangChain packages now require **Python 3.10 or higher**."
 
 ### Chat Model Return Types
-"The return type signature for chat model invocation has been fixed from [`BaseMessage`](reference...) to [`AIMessage`](reference...)"
+The return type signature for chat model invocation has been fixed from `BaseMessage` to `AIMessage`.
 
 ### Content Block Serialization (`output_version`)
 Messages now expose provider-agnostic blocks via `message.content_blocks`. To serialize standard blocks back into the `content` attribute, opt in with `output_version="v1"` on the model or set the `LC_OUTPUT_VERSION=v1` environment variable. Provider-native format remains the default for `content` to preserve backward compatibility.
@@ -226,7 +226,7 @@ Messages now expose provider-agnostic blocks via `message.content_blocks`. To se
 ".text" now operates as a property rather than method. The `.text()` method call syntax is deprecated.
 
 ### Removed `AIMessage.example`
-"The `example` parameter has been removed from [`AIMessage`](reference...) objects" in favor of `additional_kwargs`.
+The `example` parameter has been removed from `AIMessage` objects in favor of `additional_kwargs`.
 
 ## Minor Updates
 

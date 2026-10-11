@@ -1,8 +1,8 @@
 # Data locations — Official Reference Note
 
-> 공식 원문: https://docs.langchain.com/oss/python/deepagents/code/data-locations
-> 로컬 원문 스냅샷: `local/official_langchain_docs_2026-06-19/pages/oss__python__deepagents__code__data-locations.md`
-> 수집일: 2026-06-19
+> 공식 원문: https://docs.langchain.com/oss/deepagents/code/data-locations
+> 로컬 원문 스냅샷: `.local/update-check-2026-10-11/oss__python__deepagents__dynamic-subagents.md`와 Code 경로 수집 manifest
+> 갱신 기준: 2026-10-11 조사
 > 문서 성격: Deep Agents 레퍼런스 보강 노트
 
 ## 왜 추가했나
@@ -27,5 +27,5 @@ Deep Agents Code/CLI 운영 표면이다. 기본 교육 노트북보다는 `08_i
 ## 연결할 로컬 자료
 
 - 상위 문서 지도: [`../../README.md`](../../README.md)
-- 공식 원문 전체가 필요하면 위의 공식 URL 또는 `local/official_langchain_docs_2026-06-19/pages/` 스냅샷을 확인한다.
+- 공식 원문 전체가 필요하면 위의 공식 URL 또는 `.local/update-research-2026-10-11/`와 `.local/update-check-2026-10-11/` 스냅샷을 확인한다.
 - 실행 가능한 예제로 승격할 때는 관련 노트북의 셀 ID 순서, `gpt-5.4` 기본 모델 정책, LangSmith/외부 서비스 키 게이트를 함께 점검한다.

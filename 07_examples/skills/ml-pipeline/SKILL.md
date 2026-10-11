@@ -8,8 +8,10 @@ compatibility: Python 3.12+
 metadata:
   category: ml
   difficulty: advanced
-allowed-tools: data_loader train_model evaluate_model
+  include_tools: data_loader train_model evaluate_model
 ---
+
+> Skill tools note: `metadata.include_tools` is a space-separated Deep Agents field. The tools become visible only after this skill is read or pinned, and the agent or `SkillsMiddleware` must provide matching tool implementations.
 
 # ML Pipeline 스킬
 

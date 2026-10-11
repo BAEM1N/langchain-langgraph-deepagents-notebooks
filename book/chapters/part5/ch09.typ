@@ -7,7 +7,7 @@
 
 에이전트를 프로덕션에 배포하기 위한 전체 파이프라인을 다룹니다. 단위 테스트와 LangSmith 평가로 품질을 보장하고, 트레이싱으로 관측성을 확보한 뒤, LangGraph Platform으로 배포합니다.
 
-#code-block(`````python
+#code-block(`````
 개발 -> 테스트 (단위 + 평가) -> 관측성 (트레이싱) -> 배포 (LangGraph Platform)
 `````)
 
@@ -95,9 +95,9 @@
 대규모 평가, 결과 추적, 실험 비교에는 _LangSmith_ 를 사용합니다. CI/CD 비용 절감용으로는 `vcrpy` + `pytest-recording` 으로 HTTP 응답을 녹화·재생합니다.
 
 
-== 9.3 에이전트 테스트 -- LangSmith 평가
+== 9.3 Agent testing -- LangSmith evaluation
 
-`agentevals` 패키지는 에이전트 궤적(trajectory) 전용 평가자를 제공합니다. 궤적이란 에이전트가 최종 응답에 도달하기까지의 모든 단계(도구 호출, 중간 추론, 의사결정)를 의미합니다.
+`agentevals`는 에이전트 trajectory를 평가하는 도구를 제공합니다. trajectory는 최종 답변에 도달하기까지의 도구 호출, 중간 판단, 의사결정 경로 전체를 뜻합니다.
 
 #table(
   columns: 4,
@@ -110,41 +110,20 @@
   text(weight: "bold")[장점],
   text(weight: "bold")[단점],
   [_Trajectory Match_],
-  [기대 시퀀스와 단계별 비교. 미리 정의한 참조 궤적과 에이전트의 실제 궤적을 매칭],
-  [정확한 검증, 재현 가능],
-  [구체적 기대값 필요, 유연성 낮음],
+  [기대한 단계와 실제 trajectory를 비교],
+  [재현성 높음, 회귀 감지 명확],
+  [기대 경로 작성 비용],
   [_LLM-as-Judge_],
-  [LLM이 궤적을 루브릭(평가 기준) 기반으로 정성 평가. 도구 사용 적절성, 응답 정확성 등을 자동 판단],
-  [유연한 평가, 복잡한 시나리오 대응],
-  [추가 LLM 비용, 평가 자체의 비결정성],
+  [rubric 기준으로 trajectory와 답변을 평가],
+  [복잡한 시나리오 대응],
+  [비용과 비결정성],
+  [_RubricMiddleware_],
+  [runtime에서 criterion별 커버리지와 grader hook을 사용],
+  [실행 중 품질 게이트 가능],
+  [grader 설계가 필요],
 )
 
-=== Trajectory Match 모드
-
-에이전트의 도구 호출 순서에 대한 기대 수준을 4단계로 조절할 수 있습니다:
-
-#table(
-  columns: 3,
-  align: left,
-  stroke: 0.5pt + luma(200),
-  inset: 8pt,
-  fill: (_, row) => if row == 0 { rgb("#E0F2F3") } else if calc.odd(row) { luma(248) } else { white },
-  text(weight: "bold")[모드],
-  text(weight: "bold")[설명],
-  text(weight: "bold")[사용 시점],
-  [`strict`],
-  [메시지와 도구 호출 순서가 참조와 완전히 동일해야 통과],
-  [순서가 중요한 워크플로 (예: 인증 -\\\> 조회 -\\\> 업데이트)],
-  [`unordered`],
-  [동일한 도구들을 호출했으면 순서 무관하게 통과],
-  [독립적인 도구 호출이 여러 개인 경우],
-  [`subset`],
-  [에이전트가 참조 도구만 호출 (추가 도구 호출 없음)],
-  [불필요한 도구 호출을 방지하고 싶을 때],
-  [`superset`],
-  [에이전트가 참조 도구를 최소한 포함 (추가 호출 허용)],
-  [핵심 도구 호출만 보장하고 싶을 때],
-)
+Deep Agents의 `RubricMiddleware`는 단순 문자열 rubric과 다릅니다. criterion마다 평가 결과가 빠지지 않도록 설계하고, 오프라인 `evaluate`와 runtime self-revision의 책임을 나눕니다.
 
 #code-block(`````python
 try:

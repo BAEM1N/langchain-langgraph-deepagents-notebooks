@@ -78,6 +78,35 @@ graph.invoke(Command(resume=True), config=config, version="v2")   # approve
 graph.invoke(Command(resume=False), config=config, version="v2")  # reject
 `````)
 
+=== Approval schema — typed resume object
+
+For approval flows with more than a boolean, pass `response_schema=` to `interrupt`. When the graph resumes with a dict, LangGraph coerces it into the schema object, so the node reads attributes such as `decision.approved` rather than indexing a raw dict.
+
+#code-block(`````python
+from pydantic import BaseModel
+from langgraph.types import Command, interrupt
+
+class Approval(BaseModel):
+    approved: bool
+    reason: str | None = None
+
+def approval_node(state) -> Command[Literal["proceed", "cancel"]]:
+    decision = interrupt(
+        {
+            "question": "Approve this action?",
+            "details": state["action_details"],
+        },
+        response_schema=Approval,
+    )
+    return Command(goto="proceed" if decision.approved else "cancel")
+
+graph.invoke(
+    Command(resume={"approved": True, "reason": "Looks safe"}),
+    config=config,
+    version="v2",
+)
+`````)
+
 ==== 2) Review & Edit — human revises LLM output
 
 #code-block(`````python

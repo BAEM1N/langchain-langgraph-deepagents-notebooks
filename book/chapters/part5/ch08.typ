@@ -69,7 +69,7 @@ model = ChatOpenAI(model="gpt-5.4")
 
 보이스 에이전트는 3-레이어 파이프라인으로 구성됩니다:
 
-#code-block(`````python
+#code-block(`````
 Audio In -> [STT: AssemblyAI] -> Text -> [Agent: LangChain] -> Text -> [TTS: Cartesia] -> Audio Out
 `````)
 

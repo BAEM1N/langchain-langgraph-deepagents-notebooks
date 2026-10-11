@@ -13,8 +13,8 @@
 - **English README:** [`en/README.md`](en/README.md)
 - **Korean Handbook:** [`book/agent-handbook.pdf`](book/agent-handbook.pdf)
 - **English Handbook:** [`en/book/agent-handbook-en.pdf`](en/book/agent-handbook-en.pdf)
-- **Latest release note:** [`docs/releases/v1.2.0.md`](docs/releases/v1.2.0.md)
-- **Lecture decks:** [`decks/`](decks/) — 강의용 HTML/PDF/PPTX/대본 산출물 보관 위치
+- **Latest release note:** [`docs/releases/v1.3.0.md`](docs/releases/v1.3.0.md)
+- **Lecture decks:** [`decks/`](decks/) — 강의용 HTML/PDF/PPTX/대본 산출물 보관 위치. PPTX는 기존 배포 형식에 맞춘 이미지 기반 발표 파일이며, 편집 가능한 원본은 [`decks/source/`](decks/source/)의 HTML/Python 소스입니다.
 
 ---
 
@@ -43,7 +43,7 @@
 | Integration notebooks | 69 | `08_integration` provider·DB·sandbox·observability 통합 카탈로그 |
 | Total notebooks | 241 | tracked `.ipynb` 기준 전체 노트북 |
 | Handbook PDFs | 2 | 한국어/영어 Typst 기반 PDF 핸드북 |
-| Lecture decks | `decks/` | 커밋 가능한 강의용 HTML/PDF/PPTX/대본 산출물 보관 위치 |
+| Lecture decks | `decks/` | 배포용 HTML/PDF/PPTX/대본. PPTX는 이미지 기반이고 편집 가능한 원본은 `decks/source/` |
 | Local docs | 100+ | LangChain, LangGraph, Deep Agents, Skills, observability 참고 문서 |
 
 ---
@@ -190,7 +190,7 @@ Deep Agents에서 skills 디렉토리를 연결하면 예제별 `SKILL.md`를 pr
 | [`docs/README.md`](docs/README.md) | 공개 문서 지도와 유지보수 기준 |
 | [`docs/langchain/`](docs/langchain/) | LangChain v1 핵심 개념과 튜토리얼 정리 |
 | [`docs/langgraph/`](docs/langgraph/) | LangGraph v1 API, persistence, deploy, observability 정리 |
-| [`docs/deepagents/`](docs/deepagents/) | Deep Agents SDK, backend, subagent, skills, sandbox 정리 |
+| [`docs/deepagents/`](docs/deepagents/) | Deep Agents SDK, backend, subagent, skills, sandbox, Code/Frontend 경로 정리 |
 | [`docs/skills/`](docs/skills/) | LangChain/LangGraph/Deep Agents 작성 가드레일 |
 | [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) | LangSmith/Langfuse 관측 설정 |
 | [`docs/MODEL_PROVIDERS.md`](docs/MODEL_PROVIDERS.md) | provider 선택과 로컬 모델 옵션 |
@@ -211,9 +211,11 @@ Deep Agents에서 skills 디렉토리를 연결하면 예제별 `SKILL.md`를 pr
 빌드 명령:
 
 ```bash
-python book/scripts/build.py
-python en/book/scripts/build.py
+uv run --all-extras python book/scripts/build.py
+uv run --all-extras python en/book/scripts/build.py
 ```
+
+영어 핸드북에서 notebook-derived chapter를 새로 반영해야 할 때는 먼저 `uv run --all-extras python book/scripts/nb2typ.py --config en/book/scripts/config.yaml`로 해당 Typst 장을 갱신한 뒤 영어 PDF를 다시 빌드합니다. 기존 수작업으로 다듬은 영어 장을 덮어쓰지 않도록 `en/book/scripts/config.yaml` 범위만 사용합니다.
 
 ---
 
@@ -222,6 +224,9 @@ python en/book/scripts/build.py
 기본 live smoke는 `01_beginner`~`07_examples` core notebooks를 대상으로 합니다. `08_integration/`은 외부 provider, DB, cloud sandbox, 로컬 서비스 의존성이 있어 별도 검증합니다.
 
 ```bash
+uv run --all-extras python -m unittest discover -s tests -v
+uv run --all-extras python scripts/validate_materials.py --changed-only \
+  --report .local/materials-validation-report.json
 UV_NO_SYNC=1 uv run python local/notebook_execution_01_07_gpt41/run_notebooks.py \
   --changed-only --force --timeout 300
 ```
@@ -233,7 +238,9 @@ UV_NO_SYNC=1 uv run python local/notebook_execution_01_07_gpt41/run_notebooks.py
   --changed-only --force --timeout 300 --allow-langsmith-mutations
 ```
 
-최근 검증 기록은 [`docs/verification/2026-06-21-tutorial-update-and-addition-backlog.md`](docs/verification/2026-06-21-tutorial-update-and-addition-backlog.md)를 참고하세요.
+강의 deck은 [`decks/README.md`](decks/README.md)의 source rebuild 명령으로 HTML/PDF/PPTX/대본을 재생성합니다. PPTX는 발표 안정성을 위해 슬라이드 이미지를 넣는 기존 형식을 보존하므로 텍스트 단위 편집은 `decks/source/`의 HTML/Python 원본에서 수행합니다.
+
+최근 공식 문서/패키지 갭 조사는 [`docs/verification/2026-10-11-update-research.md`](docs/verification/2026-10-11-update-research.md)를 참고하세요. 실행 smoke 기록은 [`docs/verification/2026-06-21-official-docs-implementation-batch-2.md`](docs/verification/2026-06-21-official-docs-implementation-batch-2.md)에 남아 있습니다.
 
 ---
 
@@ -264,7 +271,7 @@ UV_NO_SYNC=1 uv run python local/notebook_execution_01_07_gpt41/run_notebooks.py
 | Data/RAG | FAISS, vector stores, retrievers, document loaders, text splitters |
 | Evaluation | LangSmith evaluation, `agentevals`, notebook smoke harness |
 
-정확한 버전은 [`pyproject.toml`](pyproject.toml)과 [`uv.lock`](uv.lock)을 기준으로 합니다.
+현재 업데이트 조사 기준은 LangChain 1.4.4, LangGraph 1.2.14, Deep Agents 0.7.23, LangSmith 0.14.7입니다. 실제 설치 버전은 [`pyproject.toml`](pyproject.toml)과 [`uv.lock`](uv.lock)을 기준으로 확인하고, 최신 갭은 [`docs/verification/2026-10-11-update-research.md`](docs/verification/2026-10-11-update-research.md)를 함께 봅니다.
 
 ---
 

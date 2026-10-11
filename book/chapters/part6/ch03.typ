@@ -49,10 +49,23 @@ client.create_examples(
 
 == 3.2 프로덕션 trace를 데이터셋으로 이관
 
-수동 작성은 초기 시드에만 쓰고, 규모 있는 데이터는 _프로덕션 trace_에서 옵니다. `langsmith 0.7`부터 `add_runs_to_dataset`이 제거됐으므로 `client.create_examples(...)`로 run의 `inputs`/`outputs`를 example로 변환해 넣습니다. 운영에서는 Annotation Queue로 사람이 리뷰한 run만 올리는 게 보통입니다.
+수동 작성은 초기 시드에만 쓰고, 규모 있는 데이터는 _프로덕션 trace_에서 옵니다. `langsmith 0.7`부터 `add_runs_to_dataset`이 제거됐으므로 `client.create_examples(...)`로 run의 `inputs`/`outputs`를 example로 변환해 넣습니다. SmithDB query는 `selects`를 생략하면 `ID`만 채우므로, 예시처럼 `ID`, `INPUTS`, `OUTPUTS`, `FEEDBACK_STATS`를 명시합니다. 운영에서는 Annotation Queue로 사람이 리뷰한 run만 올리는 게 보통입니다.
 
 #code-block(`````python
-good_runs = [r for r in client.list_runs(project_name="prod") if is_good(r)]
+from datetime import datetime, timedelta, timezone
+
+project = client.read_project(project_name="prod")
+since = datetime.now(timezone.utc) - timedelta(days=30)
+good_runs = [
+    r
+    async for r in client.runs.query(
+        project_ids=[str(project.id)],
+        min_start_time=since,
+        page_size=100,
+        selects=["ID", "INPUTS", "OUTPUTS", "FEEDBACK_STATS"],
+    )
+    if is_good(r)
+]
 client.create_examples(
     dataset_id=client.read_dataset(dataset_name="weather-bot-qa").id,
     examples=[
@@ -125,6 +138,7 @@ result = evaluate(
     data="weather-bot-qa",
     evaluators=[city_exact_match, city_non_empty, semantic_city_match],
     experiment_prefix="city-extractor:gpt-5.4",
+    disable_evaluator_tracing=True,
     metadata={"prompt_commit": "12344e88"},
 )
 
@@ -138,6 +152,8 @@ result = client.evaluate(
 `````)
 
 #figure(image("../../../assets/images/langsmith/03_datasets_and_evaluation/05_pairwise_experiments_tab.png", width: 95%), caption: [Pairwise Experiments 탭 — 두 experiment의 output을 나란히 비교. `evaluate_comparative` API로 실행])
+
+`disable_evaluator_tracing=True`는 evaluator 내부 모델 호출이 별도 trace를 많이 만들지 않게 막습니다. evaluator 프롬프트를 디버깅할 때는 끄고, experiment 결과와 비용·노이즈 관리가 더 중요할 때만 켭니다.
 
 == 3.6 Pairwise + Summary evaluator
 

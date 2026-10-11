@@ -163,7 +163,7 @@ with PostgresStore.from_conn_string(DB) as store:
 
 == 5.7 Deep Agents `StoreBackend`와의 관계
 
-Deep Agents 0.5는 영구 메모리를 위한 `StoreBackend`를 별도로 제공합니다. 역할은 비슷하지만 적용 범위가 다릅니다.
+Deep Agents는 영구 메모리를 위한 `StoreBackend`를 별도로 제공합니다. 현재 API에서는 `StoreBackend(namespace=...)`처럼 명시적 namespace가 필요하며, 역할은 Claude 네이티브 메모리와 비슷해 보여도 적용 범위가 다릅니다.
 
 #table(
   columns: 3,
@@ -185,7 +185,7 @@ Deep Agents 0.5는 영구 메모리를 위한 `StoreBackend`를 별도로 제공
   [`(namespace, key) → dict`],
   [검색 방식],
   [파일 목록 + 내용 읽기],
-  [임베딩 벡터 검색 지원],
+  [명시적 namespace 아래 파일 읽기/쓰기],
   [적합한 용도],
   [Claude가 자유롭게 메모 관리],
   [구조화된 프로필·사실 저장],
@@ -198,4 +198,4 @@ Deep Agents 0.5는 영구 메모리를 위한 `StoreBackend`를 별도로 제공
 - Claude 네이티브 메모리 도구는 `/memories/*` 경로 계약 + 자동 시스템 프롬프트로 "먼저 확인, 필요 시 갱신" 흐름을 강제한다
 - State 변형은 체크포인터로 thread 재개 시 복원, Filesystem 변형은 디스크에 영구 보존
 - `max_file_size_mb`로 모델이 한 메모에 몰아 쓰는 것을 방지
-- Deep Agents `StoreBackend`는 벡터 검색·멀티 프로바이더 공유 시 보완재
+- Deep Agents `StoreBackend`는 명시적 namespace와 멀티 프로바이더 공유가 필요할 때 보완재

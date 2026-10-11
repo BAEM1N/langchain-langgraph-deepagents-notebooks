@@ -49,8 +49,8 @@ def create_deep_agent(
     checkpointer=None,      # 10. LangGraph checkpointer (persistence)
     store=None,             # 11. LangGraph BaseStore (for StoreBackend)
     cache=None,             # 12. prompt cache config (e.g. Anthropic)
-    backend=None,           # 13. BackendProtocol or `lambda runtime: ...`
-    permissions=None,       # 14. allow_read/allow_write/deny_* ACL
+    backend=None,           # 13. BackendProtocol instance
+    permissions=None,       # 14. FilesystemPermission rules
     interrupt_on=None,      # 15. {"tool_name": True} HITL gates
     debug=False,            # 16. debug logging
     name=None,              # 17. graph name
@@ -260,7 +260,7 @@ Middleware is the plugin layer that extends and controls the agent's behavior.
 === Default middleware stack (execution order)
 
 #code-block(`````python
-1.  TodoListMiddleware                  — task management (write_todos)
+1.  TodoListMiddleware                  — optional task management (write_todos)
 2.  MemoryMiddleware                    — load AGENTS.md when `memory` is used
 3.  SkillsMiddleware                    — load SKILL.md when `skills` is used
 4.  FilesystemMiddleware                — file tools (ls, read, write, edit, glob, grep)
@@ -287,7 +287,7 @@ Middleware is the plugin layer that extends and controls the agent's behavior.
   text(weight: "bold")[Role],
   [`TodoListMiddleware`],
   [`write_todos`],
-  [Manage structured task lists],
+  [Manage structured task lists when explicitly enabled],
   [`FilesystemMiddleware`],
   [`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`],
   [Filesystem access],
@@ -323,6 +323,24 @@ for mw in [FilesystemMiddleware, MemoryMiddleware, SubAgentMiddleware, SkillsMid
 `````)
 
 #note-box[_Note_: `create_deep_agent()` configures middleware automatically in most cases. You can still add custom middleware through the `middleware` parameter if you need advanced behavior.]
+
+=== Replacing a default middleware instance
+
+Deep Agents treats middleware names as part of the harness contract. If you pass a user middleware instance with the same `.name` as a default middleware, it replaces that default instance in place. This is different from ordinary LangChain middleware stacking, where similarly named middleware would usually just add another hook.
+
+#code-block(`````python
+from deepagents.middleware import TodoListMiddleware
+
+# Replace the default planning middleware with a narrower configuration.
+planning = TodoListMiddleware(name="TodoListMiddleware")
+
+agent = create_deep_agent(
+    model=model,
+    middleware=[planning],
+)
+`````)
+
+#tip-box[Use replacement only when you mean to change the harness behavior. For cross-cutting additions such as logging or tracing, give the middleware its own name so it appends to the stack.]
 
 
 #line(length: 100%, stroke: 0.5pt + luma(200))
