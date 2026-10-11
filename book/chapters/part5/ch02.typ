@@ -500,20 +500,21 @@ supervisor_dispatch = create_agent(
 
 #code-block(`````python
 # Deep Agents — SubAgentMiddleware 로 일괄 등록 (수동 @tool 래핑 불필요)
+from deepagents.backends import StateBackend
 from deepagents.middleware.subagents import SubAgentMiddleware
 
 supervisor_dag = create_agent(
     model="claude-sonnet-4-6",
     middleware=[
         SubAgentMiddleware(
-            default_model="claude-sonnet-4-6",
-            default_tools=[],
+            backend=StateBackend(),
             subagents=[
                 {
                     "name": "calendar",
                     "description": "캘린더 이벤트 생성/조회",
                     "system_prompt": "당신은 캘린더 어시스턴트입니다. ISO 8601 사용.",
                     "tools": [create_calendar_event, read_calendar_events],
+                    "model": "claude-sonnet-4-6",
                 },
                 {
                     "name": "email",

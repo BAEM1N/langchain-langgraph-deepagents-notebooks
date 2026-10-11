@@ -133,7 +133,7 @@ class ContextSchema:
     user_id: str | None = None
 
 def node(state: State, runtime: Runtime[ContextSchema]):
-    if runtime.execution_info.attempt > 1:
+    if runtime.execution_info.node_attempt > 1:
         # fallback on retry
         ...
     print("thread:", runtime.execution_info.thread_id)

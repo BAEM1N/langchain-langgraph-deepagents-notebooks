@@ -142,14 +142,14 @@ def fruit_info(fruit_name: str) -> str:
 fruit_subagent_per_invocation = create_agent(
     model="gpt-5.4-mini",
     tools=[fruit_info],
-    prompt="You are a fruit expert.",
+    system_prompt="You are a fruit expert.",
 )
 
 # === 2) Per-Thread (stateful) ===
 fruit_subagent_per_thread = create_agent(
     model="gpt-5.4-mini",
     tools=[fruit_info],
-    prompt="You are a fruit expert.",
+    system_prompt="You are a fruit expert.",
     checkpointer=True,  # ← 핵심
 )
 
@@ -157,7 +157,7 @@ fruit_subagent_per_thread = create_agent(
 fruit_subagent_stateless = create_agent(
     model="gpt-5.4-mini",
     tools=[fruit_info],
-    prompt="You are a fruit expert.",
+    system_prompt="You are a fruit expert.",
     checkpointer=False,  # ← interrupt 불가
 )
 
@@ -226,7 +226,7 @@ fruit_agent_isolated = create_sub_agent(
     "gpt-5.4-mini",
     name="fruit_agent",
     tools=[fruit_info],
-    prompt="You are a fruit expert.",
+    system_prompt="You are a fruit expert.",
     checkpointer=True,
 )
 
@@ -234,7 +234,7 @@ veggie_agent_isolated = create_sub_agent(
     "gpt-5.4-mini",
     name="veggie_agent",
     tools=[veggie_info],
-    prompt="You are a veggie expert.",
+    system_prompt="You are a veggie expert.",
     checkpointer=True,
 )
 

@@ -1859,7 +1859,7 @@ result = graph.<span class="fn">invoke</span>(</pre></div></div></div></div>
 <div class="s-body code-tall"><div class="code-only"><div class="code-panel">
   <div class="code-file"><span class="tab">02_graph_api.ipynb</span><span>cell 17</span></div>
   <div class="code-body"><pre>            f<span class="str">&quot;user={ctx.user_id}, provider={ctx.llm_provider}, &quot;</span>
-            f<span class="str">&quot;attempt={info.attempt} -&gt; &#x27;{state[&#x27;query&#x27;]}&#x27;&quot;</span>
+            f<span class="str">&quot;attempt={info.node_attempt} -&gt; &#x27;{state[&#x27;query&#x27;]}&#x27;&quot;</span>
         )
     }
 
@@ -5728,7 +5728,7 @@ result = pipeline.<span class="fn">invoke</span>({
 fruit_subagent_per_invocation = <span class="fn">create_agent</span>(
     model=<span class="str">&quot;gpt-5.4-mini&quot;</span>,
     tools=[fruit_info],
-    prompt=<span class="str">&quot;You are a fruit expert.&quot;</span>,
+    system_prompt=<span class="str">&quot;You are a fruit expert.&quot;</span>,
 )
 
 <span class="cmt"># === 2) Per-Thread (stateful) ===</span>
@@ -5746,7 +5746,7 @@ fruit_subagent_per_thread = <span class="fn">create_agent</span>(
 </header>
 <div class="s-body code-tall"><div class="code-only"><div class="code-panel">
   <div class="code-file"><span class="tab">09_subgraphs.ipynb</span><span>cell 18</span></div>
-  <div class="code-body"><pre>    prompt=<span class="str">&quot;You are a fruit expert.&quot;</span>,
+  <div class="code-body"><pre>    system_prompt=<span class="str">&quot;You are a fruit expert.&quot;</span>,
     checkpointer=<span class="kw">True</span>,  <span class="cmt"># ← 핵심</span>
 )
 
@@ -5754,7 +5754,7 @@ fruit_subagent_per_thread = <span class="fn">create_agent</span>(
 fruit_subagent_stateless = <span class="fn">create_agent</span>(
     model=<span class="str">&quot;gpt-5.4-mini&quot;</span>,
     tools=[fruit_info],
-    prompt=<span class="str">&quot;You are a fruit expert.&quot;</span>,
+    system_prompt=<span class="str">&quot;You are a fruit expert.&quot;</span>,
     checkpointer=<span class="kw">False</span>,  <span class="cmt"># ← interrupt 불가</span>
 )
 
@@ -5844,7 +5844,7 @@ fruit_agent_isolated = <span class="fn">create_sub_agent</span>(
     <span class="str">&quot;gpt-5.4-mini&quot;</span>,
     name=<span class="str">&quot;fruit_agent&quot;</span>,
     tools=[fruit_info],
-    prompt=<span class="str">&quot;You are a fruit expert.&quot;</span>,
+    system_prompt=<span class="str">&quot;You are a fruit expert.&quot;</span>,
     checkpointer=<span class="kw">True</span>,
 )
 
@@ -5852,7 +5852,7 @@ veggie_agent_isolated = <span class="fn">create_sub_agent</span>(
     <span class="str">&quot;gpt-5.4-mini&quot;</span>,
     name=<span class="str">&quot;veggie_agent&quot;</span>,
     tools=[veggie_info],
-    prompt=<span class="str">&quot;You are a veggie expert.&quot;</span>,
+    system_prompt=<span class="str">&quot;You are a veggie expert.&quot;</span>,
     checkpointer=<span class="kw">True</span>,
 )
 

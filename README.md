@@ -13,7 +13,7 @@
 - **English README:** [`en/README.md`](en/README.md)
 - **Korean Handbook:** [`book/agent-handbook.pdf`](book/agent-handbook.pdf)
 - **English Handbook:** [`en/book/agent-handbook-en.pdf`](en/book/agent-handbook-en.pdf)
-- **Latest release note:** [`docs/releases/v1.3.0.md`](docs/releases/v1.3.0.md)
+- **Latest release note:** [`docs/releases/v1.3.1.md`](docs/releases/v1.3.1.md)
 - **Lecture decks:** [`decks/`](decks/) — 강의용 HTML/PDF/PPTX/대본 산출물 보관 위치. PPTX는 기존 배포 형식에 맞춘 이미지 기반 발표 파일이며, 편집 가능한 원본은 [`decks/source/`](decks/source/)의 HTML/Python 소스입니다.
 
 ---

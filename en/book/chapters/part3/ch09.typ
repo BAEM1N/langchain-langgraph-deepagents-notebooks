@@ -118,12 +118,12 @@ def create_sub_agent(model, *, name, **kwargs):
 
 fruit_agent = create_sub_agent(
     "gpt-5.4-mini", name="fruit_agent",
-    tools=[fruit_info], prompt="You are a fruit expert.",
+    tools=[fruit_info], system_prompt="You are a fruit expert.",
     checkpointer=True,
 )
 veggie_agent = create_sub_agent(
     "gpt-5.4-mini", name="veggie_agent",
-    tools=[veggie_info], prompt="You are a veggie expert.",
+    tools=[veggie_info], system_prompt="You are a veggie expert.",
     checkpointer=True,
 )
 `````)

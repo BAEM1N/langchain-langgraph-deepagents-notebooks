@@ -160,8 +160,9 @@ from langsmith.run_helpers import get_current_run_tree
 
 @traceable(name="answer-with-id")
 def answer_with_id(question: str):
+    answer = answer_user(question)
     rt = get_current_run_tree()
-    return {"answer": answer_user(question), "run_id": str(rt.id)}
+    return {"answer": answer, "run_id": str(rt.id) if rt else None}
 
 reply = answer_with_id("Seoul weather?")
 print(reply)
@@ -172,8 +173,8 @@ client.create_feedback(
     key="user_thumbs",
     score=1,
     comment="User responded that it was helpful",
-)
-print("Feedback sent successfully")
+) if reply["run_id"] else print("Tracing is off; skipping feedback send.")
+print("Feedback handling complete")
 `````)
 
 == 6.05.4 Metadata-based alert rules — failure rate \\> N% -\\> webhook

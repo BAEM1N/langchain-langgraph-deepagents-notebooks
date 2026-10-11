@@ -86,7 +86,7 @@ from langchain.tools import tool, ToolRuntime
 @tool
 def log_identity(runtime: ToolRuntime) -> str:
     info = runtime.execution_info
-    return f"Thread: {info.thread_id}, Run: {info.run_id}, Attempt: {info.attempt}"
+    return f"Thread: {info.thread_id}, Run: {info.run_id}, Attempt: {info.node_attempt}"
 ```
 
 ## Server Info (LangGraph Server only)

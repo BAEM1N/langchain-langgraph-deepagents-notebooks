@@ -3424,10 +3424,8 @@ agent_with_summary = <span class="fn">create_agent</span>(
 <div class="s-body code-tall"><div class="code-only"><div class="code-panel">
   <div class="code-file"><span class="tab">06_middleware.ipynb</span><span>cell 10</span></div>
   <div class="code-body"><pre><span class="cmt"># Anthropic / Bedrock 프롬프트 캐싱 — 시스템 프롬프트가 크거나 도구가 많을 때 효과적</span>
-<span class="kw">from</span> langchain.agents.middleware <span class="kw">import</span> (
-    <span class="fn">AnthropicPromptCachingMiddleware</span>,
-    <span class="fn">BedrockPromptCachingMiddleware</span>,
-)
+<span class="kw">from</span> langchain_anthropic.middleware <span class="kw">import</span> <span class="fn">AnthropicPromptCachingMiddleware</span>
+<span class="kw">from</span> langchain_aws.middleware.prompt_caching <span class="kw">import</span> <span class="fn">BedrockPromptCachingMiddleware</span>
 
 <span class="cmt"># Anthropic 직접 호출 (claude-sonnet-4-6 등)</span>
 anthropic_cache = <span class="fn">AnthropicPromptCachingMiddleware</span>()
@@ -4119,7 +4117,7 @@ result = agent_ctx.<span class="fn">invoke</span>(
     <span class="kw">return</span> (
         f<span class="str">&quot;thread_id={info.thread_id} | &quot;</span>
         f<span class="str">&quot;run_id={info.run_id} | &quot;</span>
-        f<span class="str">&quot;attempt={info.attempt}&quot;</span>
+        f<span class="str">&quot;attempt={info.node_attempt}&quot;</span>
     )
 
 agent_exec = <span class="fn">create_agent</span>(

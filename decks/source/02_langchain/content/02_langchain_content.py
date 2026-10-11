@@ -3191,10 +3191,8 @@ SLIDES = [{'type': 'cover',
   'file': '06_middleware.ipynb',
   'note': 'cell 10',
   'code': '# Anthropic / Bedrock 프롬프트 캐싱 — 시스템 프롬프트가 크거나 도구가 많을 때 효과적\n'
-          'from langchain.agents.middleware import (\n'
-          '    AnthropicPromptCachingMiddleware,\n'
-          '    BedrockPromptCachingMiddleware,\n'
-          ')\n'
+          'from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware\n'
+          'from langchain_aws.middleware.prompt_caching import BedrockPromptCachingMiddleware\n'
           '\n'
           '# Anthropic 직접 호출 (claude-sonnet-4-6 등)\n'
           'anthropic_cache = AnthropicPromptCachingMiddleware()\n'
@@ -3793,7 +3791,7 @@ SLIDES = [{'type': 'cover',
           '    return (\n'
           '        f"thread_id={info.thread_id} | "\n'
           '        f"run_id={info.run_id} | "\n'
-          '        f"attempt={info.attempt}"\n'
+          '        f"attempt={info.node_attempt}"\n'
           '    )\n'
           '\n'
           'agent_exec = create_agent(\n'

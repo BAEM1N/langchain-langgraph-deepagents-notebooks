@@ -106,10 +106,8 @@ print("SummarizationMiddleware agent created")
 Anthropic and Bedrock both support prompt caching, with one built-in middleware per provider.
 
 #code-block(`````python
-from langchain.agents.middleware import (
-    AnthropicPromptCachingMiddleware,
-    BedrockPromptCachingMiddleware,
-)
+from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
+from langchain_aws.middleware.prompt_caching import BedrockPromptCachingMiddleware
 from langchain_anthropic import ChatAnthropic
 
 claude = ChatAnthropic(model="claude-sonnet-4-6")

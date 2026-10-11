@@ -198,7 +198,7 @@ def call_external_api(payload: dict, runtime: ToolRuntime[Context]) -> str:
     headers = {
         "X-Trace-Run": info.run_id,
         "X-Trace-Thread": info.thread_id,
-        "X-Attempt": str(info.attempt),
+        "X-Attempt": str(info.node_attempt),
     }
     return http.post(url, json=payload, headers=headers).text
 `````)

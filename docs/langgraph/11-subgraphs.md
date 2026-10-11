@@ -113,7 +113,7 @@ def fruit_info(fruit_name: str) -> str:
 fruit_agent = create_agent(
     model="gpt-5.4-mini",
     tools=[fruit_info],
-    prompt="You are a fruit expert. Use the fruit_info tool.",
+    system_prompt="You are a fruit expert. Use the fruit_info tool.",
 )
 
 @tool
@@ -143,7 +143,7 @@ Subagent retains context across calls on the same thread — conversation histor
 fruit_agent = create_agent(
     model="gpt-5.4-mini",
     tools=[fruit_info],
-    prompt="You are a fruit expert.",
+    system_prompt="You are a fruit expert.",
     checkpointer=True,
 )
 ```
@@ -187,7 +187,7 @@ fruit_agent = create_sub_agent(
     "gpt-5.4-mini",
     name="fruit_agent",
     tools=[fruit_info],
-    prompt="You are a fruit expert.",
+    system_prompt="You are a fruit expert.",
     checkpointer=True,
 )
 
@@ -195,7 +195,7 @@ veggie_agent = create_sub_agent(
     "gpt-5.4-mini",
     name="veggie_agent",
     tools=[veggie_info],
-    prompt="You are a veggie expert.",
+    system_prompt="You are a veggie expert.",
     checkpointer=True,
 )
 ```

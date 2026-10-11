@@ -1781,7 +1781,7 @@ SLIDES = [{'type': 'cover',
   'file': '02_graph_api.ipynb',
   'note': 'cell 17',
   'code': '            f"user={ctx.user_id}, provider={ctx.llm_provider}, "\n'
-          '            f"attempt={info.attempt} -> \'{state[\'query\']}\'"\n'
+          '            f"attempt={info.node_attempt} -> \'{state[\'query\']}\'"\n'
           '        )\n'
           '    }\n'
           '\n'
@@ -5076,7 +5076,7 @@ SLIDES = [{'type': 'cover',
           'fruit_subagent_per_invocation = create_agent(\n'
           '    model="gpt-5.4-mini",\n'
           '    tools=[fruit_info],\n'
-          '    prompt="You are a fruit expert.",\n'
+          '    system_prompt="You are a fruit expert.",\n'
           ')\n'
           '\n'
           '# === 2) Per-Thread (stateful) ===\n'
@@ -5090,7 +5090,7 @@ SLIDES = [{'type': 'cover',
   'lead': '이 코드는 LangChain create_agent 조립과 실행을 보여줍니다.',
   'file': '09_subgraphs.ipynb',
   'note': 'cell 18',
-  'code': '    prompt="You are a fruit expert.",\n'
+  'code': '    system_prompt="You are a fruit expert.",\n'
           '    checkpointer=True,  # ← 핵심\n'
           ')\n'
           '\n'
@@ -5098,7 +5098,7 @@ SLIDES = [{'type': 'cover',
           'fruit_subagent_stateless = create_agent(\n'
           '    model="gpt-5.4-mini",\n'
           '    tools=[fruit_info],\n'
-          '    prompt="You are a fruit expert.",\n'
+          '    system_prompt="You are a fruit expert.",\n'
           '    checkpointer=False,  # ← interrupt 불가\n'
           ')\n'
           '\n'
@@ -5175,7 +5175,7 @@ SLIDES = [{'type': 'cover',
           '    "gpt-5.4-mini",\n'
           '    name="fruit_agent",\n'
           '    tools=[fruit_info],\n'
-          '    prompt="You are a fruit expert.",\n'
+          '    system_prompt="You are a fruit expert.",\n'
           '    checkpointer=True,\n'
           ')\n'
           '\n'
@@ -5183,7 +5183,7 @@ SLIDES = [{'type': 'cover',
           '    "gpt-5.4-mini",\n'
           '    name="veggie_agent",\n'
           '    tools=[veggie_info],\n'
-          '    prompt="You are a veggie expert.",\n'
+          '    system_prompt="You are a veggie expert.",\n'
           '    checkpointer=True,\n'
           ')\n'
           '\n'

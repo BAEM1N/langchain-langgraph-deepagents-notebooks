@@ -213,7 +213,7 @@ def whoami(runtime: ToolRuntime[UserContext]) -> str:
     parts = [
         f"thread={info.thread_id}",
         f"run={info.run_id}",
-        f"attempt={info.attempt}",
+        f"attempt={info.node_attempt}",
     ]
     server = runtime.server_info
     if server is not None:

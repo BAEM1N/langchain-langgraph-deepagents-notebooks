@@ -133,10 +133,8 @@ SummarizationMiddleware 에이전트 생성 완료
 
 #code-block(`````python
 # Anthropic / Bedrock 프롬프트 캐싱 — 시스템 프롬프트가 크거나 도구가 많을 때 효과적
-from langchain.agents.middleware import (
-    AnthropicPromptCachingMiddleware,
-    BedrockPromptCachingMiddleware,
-)
+from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
+from langchain_aws.middleware.prompt_caching import BedrockPromptCachingMiddleware
 
 # Anthropic 직접 호출 (claude-sonnet-4-6 등)
 anthropic_cache = AnthropicPromptCachingMiddleware()

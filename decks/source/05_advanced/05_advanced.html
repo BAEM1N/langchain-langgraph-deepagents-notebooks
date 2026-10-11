@@ -2281,14 +2281,14 @@ supervisor_dag = <span class="fn">create_agent</span>(
     model=<span class="str">&quot;claude-sonnet-4-6&quot;</span>,
     middleware=[
         <span class="fn">SubAgentMiddleware</span>(
-            default_model=<span class="str">&quot;claude-sonnet-4-6&quot;</span>,
-            default_tools=[],
+            backend=<span class="fn">StateBackend</span>(),
             subagents=[
                 {
                     <span class="str">&quot;name&quot;</span>: <span class="str">&quot;calendar&quot;</span>,
                     <span class="str">&quot;description&quot;</span>: <span class="str">&quot;캘린더 이벤트 생성/조회&quot;</span>,
                     <span class="str">&quot;system_prompt&quot;</span>: <span class="str">&quot;당신은 캘린더 어시스턴트입니다. ISO 8601 사용.&quot;</span>,
                     <span class="str">&quot;tools&quot;</span>: [create_calendar_event, read_calendar_events],
+                    <span class="str">&quot;model&quot;</span>: <span class="str">&quot;claude-sonnet-4-6&quot;</span>,
                 },
                 {
                     <span class="str">&quot;name&quot;</span>: <span class="str">&quot;email&quot;</span>,
@@ -3050,7 +3050,7 @@ result = agent_with_state.<span class="fn">invoke</span>(
     parts = [
         f<span class="str">&quot;thread={info.thread_id}&quot;</span>,
         f<span class="str">&quot;run={info.run_id}&quot;</span>,
-        f<span class="str">&quot;attempt={info.attempt}&quot;</span>,
+        f<span class="str">&quot;attempt={info.node_attempt}&quot;</span>,
     ]
     server = runtime.server_info
     <span class="kw">if</span> server <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span>:
