@@ -1,0 +1,43 @@
+{
+  "endpoint": "https://docs.langchain.com/mcp",
+  "transport": "Streamable HTTP",
+  "authentication": "public; no credentials supplied",
+  "tools_discovered": [
+    "search_docs_by_lang_chain",
+    "query_docs_filesystem_docs_by_lang_chain",
+    "submit_feedback"
+  ],
+  "calls": [
+    {
+      "mode": "inside_context",
+      "tool": "search_docs_by_lang_chain",
+      "status": "success",
+      "text_blocks": 10,
+      "response_chars": 18178,
+      "elapsed_seconds": 0.68
+    },
+    {
+      "mode": "after_context_reconnect",
+      "tool": "search_docs_by_lang_chain",
+      "status": "success",
+      "text_blocks": 10,
+      "response_chars": 15980,
+      "elapsed_seconds": 1.5
+    }
+  ],
+  "model_api_calls": 0,
+  "side_effect_tools_called": 0,
+  "filesystem_validation": {
+    "endpoint": "https://docs.langchain.com/mcp",
+    "tool": "query_docs_filesystem_docs_by_lang_chain",
+    "path_discovery": "passed",
+    "matched_paths": 17,
+    "document_path": "/oss/deepagents/code/mcp-tools.mdx",
+    "document_read": "success",
+    "response_chars": 1953,
+    "elapsed_seconds": 1.16,
+    "credentials_supplied": false
+  },
+  "local_http_tests": 5,
+  "total_unit_tests": 50
+}
