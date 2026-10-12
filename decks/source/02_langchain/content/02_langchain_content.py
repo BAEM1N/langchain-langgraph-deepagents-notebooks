@@ -1213,15 +1213,16 @@ SLIDES = [{'type': 'cover',
   'lead': '전송 방식은 서버가 어디에서 어떻게 떠 있는지에 따라 달라집니다',
   'points': [{'h': 'stdio', 'p': '로컬 서브프로세스로 서버를 실행해 표준 입출력으로 통신합니다.'},
              {'h': 'streamable-http', 'p': '원격 서버 URL과 인증 헤더를 가진 웹 기반 연결입니다.'},
-             {'h': '인증', 'p': '정적 Bearer 헤더, 커스텀 httpx.Auth, MCP OAuth2 흐름을 상황별로 씁니다.'}],
+             {'h': '인증', 'p': '정적 Bearer 헤더, 커스텀 httpx2.Auth, MCP OAuth2 흐름을 상황별로 씁니다.'}],
   'codes': [{'file': 'stdio_config',
              'note': '로컬 서버',
              'code': 'import sys\n'
                      'stdio_config = {\n'
-                     '    "math": {\n'
-                     '        "transport": "stdio",\n'
-                     '        "command": sys.executable,\n'
-                     '        "args": ["/tmp/lc_mcp_math_server.py"],\n'
+                     '    "mcpServers": {\n'
+                     '        "math": {\n'
+                     '            "command": sys.executable,\n'
+                     '            "args": ["/tmp/lc_mcp_math_server.py"],\n'
+                     '        }\n'
                      '    }\n'
                      '}'},
             {'file': 'http_config',
@@ -5585,7 +5586,7 @@ SLIDES = [{'type': 'cover',
           'print("        tools = await adapter.list_tools()")\n'
           'print("  - target: URL, Path, FastMCP Client, ClientGroup, MCPConfig")\n'
           'print("  - MCPConfig: {\'mcpServers\': {\'name\': {\'command\': ..., \'args\': [...]}}}")\n'
-          'print("주의: 도구 호출은 adapter context 안에서 수행해 연결 수명주기를 분명히 합니다.")'},
+          'print("참고: list_tools()는 adapter context 안에서 수행하고, 반환된 도구는 client context를 보존합니다.")'},
  {'type': 'code-only',
   'course': 'AI 에이전트 개발 기초',
   'meta': 'Code / 11_mcp',
@@ -5747,7 +5748,7 @@ SLIDES = [{'type': 'cover',
   'lead': '이 코드는 MCP client/server와 LangChain 도구 연결 방식을 보여줍니다.',
   'file': '11_mcp.ipynb',
   'note': 'cell 26',
-  'code': '# Adapter context 안에서 도구 발견과 agent 호출을 함께 수행\n'
+  'code': '# Adapter context에서 도구를 발견한 뒤 agent에 전달\n'
           "stateful_example = '\\nfrom langchain.mcp import MCPAdapter\\n\\nasync def "
           'run_with_adapter_lifetime():\\n    async with MCPAdapter(stdio_config) as adapter:\\n        tools = await '
           'adapter.list_tools()\\n        agent = create_agent(model=model, tools=tools)\\n        return await '

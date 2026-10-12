@@ -99,7 +99,7 @@ _Stdio (Standard I/O)_ transport communicates with an MCP server through a local
 #code-block(`````python
 from pathlib import Path; import json, tempfile, sys
 server_path = Path(tempfile.gettempdir()) / "lc_mcp_math_server.py"
-server_path.write_text('from mcp.server.fastmcp import FastMCP\nmcp = FastMCP("math")\n@mcp.tool()\ndef add(a: int, b: int) -> int:\n    return a + b\nif __name__ == "__main__":\n    mcp.run(transport="stdio")')
+server_path.write_text('from fastmcp import FastMCP\nmcp = FastMCP("math")\n@mcp.tool()\ndef add(a: int, b: int) -> int:\n    return a + b\nif __name__ == "__main__":\n    mcp.run(transport="stdio")')
 stdio_config = {
     "mcpServers": {
         "math": {"command": sys.executable, "args": [str(server_path)]}
@@ -160,7 +160,7 @@ async with MCPAdapter(stdio_config) as adapter:
 
 === Connection lifecycle
 
-`MCPAdapter` is an async context manager. `list_tools()` manages the underlying client lifecycle, and each returned tool opens the needed session for its call. The old `client.session(...)` stateful helper is not part of the new namespace.
+`MCPAdapter` is an async context manager. Call `list_tools()` inside the adapter context; returned tools retain client context and can reconnect when invoked after the adapter block exits. The old `client.session(...)` stateful helper is not part of the new namespace. Keep discovery and invocation together when that makes a teaching cell easier to read, or when one live server session's state or concurrency policy is part of the example.
 
 #code-block(`````python
 async with MCPAdapter(stdio_config) as adapter:
@@ -190,7 +190,7 @@ print("\nUsage pattern: async with MCPAdapter(multi_server_config) as adapter ->
 
 == 11.8 MCP Authentication
 
-Remote MCP servers authenticate through the underlying FastMCP client. Static config is fine for unauthenticated examples; bearer tokens, OAuth, and custom `httpx.Auth` belong on a `fastmcp.Client` that you pass to `MCPAdapter`.
+Remote MCP servers authenticate through the underlying FastMCP client. Static config is fine for unauthenticated examples; bearer tokens, OAuth, and custom FastMCP-compatible `httpx2.Auth` objects belong on a `fastmcp.Client` that you pass to `MCPAdapter`. Treat older plain-`httpx.Auth` snippets as migration material, not as the current contract.
 
 === Track A — Static headers
 

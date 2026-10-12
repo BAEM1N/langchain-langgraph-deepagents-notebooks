@@ -76,7 +76,7 @@ print("  - async with MCPAdapter(target) as adapter:")
 print("        tools = await adapter.list_tools()")
 print("  - target: URL, Path, FastMCP Client, ClientGroup, MCPConfig")
 print("  - MCPConfig: {'mcpServers': {'name': {'command': ..., 'args': [...]}}}")
-print("주의: 도구 호출은 adapter context 안에서 수행해 연결 수명주기를 분명히 합니다.")
+print("참고: list_tools()는 adapter context 안에서 수행하고, 반환된 도구는 client context를 보존합니다.")
 `````)
 
 == 11.4 Stdio 전송
@@ -155,7 +155,7 @@ print("\n사용 패턴: async with MCPAdapter(http_config) -> await adapter.list
   [서버별 인증을 유지한 채 하나의 adapter target으로 넘깁니다],
 )
 
-실제 연결과 도구 호출은 아래처럼 `async with MCPAdapter(client_or_group)` 블록 안에서 수행합니다.
+도구 discovery는 `async with MCPAdapter(client_or_group)` 블록에서 수행합니다. 반환된 LangChain 도구는 client context를 보존하므로 블록 밖 agent에도 전달할 수 있습니다.
 
 #code-block(`````python
 # FastMCP Client / ClientGroup 기반 인증 구성 예시(객체 생성만 수행)
@@ -258,12 +258,12 @@ def guard_mcp_tool(request, handler):
 print(middleware_note)
 `````)
 
-== 11.9b 도구 수명주기 — adapter context 안에서 실행
+== 11.9b 도구 수명주기 — discovery와 호출 범위
 
-이전 adapter 패키지의 세션 바인딩 헬퍼는 새 `langchain.mcp`의 직접 대응 API가 아닙니다. 교육 예제에서는 `async with MCPAdapter(...)` 블록 안에서 도구 목록을 만들고 에이전트 호출까지 끝내 연결 수명주기를 명확히 합니다.
+이전 adapter 패키지의 세션 바인딩 헬퍼는 새 `langchain.mcp`의 직접 대응 API가 아닙니다. `list_tools()`는 `async with MCPAdapter(...)` 블록 안에서 호출하고, 반환된 도구는 client context를 보존해 블록 밖에서도 다시 연결해 호출할 수 있습니다. 실습에서는 한 번의 discovery와 agent 호출을 같은 함수 안에 두면 흐름을 읽기 쉽고, 같은 서버 세션 상태나 동시 호출 정책이 중요한 경우에는 scope를 명시적으로 관리합니다.
 
 #code-block(`````python
-# Adapter context 안에서 도구 발견과 agent 호출을 함께 수행
+# Adapter context에서 도구를 발견한 뒤 agent에 전달
 stateful_example = '''
 from langchain.mcp import MCPAdapter
 async def run_with_adapter_lifetime():
@@ -308,7 +308,7 @@ _FastMCP_ 라이브러리를 쓰면 데코레이터로 간편하게 MCP 서버�
   [_미들웨어_],
   [도구 호출 로깅·정책은 `\@wrap_tool_call` 같은 LangChain middleware로 적용합니다],
   [_수명주기_],
-  [도구 발견과 agent 호출은 adapter context 안에서 함께 실행합니다],
+  [`list_tools()`는 adapter context 안에서 호출하고, 반환된 도구는 client context를 보존합니다],
 )
 
 

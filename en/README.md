@@ -155,16 +155,19 @@ The latest ecosystem update research is in [`../docs/verification/2026-10-11-upd
 |---|---|---|
 | `python` | `>=3.12` | Notebook runtime |
 | `uv` | lockfile-based | Dependency management |
-| `langchain` | 1.4.4 update target | agents, tools, middleware, streaming, MCPAdapter |
-| `langchain-core` | 1.6.9 update target | message/tool/model core abstractions |
-| `langgraph` | 1.2.14 update target | state graphs, persistence, interrupts, trace policy |
-| `deepagents` | 0.7.23 update target | Deep Agents SDK, backends, subagents, skills |
+| `langchain` | 1.4.4 locked | agents, tools, middleware, streaming, MCPAdapter |
+| `langchain-core` | 1.6.9 locked | message/tool/model core abstractions |
+| `langgraph` | 1.2.14 locked | state graphs, persistence, interrupts, trace policy |
+| `deepagents` | 0.7.23 locked | Deep Agents SDK, backends, subagents, skills |
 | `agentevals` | `>=0.0.9` | trajectory matching and LLM-as-judge evals |
-| `langsmith` | 0.14.7 update target | tracing, datasets, experiments, SmithDB-backed run queries |
-| `langchain-openai` | 1.7.0 update target | OpenAI model integration |
-| `pymupdf4llm` | `>=1.27.2.3` | multimodal PDF RAG preprocessing |
+| `langsmith` | 0.14.7 locked | tracing, datasets, experiments, SmithDB-backed run queries |
+| `langchain-openai` | 1.7.0 locked | OpenAI model integration |
+| `mcp` | `2.3.0` | MCP v2 protocol SDK |
+| `fastmcp` | `4.1.0` | MCP clients and servers |
+| `langfuse` | `4.17.0` | optional observability |
+| `pymupdf4llm` | `1.28.2` | multimodal PDF RAG preprocessing |
 
-Dependencies are managed through [`../pyproject.toml`](../pyproject.toml) and `uv.lock`; compare them with the update research before changing notebook code.
+Dependencies are managed through [`../pyproject.toml`](../pyproject.toml) and `uv.lock`; see the [current version and MCP audit](../docs/verification/2026-10-12-version-mcp-update.md) before changing notebook code.
 
 ---
 

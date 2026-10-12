@@ -45,10 +45,6 @@ def changed_paths():
 
 def migration_errors(tree) -> Iterator[str]:
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith(
-            "langchain_mcp_adapters"
-        ):
-            yield "active import uses the retired MCP adapter package"
         if isinstance(node, ast.Call):
             named_keywords = [
                 keyword.arg for keyword in node.keywords if keyword.arg is not None
@@ -74,6 +70,33 @@ def migration_errors(tree) -> Iterator[str]:
                     yield "pinned_skills belongs in run input state, not the constructor"
 
 
+def mcp_source_errors(source: str) -> list[str]:
+    """Inspect partial snippets and embedded server programs as well as imports."""
+    if "# historical MCP migration reference" in source:
+        return []
+    errors = []
+    retired_imports = (
+        (
+            r"\b(?:from|import)\s+langchain_mcp_adapters(?:\b|\.)",
+            "retired standalone MCP adapter import",
+        ),
+        (
+            r"\b(?:from|import)\s+mcp\.server\.fastmcp(?:\b|\.)",
+            "MCP v1 FastMCP import; use the fastmcp package",
+        ),
+    )
+    for pattern, message in retired_imports:
+        if re.search(pattern, source):
+            errors.append(message)
+    if (
+        re.search(r"class\s+\w+\s*\([^)]*httpx\.Auth", source)
+        and re.search(r"FastMCP|fastmcp|MCPAdapter", source)
+        and not re.search(r"import\s+httpx2\s+as\s+httpx", source)
+    ):
+        errors.append("FastMCP custom auth must use httpx2.Auth")
+    return errors
+
+
 def book_contract_errors(transformer):
     failures = {}
     for base in [ROOT / "book/chapters", ROOT / "en/book/chapters"]:
@@ -82,6 +105,11 @@ def book_contract_errors(transformer):
                 r"#code-block\(\s*(`{3,})python\n(.*?)\1", path.read_text(), re.DOTALL
             )
             for index, match in enumerate(blocks):
+                mcp_errors = mcp_source_errors(match[2])
+                if mcp_errors:
+                    failures.setdefault(str(path.relative_to(ROOT)), []).extend(
+                        f"block {index}: {error}" for error in mcp_errors
+                    )
                 try:
                     tree = compile(
                         transformer.transform_cell(match[2]),
@@ -153,6 +181,11 @@ def deck_contract_errors(transformer):
             source = slide.get("code", "")
             if not isinstance(source, str) or not source.strip():
                 continue
+            mcp_errors = mcp_source_errors(source)
+            if mcp_errors:
+                failures.setdefault(str(path.relative_to(ROOT)), []).extend(
+                    f"slide {index}: {error}" for error in mcp_errors
+                )
             try:
                 tree = compile(
                     transformer.transform_cell(source),
@@ -203,6 +236,9 @@ def check_notebook(path, enforce_contracts, transformer):
         source = "".join(cell.get("source", []))
         if not source.strip():
             continue
+        errors.extend(
+            f"cell {index}: {message}" for message in mcp_source_errors(source)
+        )
         try:
             python = transformer.transform_cell(source)
             compile(python, str(path), "exec", ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
@@ -222,6 +258,23 @@ def check_notebook(path, enforce_contracts, transformer):
     return errors
 
 
+def mcp_reference_errors():
+    failures = {}
+    for path in (ROOT / "docs").rglob("*.md"):
+        if {"verification", "releases"} & set(path.relative_to(ROOT / "docs").parts):
+            continue  # Published research and release snapshots keep their historical facts.
+        source = path.read_text()
+        for index, match in enumerate(
+            re.finditer(r"```python\s*\n(.*?)```", source, re.DOTALL)
+        ):
+            errors = mcp_source_errors(match[1])
+            if errors:
+                failures.setdefault(str(path.relative_to(ROOT)), []).extend(
+                    f"Python block {index}: {message}" for message in errors
+                )
+    return failures
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--changed-only", action="store_true")
@@ -235,7 +288,7 @@ def main():
     failures = {}
     for path in paths:
         try:
-            errors = check_notebook(path, path in changed, transformer)
+            errors = check_notebook(path, True, transformer)
         except (ValueError, KeyError, TypeError) as error:
             errors = [str(error)]
         if errors:
@@ -258,6 +311,7 @@ def main():
     book_errors = book_contract_errors(transformer)
     section_errors = migration_section_parity()
     deck_errors = deck_contract_errors(transformer)
+    reference_errors = mcp_reference_errors()
     report = {
         "checked": len(paths),
         "changed": len(changed),
@@ -266,13 +320,21 @@ def main():
         "book_contract_errors": book_errors,
         "migration_section_errors": section_errors,
         "deck_contract_errors": deck_errors,
+        "mcp_reference_errors": reference_errors,
     }
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return int(
-        bool(failures or parity_errors or book_errors or section_errors or deck_errors)
+        bool(
+            failures
+            or parity_errors
+            or book_errors
+            or section_errors
+            or deck_errors
+            or reference_errors
+        )
     )
 
 

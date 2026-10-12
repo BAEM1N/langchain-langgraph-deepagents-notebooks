@@ -13,7 +13,7 @@
 - **English README:** [`en/README.md`](en/README.md)
 - **Korean Handbook:** [`book/agent-handbook.pdf`](book/agent-handbook.pdf)
 - **English Handbook:** [`en/book/agent-handbook-en.pdf`](en/book/agent-handbook-en.pdf)
-- **Latest release note:** [`docs/releases/v1.3.1.md`](docs/releases/v1.3.1.md)
+- **Latest release note:** [`docs/releases/v1.3.2.md`](docs/releases/v1.3.2.md)
 - **Lecture decks:** [`decks/`](decks/) — 강의용 HTML/PDF/PPTX/대본 산출물 보관 위치. PPTX는 기존 배포 형식에 맞춘 이미지 기반 발표 파일이며, 편집 가능한 원본은 [`decks/source/`](decks/source/)의 HTML/Python 소스입니다.
 
 ---
@@ -271,7 +271,7 @@ UV_NO_SYNC=1 uv run python local/notebook_execution_01_07_gpt41/run_notebooks.py
 | Data/RAG | FAISS, vector stores, retrievers, document loaders, text splitters |
 | Evaluation | LangSmith evaluation, `agentevals`, notebook smoke harness |
 
-현재 업데이트 조사 기준은 LangChain 1.4.4, LangGraph 1.2.14, Deep Agents 0.7.23, LangSmith 0.14.7입니다. 실제 설치 버전은 [`pyproject.toml`](pyproject.toml)과 [`uv.lock`](uv.lock)을 기준으로 확인하고, 최신 갭은 [`docs/verification/2026-10-11-update-research.md`](docs/verification/2026-10-11-update-research.md)를 함께 봅니다.
+현재 검증 대상은 LangChain 1.4.4, LangGraph 1.2.14, Deep Agents 0.7.23, LangSmith 0.14.7, MCP 2.3.0, FastMCP 4.1.0입니다. Langfuse는 4.17.0을 사용합니다. 전체 의존성의 최소 버전은 [`pyproject.toml`](pyproject.toml), 재현 가능한 설치 버전은 [`uv.lock`](uv.lock)을 기준으로 합니다. 전체 버전 및 MCP 점검은 [`docs/verification/2026-10-12-version-mcp-update.md`](docs/verification/2026-10-12-version-mcp-update.md)에 기록합니다.
 
 ---
 

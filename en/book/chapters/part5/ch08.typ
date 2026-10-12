@@ -150,7 +150,7 @@ Compare two approaches to building voice agents.
 
 #tip-box[_This cell requires an AssemblyAI API key._ Reference code to understand the concept.]
 
-AssemblyAI's `RealtimeTranscriber` operates with the _Producer-Consumer pattern_:
+AssemblyAI 1.x `RealTimeTranscriber` operates with the _Producer-Consumer pattern_:
 
 - _Producer_: Send audio chunks captured from the microphone to WebSocket
 - _Consumer_: Receives partial and final transcription results as a callback.
@@ -169,35 +169,39 @@ Since both operations take place _simultaneously_, you can receive a transcripti
   text(weight: "bold")[class],
   text(weight: "bold")[Description],
   [_Partial_],
-  [`RealtimeTranscript`],
+  [`TurnEvent(end_of_turn=False)`],
   [Temporary transcription of words still being uttered. Updated in real-time as the user speaks],
   [_Final_],
-  [`RealtimeFinalTranscript`],
+  [`TurnEvent(end_of_turn=True)`],
   [Confirmation transcription after the end of utterance (endpointing) is detected. Pass only this result to the agent],
 )
 
 AssemblyAI's built-in Voice Activity Detection (VAD) automatically detects when an utterance has ended, eliminating the need for separate silence detection logic.
 
 #code-block(`````python
-import assemblyai as aai
-
-aai.settings.api_key = "your-assemblyai-key"
-
-transcriber = aai.RealtimeTranscriber(
-    sample_rate=16000,
-    encoding=aai.AudioEncoding.pcm_s16le,
-    on_data=on_transcription_data,
-    on_error=on_transcription_error,
+from assemblyai.streaming.v3 import (
+    Encoding,
+    RealTimeError,
+    RealTimeEvents,
+    RealTimeTranscriber,
+    StreamingParameters,
+    TurnEvent,
 )
 
-def on_transcription_data(transcript: aai.RealtimeTranscript):
-    if isinstance(transcript, aai.RealtimeFinalTranscript):
-        process_user_input(transcript.text)
+transcriber = RealTimeTranscriber(api_key="your-assemblyai-key")
 
-def on_transcription_error(error: aai.RealtimeError):
+def on_turn(client: RealTimeTranscriber, event: TurnEvent) -> None:
+    if event.end_of_turn and event.transcript:
+        process_user_input(event.transcript)
+
+def on_error(client: RealTimeTranscriber, error: RealTimeError) -> None:
     print(f"Transcription error: {error}")
 
-transcriber.connect()
+transcriber.on(RealTimeEvents.Turn, on_turn)
+transcriber.on(RealTimeEvents.Error, on_error)
+transcriber.connect(
+    StreamingParameters(sample_rate=16000, encoding=Encoding.pcm_s16le)
+)
 `````)
 
 === Capturing Microphone Audio
@@ -339,22 +343,29 @@ cartesia_client = cartesia.AsyncCartesia(
 )
 
 async def text_to_speech_stream(text_stream):
-    ws = await cartesia_client.tts.websocket()
-    async for text_chunk in text_stream:
-        audio_chunks = ws.send(
+    async with cartesia_client.tts.websocket_connect() as ws:
+        ctx = ws.context(
             model_id="sonic-2",
-            transcript=text_chunk,
-            voice_id="your-voice-id",
-            stream=True,
+            voice={"id": "your-voice-id"},
             output_format={
                 "container": "raw",
                 "encoding": "pcm_s16le",
                 "sample_rate": 24000,
             },
         )
-        async for audio in audio_chunks:
-            yield audio["audio"]
-    await ws.close()
+
+        async def send_text():
+            async for text_chunk in text_stream:
+                await ctx.push(text_chunk)
+            await ctx.no_more_inputs()
+
+        send_task = asyncio.create_task(send_text())
+        try:
+            async for event in ctx.receive():
+                if event.type == "chunk":
+                    yield event.audio
+        finally:
+            await send_task
 `````)
 
 == 8.7 Pipeline Combination -- RunnableGenerator
@@ -388,14 +399,15 @@ Use `asyncio.Queue` to pass the final STT transcript to the agent and forward th
 async def voice_pipeline(audio_input_stream):
     transcript_queue = asyncio.Queue()
 
-    def on_final(transcript):
-        if isinstance(transcript, aai.RealtimeFinalTranscript):
-            transcript_queue.put_nowait(transcript.text)
+    def on_turn(client, event):
+        if event.end_of_turn and event.transcript:
+            transcript_queue.put_nowait(event.transcript)
 
-    transcriber = aai.RealtimeTranscriber(
-        sample_rate=16000, on_data=on_final
+    transcriber = RealTimeTranscriber(api_key="your-assemblyai-key")
+    transcriber.on(RealTimeEvents.Turn, on_turn)
+    transcriber.connect(
+        StreamingParameters(sample_rate=16000, encoding=Encoding.pcm_s16le)
     )
-    transcriber.connect()
 
     async for audio_chunk in audio_input_stream:
         transcriber.stream(audio_chunk)
@@ -490,7 +502,7 @@ A key performance metric for voice agents is Time to First Audio (TTFA). For a n
   text(weight: "bold")[Implementation method],
   [Streaming STT],
   [Eliminate full transcription wait],
-  [`RealtimeTranscriber` + partial result],
+  [`RealTimeTranscriber` + `TurnEvent`],
   [Streaming Agent],
   [Start TTS before completing all responses],
   [Use `astream()` — instead of `ainvoke()`],
@@ -559,7 +571,7 @@ voice_agent = create_agent(
   [_Sandwich Architecture_],
   [STT -\\\> Agent -\\\> TTS, each layer can be replaced independently, supports tool calling],
   [_STT (AssemblyAI)_],
-  [`RealtimeTranscriber`, Producer-Consumer pattern, WebSocket streaming],
+  [`RealTimeTranscriber`, `TurnEvent`, Producer-Consumer pattern, WebSocket streaming],
   [_Agent (LangChain)_],
   [`create_agent` + `astream()`, token-level streaming, tool integration],
   [_TTS (Cartesia)_],

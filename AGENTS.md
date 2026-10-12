@@ -82,14 +82,16 @@ lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
 
 | 패키지 | 버전 | 용도 |
 |--------|------|------|
-| `deepagents` | 0.7.23 조사 기준 | Deep Agents SDK |
-| `langchain` | 1.4.4 조사 기준 | LangChain 프레임워크 |
-| `langgraph` | 1.2.14 조사 기준 | LangGraph 오케스트레이션 |
-| `langchain-openai` | 1.7.0 조사 기준 | OpenAI 통합 |
-| `langchain-community` | latest | 커뮤니티 통합 |
-| `tavily-python` | latest | 웹 검색 도구 |
-| `langfuse` | >=2.0 | Observability (선택) |
-| `langsmith` | 0.14.7 조사 기준 | Observability (선택) |
+| `deepagents` | 0.7.23 lock/검증 기준 | Deep Agents SDK |
+| `langchain` | 1.4.4 lock/검증 기준 | LangChain 프레임워크 |
+| `langgraph` | 1.2.14 lock/검증 기준 | LangGraph 오케스트레이션 |
+| `langchain-openai` | 1.7.0 lock/검증 기준 | OpenAI 통합 |
+| `langchain-community` | 0.4.2 | 커뮤니티 통합 |
+| `tavily-python` | 0.8.5 | 웹 검색 도구 |
+| `langfuse` | 4.17.0 | Observability (선택) |
+| `mcp` | 2.3.0 | MCP v2 SDK |
+| `fastmcp` | 4.1.0 | MCP client/server |
+| `langsmith` | 0.14.7 lock/검증 기준 | Observability (선택) |
 
 **Python**: >=3.12 | **패키지 관리**: uv
 
@@ -131,6 +133,11 @@ lf_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
 7. **한국어 설명, 영어 코드**: 주석과 마크다운은 한국어, 변수명과 함수명은 영어
 
 ### 최신성 주의
+
+- 현재 의존성 버전은 `uv.lock`과 `docs/verification/2026-10-12-version-mcp-update.md`가 기준이다. 과거 verification/release 기록의 버전은 당시 사실로 보존한다.
+- MCP 도구는 어댑터 문맥 종료 후에도 클라이언트를 유지해 재연결할 수 있다. 세션 상태 유지가 필요할 때는 문맥 범위를 명시한다.
+- Python MCP 서버는 `from fastmcp import FastMCP`, custom auth는 `httpx2.Auth`를 사용한다.
+- 음성 예제는 AssemblyAI 1.6.1 및 Cartesia 4.2.0 API를 기준으로 한다. `websockets<16`은 OpenAI/Cartesia realtime extras의 호환 제약이다.
 
 - Deep Agents 0.7 기준 계획 도구는 기본 내장이 아니라 `TodoListMiddleware`를 명시해 구성한다.
 - Deep Agents backend는 `BackendProtocol` 인스턴스를 전달한다. `StoreBackend`는 keyword-only `namespace=`가 필요하며, `namespace=lambda rt: ...` factory는 여전히 유효하다.

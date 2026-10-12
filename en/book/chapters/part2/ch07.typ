@@ -253,8 +253,10 @@ _MCP_ is a standardized way to connect tool servers.
 - _Standardization_: any tool can be connected as long as it follows the MCP protocol
 
 === MCP support in LangChain v1
-- You can connect to a local MCP server with `mcp.client.stdio.stdio_client()` and `ClientSession`
-- `load_mcp_tools(session)` from `langchain-mcp-adapters` converts MCP session tools into LangChain tools
+- New examples use the beta `langchain.mcp.MCPAdapter` API
+- Configure servers with `MCPConfig` under `mcpServers`, then call `await adapter.list_tools()`
+- Returned tools can be passed directly to `create_agent(tools=...)`
+- Keep `ClientSession` and `load_mcp_tools()` only in explicitly labeled migration comparisons
 
 
 == 7.8 Summary
@@ -279,7 +281,7 @@ _MCP_ is a standardized way to connect tool servers.
   [`dynamic_prompt` middleware],
   [_MCP_],
   [Standardized tool protocol],
-  [`ClientSession + load_mcp_tools()`],
+  [`MCPAdapter + list_tools()`],
 )
 
 === Next Steps

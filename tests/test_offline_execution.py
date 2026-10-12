@@ -13,10 +13,39 @@ from scripts.execute_notebooks_offline import (
     clear_outputs,
     defined_names,
     main,
+    static_skip_reason,
 )
 
 
 class OfflineEvidenceTests(unittest.TestCase):
+    def test_local_function_named_input_is_not_interactive(self):
+        self.assertIsNone(
+            static_skip_reason(
+                'def test_empty_input():\n    assert "".upper() == ""\ntest_empty_input()'
+            )
+        )
+        self.assertIsNotNone(static_skip_reason('answer = input("Name: ")'))
+
+    def test_disabled_langfuse_client_is_distinct_from_removed_methods(self):
+        result = classify_error(
+            "client.create_dataset(name='example')",
+            "AttributeError",
+            "Langfuse client is not initialized",
+            "langfuse/_client.py",
+            set(),
+        )
+        assert result is not None
+        self.assertEqual(result[0], "external_api")
+        self.assertIsNone(
+            classify_error(
+                "client.removed_method()",
+                "AttributeError",
+                "client has no attribute 'removed_method'",
+                "langfuse/_client.py",
+                set(),
+            )
+        )
+
     def test_credential_name_in_source_does_not_hide_type_error(self):
         source = 'assert os.getenv("OPENAI_API_KEY")\ncreate_agent(prompt="bad")'
         self.assertIsNone(

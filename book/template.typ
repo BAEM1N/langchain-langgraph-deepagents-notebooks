@@ -4,7 +4,7 @@
 // ─── Page Setup ───────────────────────────────────────────────
 #let book-setup(body) = {
   set document(
-    title: book-full-title,
+    title: book-full-title + " v" + book-version,
     author: book-author,
   )
 

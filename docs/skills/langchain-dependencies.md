@@ -4,7 +4,7 @@
 
 ## 요구사항
 
-- Python 3.10+
+- 이 저장소는 Python 3.12+
 - Node.js 20+ (TypeScript 사용 시)
 
 ## 핵심 패키지
@@ -20,7 +20,12 @@
 | `langchain-anthropic` | Anthropic 통합 | 최신 | 전용 패키지 권장 |
 | `langchain-google-genai` | Google 통합 | 4.4.1+ | Gemini + Vertex AI 단일 SDK, thinking 설정 |
 | `langchain-community` | 커뮤니티 통합 | 0.4.2,<0.5 | 보수적 minor 고정 |
-| `pymupdf4llm` | PDF Markdown 추출 | 1.27.2.3+ | 슬라이드/논문 PDF 이미지·표 추출 |
+| `mcp` | MCP v2 프로토콜 | 2.3.0,<3 | FastMCP 4 기반 계약 |
+| `fastmcp` | MCP client/server | 4.1.0,<5 | 도구는 문맥 종료 후 재연결 가능 |
+| `langfuse` | 선택적 관측성 | 4.17.0,<5 | LangChain callback 통합 |
+| `assemblyai` | 음성 스트리밍 | 1.6.1,<2 | versioned RealTimeTranscriber |
+| `cartesia` | 음성 합성 | 4.2.0,<5 | websocket_connect/context 흐름 |
+| `pymupdf4llm` | PDF Markdown 추출 | 1.28.2+ | 슬라이드/논문 PDF 이미지·표 추출 |
 
 ### 선택적 샌드박스 (deepagents 0.4+)
 
@@ -51,10 +56,12 @@ uv add langchain-core langchain langgraph deepagents langchain-openai langchain-
 uv add pymupdf4llm
 
 # pip
-pip install "langchain-core>=1.6.9" "langchain[mcp]>=1.4.4" "langgraph>=1.2.14" "deepagents>=0.7.23" "langsmith>=0.14.7" "pymupdf4llm>=1.27.2.3"
+pip install "langchain-core>=1.6.9" "langchain[mcp]>=1.4.4" "langgraph>=1.2.14" "deepagents>=0.7.23" "langsmith>=0.14.7" "pymupdf4llm>=1.28.2" "mcp>=2.3.0,<3" "fastmcp>=4.1.0,<5"
 ```
 
 ## 버전 관리 원칙
+
+전체 설치는 `uv sync --all-extras`와 저장소 `uv.lock`을 기준으로 재현한다. `websockets>=15.0.1,<16`은 OpenAI realtime / Cartesia websocket extras의 실제 호환 제약이다. 최신 전체 버전과 호환 가능한 버전을 구분한다.
 
 1. **LangChain 1.4.4+ / LangGraph 1.2.14+ / DeepAgents 0.7.23+ 사용** — MCPAdapter, response schema, backend 0.7 계약, skill tool disclosure 예제 기준
 2. **전용 통합 패키지 우선** — `langchain-openai` > `langchain-community`의 OpenAI

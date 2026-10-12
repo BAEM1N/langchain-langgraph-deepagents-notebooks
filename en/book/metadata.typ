@@ -1,4 +1,5 @@
 // Book metadata constants
+#let book-version = "1.3.2"
 #let book-title = "Agent Handbook"
 #let book-subtitle = "with LangChain, LangGraph & Deep Agents"
 #let book-full-title = "Agent Handbook with LangChain, LangGraph & Deep Agents"

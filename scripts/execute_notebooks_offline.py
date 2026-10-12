@@ -122,7 +122,7 @@ OPTIONAL_MODULES = {
 }
 
 INTERACTIVE_OR_SERVER_PATTERN = re.compile(
-    r"(input\(|getpass\.|uvicorn|app\.run\(|\.serve\(|websockets\.serve|"
+    r"((?<![\w.])input\s*\(|getpass\.getpass\s*\(|uvicorn|app\.run\(|\.serve\(|websockets\.serve|"
     r"while\s+True:|KeyboardInterrupt)"
 )
 NAME_ERROR_PATTERN = re.compile(r"name ['\"]([^'\"]+)['\"] is not defined")
@@ -602,6 +602,8 @@ def classify_error(
         )
     ):
         return "external_api", "provider credential is intentionally absent"
+    if ename == "AttributeError" and evalue == "Langfuse client is not initialized":
+        return "external_api", "Langfuse credentials are intentionally absent offline"
     if re.search(r"FileNotFoundError", evidence) and re.search(
         r"local/content_builder|post\.md", evidence
     ):

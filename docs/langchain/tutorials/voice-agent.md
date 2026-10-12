@@ -38,30 +38,33 @@ export CARTESIA_API_KEY="your-cartesia-key"
 
 ## Step 1: Speech-to-Text with AssemblyAI
 
-AssemblyAI provides real-time transcription via WebSocket. Configure it to stream partial transcripts and emit final results.
+AssemblyAI provides real-time transcription via WebSocket. In the 1.x streaming API, register handlers for `TurnEvent` and pass only end-of-turn transcripts to the agent.
 
 ```python
-import assemblyai as aai
-
-aai.settings.api_key = "your-assemblyai-key"
-
-transcriber = aai.RealtimeTranscriber(
-    sample_rate=16000,
-    encoding=aai.AudioEncoding.pcm_s16le,
-    on_data=on_transcription_data,
-    on_error=on_transcription_error,
+from assemblyai.streaming.v3 import (
+    Encoding,
+    RealTimeError,
+    RealTimeEvents,
+    RealTimeTranscriber,
+    StreamingParameters,
+    TurnEvent,
 )
 
-def on_transcription_data(transcript: aai.RealtimeTranscript):
-    if isinstance(transcript, aai.RealtimeFinalTranscript):
-        # Final transcript -- send to agent
-        process_user_input(transcript.text)
+transcriber = RealTimeTranscriber(api_key="your-assemblyai-key")
 
-def on_transcription_error(error: aai.RealtimeError):
+def on_turn(client: RealTimeTranscriber, event: TurnEvent) -> None:
+    if event.end_of_turn and event.transcript:
+        # End-of-turn transcript -- send to agent
+        process_user_input(event.transcript)
+
+def on_error(client: RealTimeTranscriber, error: RealTimeError) -> None:
     print(f"Transcription error: {error}")
 
-# Connect and start streaming audio
-transcriber.connect()
+transcriber.on(RealTimeEvents.Turn, on_turn)
+transcriber.on(RealTimeEvents.Error, on_error)
+transcriber.connect(
+    StreamingParameters(sample_rate=16000, encoding=Encoding.pcm_s16le)
+)
 ```
 
 ### Streaming Audio from Microphone
@@ -144,24 +147,29 @@ cartesia_client = cartesia.AsyncCartesia(api_key="your-cartesia-key")
 
 async def text_to_speech_stream(text_stream):
     """Convert a stream of text chunks into audio using Cartesia."""
-    ws = await cartesia_client.tts.websocket()
-
-    async for text_chunk in text_stream:
-        audio_chunks = ws.send(
+    async with cartesia_client.tts.websocket_connect() as ws:
+        ctx = ws.context(
             model_id="sonic-2",
-            transcript=text_chunk,
-            voice_id="your-voice-id",
-            stream=True,
+            voice={"id": "your-voice-id"},
             output_format={
                 "container": "raw",
                 "encoding": "pcm_s16le",
                 "sample_rate": 24000,
             },
         )
-        async for audio in audio_chunks:
-            yield audio["audio"]  # Raw PCM bytes
 
-    await ws.close()
+        async def send_text():
+            async for text_chunk in text_stream:
+                await ctx.push(text_chunk)
+            await ctx.no_more_inputs()
+
+        send_task = asyncio.create_task(send_text())
+        try:
+            async for event in ctx.receive():
+                if event.type == "chunk":
+                    yield event.audio  # Raw PCM bytes
+        finally:
+            await send_task
 ```
 
 ## Step 4: WebSocket Server for Real-Time Communication
@@ -206,8 +214,13 @@ asyncio.run(main())
 
 ```python
 import asyncio
-import assemblyai as aai
 import cartesia
+from assemblyai.streaming.v3 import (
+    Encoding,
+    RealTimeEvents,
+    RealTimeTranscriber,
+    StreamingParameters,
+)
 from langchain.agents import create_agent
 
 # Initialize components
@@ -224,15 +237,15 @@ async def voice_pipeline(audio_input_stream):
     transcript_queue = asyncio.Queue()
 
     # STT: Audio -> Text
-    def on_final_transcript(transcript):
-        if isinstance(transcript, aai.RealtimeFinalTranscript):
-            transcript_queue.put_nowait(transcript.text)
+    def on_turn(client, event):
+        if event.end_of_turn and event.transcript:
+            transcript_queue.put_nowait(event.transcript)
 
-    transcriber = aai.RealtimeTranscriber(
-        sample_rate=16000,
-        on_data=on_final_transcript,
+    transcriber = RealTimeTranscriber(api_key="your-assemblyai-key")
+    transcriber.on(RealTimeEvents.Turn, on_turn)
+    transcriber.connect(
+        StreamingParameters(sample_rate=16000, encoding=Encoding.pcm_s16le)
     )
-    transcriber.connect()
 
     # Process audio input
     async for audio_chunk in audio_input_stream:
@@ -255,7 +268,7 @@ async def voice_pipeline(audio_input_stream):
 
 | Technique | Impact | Implementation |
 |-----------|--------|----------------|
-| Streaming STT | Reduces wait for full transcription | Use `RealtimeTranscriber` with partial results |
+| Streaming STT | Reduces wait for full transcription | Use `RealTimeTranscriber` with `TurnEvent` |
 | Streaming agent output | Enables TTS to start before full response | Use `astream()` instead of `ainvoke()` |
 | Streaming TTS | Reduces time to first audio | Use WebSocket-based synthesis |
 | Connection pooling | Eliminates connection setup latency | Reuse WebSocket connections across requests |

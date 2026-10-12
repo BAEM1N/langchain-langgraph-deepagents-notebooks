@@ -313,7 +313,7 @@ class AsyncContracts(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(resumed["messages"][-1].content, "done")
 
-    async def test_mcp_calls_stay_inside_adapter_lifetime(self):
+    async def test_mcp_discovery_and_in_context_tool_call(self):
         server = FastMCP("course-test")
 
         @server.tool

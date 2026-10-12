@@ -21,6 +21,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from html import escape
 from pathlib import Path
 
@@ -35,6 +36,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE = Path(__file__).resolve().parent
 RENDER = ROOT / ".local" / "deck_source_render"
 DECKS = ROOT / "decks"
+PROJECT_VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
 
 TRACKS = [
     "01_beginner",
@@ -78,6 +80,11 @@ def render_slide_pdf(page, track: str) -> None:
         pass
     page.emulate_media(media="print")
     page.pdf(path=str(out), prefer_css_page_size=True, print_background=True)
+    with fitz.open(out) as document:
+        metadata = document.metadata
+        metadata["keywords"] = f"release:v{PROJECT_VERSION}"
+        document.set_metadata(metadata)
+        document.saveIncr()
 
 
 def pdf_to_pngs(track: str) -> list[Path]:
@@ -100,6 +107,8 @@ def build_pptx(track: str, pngs: list[Path]) -> None:
     speeches_path = SOURCE / track / "_render" / "speeches.json"
     speeches = json.loads(speeches_path.read_text(encoding="utf-8"))
     prs = Presentation()
+    prs.core_properties.subject = f"Course release v{PROJECT_VERSION}"
+    prs.core_properties.keywords = f"release:v{PROJECT_VERSION}"
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
     blank = prs.slide_layouts[6]
@@ -190,6 +199,11 @@ def render_script(page, track: str) -> None:
         print_background=True,
         margin={"top": "16mm", "right": "15mm", "bottom": "18mm", "left": "15mm"},
     )
+    with fitz.open(DECKS / track / f"{track}_대본.pdf") as document:
+        metadata = document.metadata
+        metadata["keywords"] = f"release:v{PROJECT_VERSION}"
+        document.set_metadata(metadata)
+        document.saveIncr()
 
 
 def count_pdf_pages(path: Path) -> int:

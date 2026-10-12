@@ -174,7 +174,7 @@ Sandwich 아키텍처에서는 STT 가 텍스트를 만들어 에이전트에 �
 
 #tip-box[_이 셀은 AssemblyAI API 키가 필요합니다._ 개념 이해를 위한 참조 코드입니다.]
 
-AssemblyAI의 `RealtimeTranscriber`는 _Producer-Consumer 패턴_으로 동작합니다:
+AssemblyAI 1.x의 `RealTimeTranscriber`는 _Producer-Consumer 패턴_으로 동작합니다:
 
 - _Producer_: 마이크에서 캡처한 오디오 청크를 WebSocket으로 전송
 - _Consumer_: 부분 전사(partial) 및 최종 전사(final) 결과를 콜백으로 수신
@@ -193,35 +193,39 @@ AssemblyAI의 `RealtimeTranscriber`는 _Producer-Consumer 패턴_으로 동작�
   text(weight: "bold")[클래스],
   text(weight: "bold")[설명],
   [_Partial_],
-  [`RealtimeTranscript`],
+  [`TurnEvent(end_of_turn=False)`],
   [아직 발화 중인 단어들의 임시 전사. 사용자가 말하는 동안 실시간으로 업데이트됨],
   [_Final_],
-  [`RealtimeFinalTranscript`],
+  [`TurnEvent(end_of_turn=True)`],
   [발화 종료(엔드포인팅)가 감지된 후의 확정 전사. 이 결과만 에이전트로 전달],
 )
 
 AssemblyAI의 내장 VAD(Voice Activity Detection)가 발화 종료 시점을 자동으로 감지하므로, 별도의 무음 감지 로직이 필요하지 않습니다.
 
 #code-block(`````python
-import assemblyai as aai
-
-aai.settings.api_key = "your-assemblyai-key"
-
-transcriber = aai.RealtimeTranscriber(
-    sample_rate=16000,
-    encoding=aai.AudioEncoding.pcm_s16le,
-    on_data=on_transcription_data,
-    on_error=on_transcription_error,
+from assemblyai.streaming.v3 import (
+    Encoding,
+    RealTimeError,
+    RealTimeEvents,
+    RealTimeTranscriber,
+    StreamingParameters,
+    TurnEvent,
 )
 
-def on_transcription_data(transcript: aai.RealtimeTranscript):
-    if isinstance(transcript, aai.RealtimeFinalTranscript):
-        process_user_input(transcript.text)
+transcriber = RealTimeTranscriber(api_key="your-assemblyai-key")
 
-def on_transcription_error(error: aai.RealtimeError):
+def on_turn(client: RealTimeTranscriber, event: TurnEvent) -> None:
+    if event.end_of_turn and event.transcript:
+        process_user_input(event.transcript)
+
+def on_error(client: RealTimeTranscriber, error: RealTimeError) -> None:
     print(f"Transcription error: {error}")
 
-transcriber.connect()
+transcriber.on(RealTimeEvents.Turn, on_turn)
+transcriber.on(RealTimeEvents.Error, on_error)
+transcriber.connect(
+    StreamingParameters(sample_rate=16000, encoding=Encoding.pcm_s16le)
+)
 `````)
 
 === 마이크 오디오 캡처
@@ -338,22 +342,29 @@ cartesia_client = cartesia.AsyncCartesia(
 )
 
 async def text_to_speech_stream(text_stream):
-    ws = await cartesia_client.tts.websocket()
-    async for text_chunk in text_stream:
-        audio_chunks = ws.send(
+    async with cartesia_client.tts.websocket_connect() as ws:
+        ctx = ws.context(
             model_id="sonic-2",
-            transcript=text_chunk,
-            voice_id="your-voice-id",
-            stream=True,
+            voice={"id": "your-voice-id"},
             output_format={
                 "container": "raw",
                 "encoding": "pcm_s16le",
                 "sample_rate": 24000,
             },
         )
-        async for audio in audio_chunks:
-            yield audio["audio"]
-    await ws.close()
+
+        async def send_text():
+            async for text_chunk in text_stream:
+                await ctx.push(text_chunk)
+            await ctx.no_more_inputs()
+
+        send_task = asyncio.create_task(send_text())
+        try:
+            async for event in ctx.receive():
+                if event.type == "chunk":
+                    yield event.audio
+        finally:
+            await send_task
 `````)
 
 == 8.7 파이프라인 조합 -- RunnableGenerator
@@ -387,14 +398,15 @@ agent_runnable = RunnableGenerator(transform_input)
 async def voice_pipeline(audio_input_stream):
     transcript_queue = asyncio.Queue()
 
-    def on_final(transcript):
-        if isinstance(transcript, aai.RealtimeFinalTranscript):
-            transcript_queue.put_nowait(transcript.text)
+    def on_turn(client, event):
+        if event.end_of_turn and event.transcript:
+            transcript_queue.put_nowait(event.transcript)
 
-    transcriber = aai.RealtimeTranscriber(
-        sample_rate=16000, on_data=on_final
+    transcriber = RealTimeTranscriber(api_key="your-assemblyai-key")
+    transcriber.on(RealTimeEvents.Turn, on_turn)
+    transcriber.connect(
+        StreamingParameters(sample_rate=16000, encoding=Encoding.pcm_s16le)
     )
-    transcriber.connect()
 
     async for audio_chunk in audio_input_stream:
         transcriber.stream(audio_chunk)
@@ -489,7 +501,7 @@ async def main():
   text(weight: "bold")[구현 방법],
   [스트리밍 STT],
   [전체 전사 대기 제거],
-  [`RealtimeTranscriber` + 부분 결과],
+  [`RealTimeTranscriber` + `TurnEvent`],
   [스트리밍 Agent],
   [전체 응답 완료 전 TTS 시작],
   [`astream()` 사용 — `ainvoke()` 대신],
@@ -558,7 +570,7 @@ voice_agent = create_agent(
   [_Sandwich 아키텍처_],
   [STT -\\\> Agent -\\\> TTS, 각 레이어 독립 교체 가능, 도구 호출 지원],
   [_STT (AssemblyAI)_],
-  [`RealtimeTranscriber`, Producer-Consumer 패턴, WebSocket 스트리밍],
+  [`RealTimeTranscriber`, `TurnEvent`, Producer-Consumer 패턴, WebSocket 스트리밍],
   [_Agent (LangChain)_],
   [`create_agent` + `astream()`, 토큰 단위 스트리밍, 도구 통합],
   [_TTS (Cartesia)_],

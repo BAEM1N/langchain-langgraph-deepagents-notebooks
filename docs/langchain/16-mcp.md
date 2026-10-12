@@ -83,6 +83,8 @@ If existing code relies on one of those surfaces, document the gap instead of in
 
 Multi-server configs automatically prefix tools where needed, usually as `{server}_{tool}`.
 
+Local release checks use `langchain[mcp]` 1.4.4, `mcp` 2.3.0, FastMCP 4.1.0, and `httpx2` 2.13.1. Under that stack, a tool returned by `list_tools()` can be invoked after the adapter context exits. Keep discovery and invocation together when that makes a teaching cell easier to read, or when one live server session's state or concurrency policy is part of the example.
+
 ## Authentication
 
 Authentication lives on FastMCP clients or transports:

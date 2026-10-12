@@ -192,17 +192,14 @@ except Exception as e:
 모든 요청에 붙이면 비용과 지연이 커지므로, 실패 비용이 큰 구간에 선택적으로 적용합니다.
 
 #code-block(`````python
-try:
-    from deepagents import RubricMiddleware
+from deepagents.middleware.rubric import RubricMiddleware
 
-    rubric = RubricMiddleware(
-        model="openai:gpt-5.4-mini",
-        system_prompt="정확성, 근거, 안전성 기준으로 평가하고 부족하면 수정 지시",
-        max_iterations=2,
-    )
-    print("RubricMiddleware 준비됨:", type(rubric).__name__)
-except ImportError:
-    print("deepagents>=0.6.10 필요: pip install -U deepagents")
+rubric = RubricMiddleware(
+    model="openai:gpt-5.4-mini",
+    system_prompt="정확성, 근거, 안전성 기준으로 평가하고 부족하면 수정 지시",
+    max_iterations=2,
+)
+print("RubricMiddleware 준비됨:", type(rubric).__name__)
 `````)
 
 == 9.4 단위 테스트 패턴
